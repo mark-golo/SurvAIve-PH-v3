@@ -1,0 +1,2 @@
+cd "c:\xampp\htdocs\SurvAIve PH v3\frontend"
+frontend>npm run dev

@@ -1,0 +1,15 @@
+{
+  "name": "SurvAIve PH",
+  "short_name": "SurvAIve",
+  "description": "AI-Powered Mesh-Based Emergency Response System",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050a18",
+  "theme_color": "#00d4ff",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "categories": ["utilities", "emergency"],
+  "lang": "en-PH"
+}

@@ -1,0 +1,11 @@
+Options -Indexes
+RewriteEngine On
+
+# Allow CORS preflight
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^ - [L]
+
+# Route all /api/* requests through a front controller
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^api/(.*)$ api/router.php?path=$1 [QSA,L]
