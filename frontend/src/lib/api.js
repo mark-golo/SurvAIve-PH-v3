@@ -143,7 +143,7 @@ async function post(path, body = {}) {
           const digits = body.contact.replace(/\D/g, '')
           const phone = '+63' + (digits.startsWith('0') ? digits.slice(1) : digits)
           const { error } = await supabase.auth.signInWithOtp({ phone })
-          if (error) throwErr(error.message)
+          if (error) throwErr(error.message || `Failed to send SMS OTP (${error.status ?? 500})`)
           return { message: 'OTP sent via SMS' }
         }
         // email method
@@ -151,7 +151,12 @@ async function post(path, body = {}) {
           email: body.email,
           options: { shouldCreateUser: true },
         })
-        if (error) throwErr(error.message)
+        if (error) {
+          const msg = error.message
+            || (error.status === 429 ? 'Too many OTP requests. Please wait a few minutes and try again.' : null)
+            || `Failed to send OTP (${error.status ?? 500}). Check your Supabase email settings.`
+          throwErr(msg)
+        }
         return { message: 'OTP sent to email' }
       }
 

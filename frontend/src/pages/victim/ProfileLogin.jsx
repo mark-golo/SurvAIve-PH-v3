@@ -65,7 +65,10 @@ export function ProfileLogin() {
         await api.post('/auth/otp', { action: 'send', method: 'email', email: identifier })
       }
       setOtpSent(true)
-    } catch (e) { setError(e.error ?? e.message ?? 'Failed to send OTP') }
+    } catch (e) {
+      const msg = (typeof e.error === 'string' && e.error) || (typeof e.message === 'string' && e.message) || 'Failed to send OTP. Please try again.'
+      setError(msg)
+    }
     setLoading(false)
   }
 
@@ -83,7 +86,10 @@ export function ProfileLogin() {
         if (method === 'phone') setContact(identifier.replace(/\D/g, ''))
         setStep(1)
       }
-    } catch (e) { setError(e.error ?? e.message ?? 'Invalid OTP') }
+    } catch (e) {
+      const msg = (typeof e.error === 'string' && e.error) || (typeof e.message === 'string' && e.message) || 'Invalid OTP. Please try again.'
+      setError(msg)
+    }
     setLoading(false)
   }
 
