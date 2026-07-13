@@ -6,6 +6,7 @@ import { GlassInput, GlassSelect } from '../../components/ui/GlassInput'
 import { GlassCard } from '../../components/ui/GlassCard'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
+import { getBarangays } from '../../lib/philippineLocations'
 
 const STATUS_COLORS = {
   active:   { bg: 'bg-[rgba(34,197,94,0.1)]',  text: 'text-[#22c55e]',  label: 'Active'   },
@@ -147,7 +148,10 @@ export function ConstituentRegistry() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <GlassInput label="Full Name *"     value={addForm.name}           onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))}           placeholder="Juan Dela Cruz" />
               <GlassInput label="Contact Number"  value={addForm.contact_number} onChange={e => setAddForm(p => ({ ...p, contact_number: e.target.value }))} placeholder="09XXXXXXXXX" />
-              <GlassInput label="Barangay *"      value={addForm.barangay}       onChange={e => setAddForm(p => ({ ...p, barangay: e.target.value }))}       placeholder="Barangay Name" />
+              <GlassSelect label="Barangay *" value={addForm.barangay} onChange={e => setAddForm(p => ({ ...p, barangay: e.target.value }))}>
+                <option value="">Select Barangay</option>
+                {getBarangays(muni).map(b => <option key={b} value={b}>{b}</option>)}
+              </GlassSelect>
               <GlassInput label="Household Count" value={addForm.household_count} type="number" onChange={e => setAddForm(p => ({ ...p, household_count: e.target.value }))} />
             </div>
             <div className="flex gap-2 mt-3">
@@ -229,7 +233,10 @@ export function ConstituentRegistry() {
                               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                                 <GlassInput label="Full Name"      value={editForm.name}           onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} />
                                 <GlassInput label="Contact Number" value={editForm.contact_number} onChange={e => setEditForm(p => ({ ...p, contact_number: e.target.value }))} />
-                                <GlassInput label="Barangay"       value={editForm.barangay}       onChange={e => setEditForm(p => ({ ...p, barangay: e.target.value }))} />
+                                <GlassSelect label="Barangay" value={editForm.barangay ?? ''} onChange={e => setEditForm(p => ({ ...p, barangay: e.target.value }))}>
+                                  <option value="">Select Barangay</option>
+                                  {getBarangays(muni).map(b => <option key={b} value={b}>{b}</option>)}
+                                </GlassSelect>
                                 <GlassInput label="Household Count" type="number" value={editForm.household_count} onChange={e => setEditForm(p => ({ ...p, household_count: e.target.value }))} />
                                 <GlassSelect label="Status" value={editForm.status} onChange={e => setEditForm(p => ({ ...p, status: e.target.value }))}>
                                   <option value="active">Active</option>

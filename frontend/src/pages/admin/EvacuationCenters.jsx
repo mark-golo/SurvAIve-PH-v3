@@ -8,7 +8,7 @@ import { GlassCard } from '../../components/ui/GlassCard'
 import { GlassInput, GlassSelect } from '../../components/ui/GlassInput'
 import { NeonButton } from '../../components/ui/NeonButton'
 import api from '../../lib/api'
-import { getBarangays } from '../../lib/philippineLocations'
+import { PROVINCES, getMunicipalities, getBarangays } from '../../lib/philippineLocations'
 import { useAuthStore } from '../../store/auth'
 
 const BLANK = { name: '', province: '', municipality: '', barangay: '', address: '', lat: '', lng: '', capacity: '', contact_number: '', status: 'open' }
@@ -241,8 +241,14 @@ function CenterForm({ title, form, set, error, saving, onSave, onCancel, isEdit 
       <p className="text-xs font-semibold text-[#22c55e] uppercase tracking-wider mb-3">{title}</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <GlassInput label="Name *"         value={form.name}           onChange={e => set('name', e.target.value)}           placeholder="Del Carmen Gymnasium" />
-        <GlassInput label="Province"       value={form.province}       onChange={e => set('province', e.target.value)}       placeholder="Surigao del Norte" />
-        <GlassInput label="Municipality"   value={form.municipality}   onChange={e => set('municipality', e.target.value)}   placeholder="Del Carmen" />
+        <GlassSelect label="Province" value={form.province} onChange={e => set('province', e.target.value)} disabled>
+          <option value="">Select Province</option>
+          {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
+        </GlassSelect>
+        <GlassSelect label="Municipality" value={form.municipality} onChange={e => set('municipality', e.target.value)} disabled>
+          <option value="">Select Municipality</option>
+          {getMunicipalities(form.province).map(m => <option key={m} value={m}>{m}</option>)}
+        </GlassSelect>
         <GlassSelect label="Barangay" value={form.barangay} onChange={e => set('barangay', e.target.value)}>
           <option value="">Select Barangay</option>
           {getBarangays(form.municipality).map(b => (

@@ -6,6 +6,7 @@ import { GlassInput, GlassSelect } from '../../components/ui/GlassInput'
 import { NeonButton } from '../../components/ui/NeonButton'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
+import { PROVINCES, getMunicipalities, getBarangays } from '../../lib/philippineLocations'
 
 const BLANK_ADMIN = { name: '', contact_number: '', gmail: '', province: '', municipality: '', password: '', status: 'active' }
 const BLANK_RESP  = { name: '', contact_number: '', gmail: '', province: '', municipality: '', barangay: '', password: '', team_id: '', unit_name: '', assigned_zone: '', assigned_barangay: '', status: 'active' }
@@ -261,10 +262,19 @@ function StaffForm({ isAdmin, isEdit, title, form, setForm, showPw, setShowPw, e
         <GlassInput label="Full Name *"    value={form.name}           onChange={e => set('name', e.target.value)}           placeholder="Juan dela Cruz" />
         <GlassInput label="Contact Number" value={form.contact_number} onChange={e => set('contact_number', e.target.value)} placeholder="09XXXXXXXXX" />
         <GlassInput label="Gmail"          value={form.gmail}          onChange={e => set('gmail', e.target.value)}           placeholder="user@gmail.com" />
-        <GlassInput label="Province"       value={form.province}       onChange={e => set('province', e.target.value)}        placeholder="Surigao del Norte" />
-        <GlassInput label="Municipality"   value={form.municipality}   onChange={e => set('municipality', e.target.value)}    placeholder="Surigao City" />
+        <GlassSelect label="Province" value={form.province} onChange={e => set('province', e.target.value)} disabled>
+          <option value="">Select Province</option>
+          {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
+        </GlassSelect>
+        <GlassSelect label="Municipality" value={form.municipality} onChange={e => set('municipality', e.target.value)} disabled>
+          <option value="">Select Municipality</option>
+          {getMunicipalities(form.province).map(m => <option key={m} value={m}>{m}</option>)}
+        </GlassSelect>
         {!isAdmin && <>
-          <GlassInput label="Barangay"         value={form.barangay ?? ''}         onChange={e => set('barangay', e.target.value)}         placeholder="Lipata" />
+          <GlassSelect label="Barangay" value={form.barangay ?? ''} onChange={e => set('barangay', e.target.value)}>
+            <option value="">Select Barangay</option>
+            {getBarangays(form.municipality).map(b => <option key={b} value={b}>{b}</option>)}
+          </GlassSelect>
           <GlassInput label="Team ID"          value={form.team_id ?? ''}          onChange={e => set('team_id', e.target.value)}          placeholder="TEAM-A" />
           <GlassInput label="Unit Name"        value={form.unit_name ?? ''}        onChange={e => set('unit_name', e.target.value)}        placeholder="Alpha Unit" />
           <GlassInput label="Assigned Zone"    value={form.assigned_zone ?? ''}    onChange={e => set('assigned_zone', e.target.value)}    placeholder="Zone 1 – Lipata" />

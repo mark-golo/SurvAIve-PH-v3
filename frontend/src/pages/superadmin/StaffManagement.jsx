@@ -5,6 +5,7 @@ import { GlassCard } from '../../components/ui/GlassCard'
 import { GlassInput, GlassSelect } from '../../components/ui/GlassInput'
 import { NeonButton } from '../../components/ui/NeonButton'
 import api from '../../lib/api'
+import { PROVINCES, getMunicipalities } from '../../lib/philippineLocations'
 
 const BLANK_SA    = { name: '', contact_number: '', gmail: '', province: '', password: '' }
 const BLANK_ADMIN = { name: '', contact_number: '', gmail: '', province: '', municipality: '', password: '', status: 'active' }
@@ -357,9 +358,18 @@ function StaffForm({ title, form, setForm, showPw, setShowPw, error, saving, onS
         <GlassInput label="Full Name *"      value={form.name}           onChange={e => set('name', e.target.value)}           placeholder="Juan dela Cruz" />
         <GlassInput label="Contact Number"   value={form.contact_number} onChange={e => set('contact_number', e.target.value)} placeholder="09XXXXXXXXX" />
         <GlassInput label="Gmail"            value={form.gmail}          onChange={e => set('gmail', e.target.value)}           placeholder="user@gmail.com" />
-        <GlassInput label="Province"         value={form.province}       onChange={e => set('province', e.target.value)}        placeholder="Surigao del Norte" />
+        <GlassSelect label="Province" value={form.province}
+          onChange={e => setForm(p => ({ ...p, province: e.target.value, municipality: '' }))}>
+          <option value="">Select Province</option>
+          {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
+        </GlassSelect>
         {showMunicipality && (
-          <GlassInput label="Municipality *" value={form.municipality}   onChange={e => set('municipality', e.target.value)}    placeholder="Del Carmen" />
+          <GlassSelect label="Municipality *" value={form.municipality}
+            onChange={e => set('municipality', e.target.value)}
+            disabled={!form.province}>
+            <option value="">Select Municipality</option>
+            {getMunicipalities(form.province).map(m => <option key={m} value={m}>{m}</option>)}
+          </GlassSelect>
         )}
         <div className="relative">
           <GlassInput
