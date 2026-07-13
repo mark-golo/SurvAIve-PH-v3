@@ -7,15 +7,6 @@ import { GlassInput } from '../../components/ui/GlassInput'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 
-const DEMO = [
-  { id: 1, name: 'Rosa Villanueva',  status: 'trapped', barangay: 'Caub',      timestamp: '14:32', priority: 'CRITICAL', score: 95, verified: true,  rescue: 'pending'   },
-  { id: 2, name: 'Maria Santos',     status: 'trapped', barangay: 'Del Carmen Poblacion', timestamp: '14:28', priority: 'CRITICAL', score: 92, verified: true,  rescue: 'pending'   },
-  { id: 3, name: 'Juan Dela Cruz',   status: 'injured', barangay: 'Bitoon',    timestamp: '14:20', priority: 'HIGH',     score: 78, verified: true,  rescue: 'en_route'  },
-  { id: 4, name: 'Guest User',       status: 'injured', barangay: 'Cancohoy',  timestamp: '14:17', priority: 'HIGH',     score: 68, verified: false, rescue: 'pending'   },
-  { id: 5, name: 'Anonymous',        status: 'missing', barangay: 'Caub',      timestamp: '14:10', priority: 'MODERATE', score: 55, verified: false, rescue: 'pending'   },
-  { id: 6, name: 'Group',            status: 'safe',    barangay: 'Domoyog',   timestamp: '14:05', priority: 'SAFE',     score: 20, verified: false, rescue: 'pending'   },
-]
-
 const RESCUE_LABEL = { pending: 'Pending', en_route: 'En Route', on_scene: 'On Scene', rescued: 'Rescued', cannot_reach: 'Cannot Reach' }
 
 export function VictimTable() {
@@ -40,7 +31,7 @@ export function VictimTable() {
         verified: !!r.is_verified,
         rescue: r.rescue_status,
       }))))
-      .catch(() => setData(DEMO))
+      .catch(() => setData([]))
       .finally(() => setLoading(false))
   }, [])
 

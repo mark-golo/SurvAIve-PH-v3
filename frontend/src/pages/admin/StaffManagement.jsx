@@ -7,17 +7,6 @@ import { NeonButton } from '../../components/ui/NeonButton'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 
-const DEMO_ADMINS = [
-  { id: 1, name: 'DRRM Officer - Del Carmen', contact_number: '09170000002', gmail: 'drrm.delcarmen@survAIve.ph', province: 'Surigao del Norte', municipality: 'Del Carmen', status: 'active' },
-  { id: 2, name: 'DRRM Officer - Dapa',        contact_number: '09170000003', gmail: 'drrm.dapa@survAIve.ph',     province: 'Surigao del Norte', municipality: 'Dapa',        status: 'active' },
-]
-
-const DEMO_RESPONDERS = [
-  { id: 1, name: 'Responder Alpha-1',   contact_number: '09180000001', municipality: 'Del Carmen', team_id: 'TEAM-A', unit_name: 'Alpha Unit',   assigned_zone: 'Zone 1 – Del Carmen Poblacion', assigned_barangay: 'Del Carmen Poblacion', duty_status: 'on_duty',  active_mesh_relay: 1, status: 'active' },
-  { id: 2, name: 'Responder Bravo-2',   contact_number: '09180000002', municipality: 'Del Carmen', team_id: 'TEAM-B', unit_name: 'Bravo Unit',   assigned_zone: 'Zone 2 – Bitoon',    assigned_barangay: 'Bitoon',    duty_status: 'on_duty',  active_mesh_relay: 0, status: 'active' },
-  { id: 3, name: 'Responder Charlie-3', contact_number: '09180000003', municipality: 'Del Carmen', team_id: 'TEAM-C', unit_name: 'Charlie Unit', assigned_zone: 'Zone 3 – San Jose',     assigned_barangay: 'San Jose',     duty_status: 'standby', active_mesh_relay: 1, status: 'active' },
-]
-
 const BLANK_ADMIN = { name: '', contact_number: '', gmail: '', province: '', municipality: '', password: '', status: 'active' }
 const BLANK_RESP  = { name: '', contact_number: '', gmail: '', province: '', municipality: '', barangay: '', password: '', team_id: '', unit_name: '', assigned_zone: '', assigned_barangay: '', status: 'active' }
 
@@ -41,8 +30,8 @@ export function StaffManagement() {
   useEffect(() => {
     const q = muni ? `?municipality=${encodeURIComponent(muni)}` : ''
     Promise.all([
-      api.get(`/admins${q}`).catch(() => DEMO_ADMINS),
-      api.get(`/responders${q}`).catch(() => DEMO_RESPONDERS),
+      api.get(`/admins${q}`).catch(() => []),
+      api.get(`/responders${q}`).catch(() => []),
     ]).then(([a, r]) => { setAdmins(a); setResps(r) })
       .finally(() => setLoading(false))
   }, [])

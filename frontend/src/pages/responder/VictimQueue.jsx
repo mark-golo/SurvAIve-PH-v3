@@ -8,14 +8,6 @@ import { db } from '../../lib/db'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 
-const DEMO_QUEUE = [
-  { id: 3, name: 'Rosa Villanueva', status: 'trapped',  priority: 'CRITICAL', people_count: 6,  barangay: 'Caub',      is_verified: true,  time_ago: '5m ago',  notes: 'Pregnant woman, need urgent help', lat: 9.8610, lng: 126.0780 },
-  { id: 1, name: 'Maria Santos',    status: 'trapped',  priority: 'CRITICAL', people_count: 4,  barangay: 'Del Carmen Poblacion', is_verified: true,  time_ago: '8m ago',  notes: 'Floodwater rising fast, second floor' },
-  { id: 2, name: 'Juan Dela Cruz',  status: 'injured',  priority: 'HIGH',     people_count: 2,  barangay: 'Bitoon',    is_verified: true,  time_ago: '12m ago', notes: 'Roof collapsed, leg injury' },
-  { id: 4, name: 'Guest User',      status: 'injured',  priority: 'HIGH',     people_count: 3,  barangay: 'Cancohoy',  is_verified: false, time_ago: '15m ago', notes: '5 children trapped inside school' },
-  { id: 5, name: 'Anonymous',       status: 'missing',  priority: 'MODERATE', people_count: 1,  barangay: 'Caub',      is_verified: false, time_ago: '22m ago', notes: 'Elderly man last seen near river' },
-]
-
 const NAV = [
   { icon: List,     label: 'Queue',    path: '/responder/queue'    },
   { icon: Map,      label: 'Map',      path: '/responder/map'      },
@@ -25,7 +17,7 @@ const NAV = [
 
 export function VictimQueue() {
   const { scope } = useAuthStore()
-  const [queue, setQueue] = useState(DEMO_QUEUE)
+  const [queue, setQueue] = useState([])
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState('all')
 
@@ -38,8 +30,8 @@ export function VictimQueue() {
         ? `/sos?assigned_to=me&municipality=${encodeURIComponent(muni)}`
         : '/sos?assigned_to=me'
       const res = await api.get(url)
-      if (res.length) setQueue(res)
-    } catch { /* use cached */ }
+      setQueue(res)
+    } catch { setQueue([]) }
     setLoading(false)
   }
 

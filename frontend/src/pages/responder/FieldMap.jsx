@@ -16,18 +16,6 @@ const NAV = [
   { icon: Settings, label: 'Settings', path: '/responder/settings' },
 ]
 
-const ASSIGNED = [
-  { id: 1, lat: 9.8610, lng: 126.0780, priority: 'CRITICAL', label: '1', name: 'Rosa V.',   barangay: 'Caub',      status: 'trapped' },
-  { id: 2, lat: 9.8527, lng: 126.0736, priority: 'CRITICAL', label: '2', name: 'Maria S.',  barangay: 'Del Carmen Poblacion', status: 'trapped' },
-  { id: 3, lat: 9.8720, lng: 126.0690, priority: 'HIGH',     label: '3', name: 'Juan D.C.', barangay: 'Bitoon',    status: 'injured' },
-]
-
-const DEMO_CENTERS = [
-  { id: 1, name: 'Del Carmen Municipal Gymnasium', barangay: 'Del Carmen Poblacion', lat: 9.8520, lng: 126.0730, capacity: 500, status: 'open' },
-  { id: 2, name: 'Bitoon Barangay Hall',           barangay: 'Bitoon',    lat: 9.8715, lng: 126.0685, capacity: 150, status: 'open' },
-  { id: 3, name: 'Siargao Island Sports Complex',  barangay: 'San Jose',     lat: 9.8485, lng: 126.0845, capacity: 800, status: 'open' },
-]
-
 const RESPONDER_POS = [9.852, 126.073]
 
 const priorityColor = { CRITICAL: '#ef4444', HIGH: '#f97316', MODERATE: '#f59e0b', SAFE: '#22c55e' }
@@ -60,13 +48,27 @@ const shelterIcon = (status) => {
 export function FieldMap() {
   const navigate = useNavigate()
   const { scope } = useAuthStore()
-  const [centers, setCenters] = useState([])
+  const [centers, setCenters]   = useState([])
+  const [assigned, setAssigned] = useState([])
 
   const muni = scope?.municipality
   useEffect(() => {
     api.get(muni ? `/evacuation_centers?municipality=${encodeURIComponent(muni)}` : '/evacuation_centers')
       .then(rows => setCenters(rows))
-      .catch(() => setCenters(DEMO_CENTERS))
+      .catch(() => setCenters([]))
+  }, [])
+
+  useEffect(() => {
+    api.get(muni ? `/sos?municipality=${encodeURIComponent(muni)}` : '/sos')
+      .then(rows => setAssigned(rows.map((r, i) => ({
+        id: r.id, lat: r.lat, lng: r.lng,
+        priority: r.priority ?? 'LOW',
+        label: String(i + 1),
+        name: r.name ?? 'Unknown',
+        barangay: r.barangay ?? '',
+        status: r.status ?? 'unknown',
+      }))))
+      .catch(() => setAssigned([]))
   }, [])
 
   return (
@@ -93,7 +95,7 @@ export function FieldMap() {
           </Marker>
 
           {/* Assigned victims */}
-          {ASSIGNED.map((v) => (
+          {assigned.map((v) => (
             <Marker key={v.id} position={[v.lat, v.lng]} icon={numberedIcon(v.label, priorityColor[v.priority])}>
               <Popup>
                 <div className="bg-[#0f172a] text-white text-xs p-2 rounded min-w-[140px]">

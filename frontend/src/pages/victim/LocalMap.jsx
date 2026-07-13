@@ -7,12 +7,6 @@ import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 
-const DEMO_CENTERS = [
-  { id: 1, name: 'Del Carmen Municipal Gymnasium', barangay: 'Del Carmen Poblacion', lat: 9.8520, lng: 126.0730, capacity: 500, status: 'open', contact_number: '09170001001' },
-  { id: 2, name: 'Bitoon Barangay Hall',           barangay: 'Bitoon',    lat: 9.8715, lng: 126.0685, capacity: 150, status: 'open', contact_number: '09170001002' },
-  { id: 3, name: 'Siargao Island Sports Complex',  barangay: 'San Jose',     lat: 9.8485, lng: 126.0845, capacity: 800, status: 'open', contact_number: '09170001003' },
-]
-
 const DEFAULT_POS = [9.852, 126.073]
 
 const NAV = [
@@ -73,7 +67,7 @@ export function LocalMap() {
   useEffect(() => {
     api.get(muni ? `/evacuation_centers?municipality=${encodeURIComponent(muni)}` : '/evacuation_centers')
       .then(rows => setCenters(rows))
-      .catch(() => setCenters(DEMO_CENTERS))
+      .catch(() => setCenters([]))
       .finally(() => setLoading(false))
   }, [])
 

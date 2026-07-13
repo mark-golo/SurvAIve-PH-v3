@@ -10,21 +10,6 @@ import { NeonButton } from '../../components/ui/NeonButton'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 
-const DEMO_REPORTS = [
-  { id: 1, lat: 9.8610, lng: 126.0780, priority: 'CRITICAL', name: 'Rosa V.',   barangay: 'Caub',      verified: true  },
-  { id: 2, lat: 9.8527, lng: 126.0736, priority: 'CRITICAL', name: 'Maria S.',  barangay: 'Del Carmen Poblacion', verified: true  },
-  { id: 3, lat: 9.8720, lng: 126.0690, priority: 'HIGH',     name: 'Juan D.C.', barangay: 'Bitoon',    verified: true  },
-  { id: 4, lat: 9.8560, lng: 126.0620, priority: 'HIGH',     name: 'Guest',     barangay: 'Cancohoy',  verified: false },
-  { id: 5, lat: 9.8450, lng: 126.0680, priority: 'MODERATE', name: 'Guest',     barangay: 'Domoyog',   verified: false },
-  { id: 6, lat: 9.8490, lng: 126.0850, priority: 'SAFE',     name: 'Group',     barangay: 'San Jose',     verified: false },
-]
-
-const DEMO_CENTERS = [
-  { id: 1, name: 'Del Carmen Municipal Gymnasium', barangay: 'Del Carmen Poblacion', lat: 9.8520, lng: 126.0730, capacity: 500, status: 'open' },
-  { id: 2, name: 'Bitoon Barangay Hall',           barangay: 'Bitoon',    lat: 9.8715, lng: 126.0685, capacity: 150, status: 'open' },
-  { id: 3, name: 'Siargao Island Sports Complex',  barangay: 'San Jose',     lat: 9.8485, lng: 126.0845, capacity: 800, status: 'open' },
-]
-
 const COLORS = { CRITICAL: '#ef4444', HIGH: '#f97316', MODERATE: '#f59e0b', SAFE: '#22c55e' }
 
 const pinIcon = (color, verified) => L.divIcon({
@@ -47,9 +32,9 @@ const shelterIcon = (status) => {
 
 export function CommandCenter() {
   const { scope } = useAuthStore()
-  const [stats, setStats] = useState({ total: 6, critical: 2, rescued: 1, nodes: 3, unverified: 3 })
+  const [stats, setStats] = useState({ total: 0, critical: 0, rescued: 0, nodes: 0, unverified: 0 })
   const [syncing, setSyncing] = useState(false)
-  const [reports, setReports] = useState(DEMO_REPORTS)
+  const [reports, setReports] = useState([])
   const [centers, setCenters] = useState([])
 
   const muni = scope?.municipality
@@ -57,7 +42,7 @@ export function CommandCenter() {
   useEffect(() => {
     api.get(muni ? `/evacuation_centers?municipality=${encodeURIComponent(muni)}` : '/evacuation_centers')
       .then(rows => setCenters(rows))
-      .catch(() => setCenters(DEMO_CENTERS))
+      .catch(() => setCenters([]))
   }, [])
 
   useEffect(() => { sync() }, [])
@@ -66,16 +51,14 @@ export function CommandCenter() {
     setSyncing(true)
     try {
       const res = await api.get(muni ? `/sos?municipality=${encodeURIComponent(muni)}` : '/sos')
-      if (res.length) {
-        setReports(res)
-        setStats(prev => ({
-          total: res.length,
-          critical: res.filter(r => r.priority === 'CRITICAL').length,
-          rescued: res.filter(r => r.rescue_status === 'rescued').length,
-          nodes: prev.nodes,
-          unverified: res.filter(r => !r.is_verified).length,
-        }))
-      }
+      setReports(res)
+      setStats(prev => ({
+        total: res.length,
+        critical: res.filter(r => r.priority === 'CRITICAL').length,
+        rescued: res.filter(r => r.rescue_status === 'rescued').length,
+        nodes: prev.nodes,
+        unverified: res.filter(r => !r.is_verified).length,
+      }))
     } catch {}
     setSyncing(false)
   }

@@ -6,10 +6,6 @@ import { GlassInput, GlassSelect } from '../../components/ui/GlassInput'
 import { NeonButton } from '../../components/ui/NeonButton'
 import api from '../../lib/api'
 
-const DEMO = [
-  { id: 1, name: 'DOST Provincial Director - Caraga', contact_number: '09170000001', gmail: 'dost@survAIve.ph', province: 'Surigao del Norte', status: 'active', created_at: '2024-01-01' },
-]
-
 const BLANK = { name: '', contact_number: '', gmail: '', province: '', password: '' }
 
 export function StaffManagement() {
@@ -26,7 +22,7 @@ export function StaffManagement() {
   useEffect(() => {
     api.get('/superadmins')
       .then(rows => setData(rows))
-      .catch(() => setData(DEMO))
+      .catch(() => setData([]))
       .finally(() => setLoading(false))
   }, [])
 
