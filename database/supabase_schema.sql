@@ -389,50 +389,7 @@ VALUES
   ('DRRM Officer - Dapa',       '09170000003', 'drrm.dapa@survAIve.ph',      'Surigao del Norte', 'Dapa',       'active', TRUE, 'HIGH')
 ON CONFLICT (contact_number) DO NOTHING;
 
-INSERT INTO responders (name, contact_number, province, municipality, barangay, status, is_verified, trust_score, team_id, unit_name, assigned_zone, assigned_barangay, duty_status, active_mesh_relay)
-VALUES
-  ('Responder Alpha-1',   '09180000001', 'Surigao del Norte', 'Del Carmen', 'Del Carmen Poblacion', 'active', TRUE, 'HIGH', 'TEAM-A', 'Alpha Unit',   'Zone 1 – Del Carmen Poblacion', 'Del Carmen Poblacion', 'on_duty', TRUE),
-  ('Responder Bravo-2',   '09180000002', 'Surigao del Norte', 'Del Carmen', 'Bitoon',               'active', TRUE, 'HIGH', 'TEAM-B', 'Bravo Unit',   'Zone 2 – Bitoon',               'Bitoon',               'on_duty', FALSE),
-  ('Responder Charlie-3', '09180000003', 'Surigao del Norte', 'Del Carmen', 'San Jose',             'active', TRUE, 'HIGH', 'TEAM-C', 'Charlie Unit', 'Zone 3 – San Jose',             'San Jose',             'standby', TRUE)
-ON CONFLICT (contact_number) DO NOTHING;
-
-INSERT INTO victims (name, contact_number, province, municipality, barangay, sitio, household_count, vulnerabilities, status, is_verified, trust_score)
-VALUES
-  ('Maria Santos',    '09200000001', 'Surigao del Norte', 'Del Carmen', 'Del Carmen Poblacion', 'Purok 1', 4, '["Elderly (60+)","Infant (0-2 years old)"]'::jsonb, 'sos_sent', TRUE, 'HIGH'),
-  ('Juan Dela Cruz',  '09200000002', 'Surigao del Norte', 'Del Carmen', 'Bitoon',               'Purok 2', 2, '["None"]'::jsonb,                                   'sos_sent', TRUE, 'HIGH'),
-  ('Rosa Villanueva', '09200000003', 'Surigao del Norte', 'Del Carmen', 'Caub',                 'Purok 1', 6, '["Pregnant","Person with Disability (PWD)"]'::jsonb, 'sos_sent', TRUE, 'HIGH'),
-  ('Pedro Ramos',     '09200000004', 'Surigao del Norte', 'Del Carmen', 'Domoyog',              'Purok 3', 1, '["None"]'::jsonb,                                   'active',   TRUE, 'HIGH'),
-  ('Ana Reyes',       '09200000005', 'Surigao del Norte', 'Del Carmen', 'Esperanza',            NULL,      3, '["Elderly (60+)"]'::jsonb,                           'rescued',  TRUE, 'HIGH')
-ON CONFLICT (contact_number) DO NOTHING;
-
-INSERT INTO sos_reports (user_id, barangay, municipality, province, lat, lng, status, people_count, notes, is_verified, trust_score, ai_priority_score, rescue_status)
-SELECT id, barangay, municipality, province, 9.8527, 126.0736, 'trapped', 4, 'Floodwater rising fast, second floor', TRUE, 'HIGH', 92, 'pending'
-FROM victims WHERE contact_number = '09200000001';
-
-INSERT INTO sos_reports (user_id, barangay, municipality, province, lat, lng, status, people_count, notes, is_verified, trust_score, ai_priority_score, rescue_status)
-SELECT id, barangay, municipality, province, 9.8720, 126.0690, 'injured', 2, 'Roof collapsed, leg injury', TRUE, 'HIGH', 78, 'en_route'
-FROM victims WHERE contact_number = '09200000002';
-
-INSERT INTO sos_reports (user_id, barangay, municipality, province, lat, lng, status, people_count, notes, is_verified, trust_score, ai_priority_score, rescue_status)
-SELECT id, barangay, municipality, province, 9.8610, 126.0780, 'trapped', 6, 'Pregnant woman, need urgent help', TRUE, 'HIGH', 95, 'pending'
-FROM victims WHERE contact_number = '09200000003';
-
-INSERT INTO sos_reports (barangay, municipality, province, lat, lng, status, people_count, notes, is_verified, trust_score, ai_priority_score, rescue_status)
-VALUES
-  ('Cancohoy', 'Del Carmen', 'Surigao del Norte', 9.8560, 126.0620, 'injured', 3, '5 children trapped inside school building', FALSE, 'LOW', 68, 'pending'),
-  ('Caub',     'Del Carmen', 'Surigao del Norte', 9.8610, 126.0780, 'missing', 1, 'Elderly man last seen near river',          FALSE, 'LOW', 55, 'pending'),
-  ('Domoyog',  'Del Carmen', 'Surigao del Norte', 9.8450, 126.0680, 'safe',    8, 'Group at evacuation center, need supplies', FALSE, 'LOW', 20, 'pending');
-
-INSERT INTO evacuation_centers (name, province, municipality, barangay, address, lat, lng, capacity, contact_number, status)
-VALUES
-  ('Del Carmen Municipal Gymnasium', 'Surigao del Norte', 'Del Carmen', 'Del Carmen Poblacion', 'Del Carmen Poblacion, Del Carmen, Siargao Island', 9.8520, 126.0730, 500, '09170001001', 'open'),
-  ('Bitoon Barangay Hall',           'Surigao del Norte', 'Del Carmen', 'Bitoon',               'Bitoon, Del Carmen, Siargao Island',                9.8715, 126.0685, 150, '09170001002', 'open'),
-  ('Siargao Island Sports Complex',  'Surigao del Norte', 'Del Carmen', 'San Jose',             'San Jose, Del Carmen, Siargao Island',              9.8485, 126.0845, 800, '09170001003', 'open');
-
-INSERT INTO escalations (municipality, incident_summary, escalation_reason, acknowledged)
-VALUES
-  ('Del Carmen', '12 critical SOS reports unaddressed in Zones 1-3. Responder capacity exceeded.', 'Insufficient rescue teams',        FALSE),
-  ('Dapa',       'Flooding in 5 barangays. 40+ victims, only 2 active responders.',                'Request for additional resources', TRUE);
+-- Demo seed data removed. Insert real data through the app.
 
 -- ============================================================
 -- AUTH USER SETUP (run AFTER creating users in Supabase Dashboard)

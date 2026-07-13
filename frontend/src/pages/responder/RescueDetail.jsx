@@ -9,12 +9,6 @@ import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassTextarea } from '../../components/ui/GlassInput'
 import api from '../../lib/api'
 
-const DEMO_VICTIMS = {
-  1: { id: 1, name: 'Maria Santos',    status: 'trapped',  priority: 'CRITICAL', people_count: 4,  barangay: 'Del Carmen Poblacion', lat: 9.8527, lng: 126.0736, notes: 'Floodwater rising fast, second floor', contact: '+63920000001', vulnerabilities: ['Elderly (60+)', 'Infant'], is_verified: true,  rescue_status: 'pending' },
-  2: { id: 2, name: 'Juan Dela Cruz',  status: 'injured',  priority: 'HIGH',     people_count: 2,  barangay: 'Bitoon',    lat: 9.8720, lng: 126.0690, notes: 'Roof collapsed, leg injury',            contact: '+63920000002', vulnerabilities: [],      is_verified: true,  rescue_status: 'en_route' },
-  3: { id: 3, name: 'Rosa Villanueva', status: 'trapped',  priority: 'CRITICAL', people_count: 6,  barangay: 'Caub',      lat: 9.8610, lng: 126.0780, notes: 'Pregnant woman, need urgent help',      contact: '+63920000003', vulnerabilities: ['Pregnant', 'PWD'], is_verified: true,  rescue_status: 'pending' },
-  4: { id: 4, name: 'Guest User',      status: 'injured',  priority: 'HIGH',     people_count: 3,  barangay: 'Cancohoy',  lat: 9.8560, lng: 126.0620, notes: '5 children trapped inside school',     contact: null,           vulnerabilities: [],      is_verified: false, rescue_status: 'pending' },
-}
 
 const ACTIONS = [
   { label: 'En Route',     value: 'en_route',    variant: 'blue',   icon: Navigation  },
@@ -26,12 +20,13 @@ const ACTIONS = [
 export function RescueDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const fallback = DEMO_VICTIMS[id] ?? DEMO_VICTIMS[1]
 
-  const [victim, setVictim] = useState(fallback)
-  const [rescueStatus, setRescueStatus] = useState(fallback.rescue_status)
+  const [victim, setVictim] = useState(null)
+  const [rescueStatus, setRescueStatus] = useState('pending')
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
+  const [dataLoading, setDataLoading] = useState(true)
+  const [notFound, setNotFound] = useState(false)
   const [timer, setTimer] = useState(null)
 
   useEffect(() => {
@@ -53,7 +48,8 @@ export function RescueDetail() {
         })
         setRescueStatus(row.rescue_status ?? 'pending')
       })
-      .catch(() => {})
+      .catch(() => setNotFound(true))
+      .finally(() => setDataLoading(false))
   }, [id])
 
   const updateStatus = async (newStatus) => {
@@ -71,6 +67,20 @@ export function RescueDetail() {
   const openMap = () => {
     if (victim.lat) window.open(`https://www.openstreetmap.org/?mlat=${victim.lat}&mlon=${victim.lng}&zoom=17`, '_blank')
   }
+
+  if (dataLoading) return (
+    <div className="min-h-screen bg-mesh flex flex-col pb-6">
+      <TopBar title="Rescue Detail" subtitle="Loading…" onBack />
+      <div className="flex items-center justify-center flex-1 text-slate-400 text-sm">Loading…</div>
+    </div>
+  )
+
+  if (notFound || !victim) return (
+    <div className="min-h-screen bg-mesh flex flex-col pb-6">
+      <TopBar title="Rescue Detail" subtitle="Not found" onBack />
+      <div className="flex items-center justify-center flex-1 text-slate-400 text-sm">Victim not found</div>
+    </div>
+  )
 
   return (
     <div className="min-h-screen bg-mesh flex flex-col pb-6">
