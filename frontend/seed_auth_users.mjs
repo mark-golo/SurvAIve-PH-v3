@@ -34,26 +34,6 @@ const USERS = [
     name: 'DRRM Officer - Dapa',
     province: 'Surigao del Norte', municipality: 'Dapa', barangay: null,
   },
-  {
-    contact: '09180000001', role: 'responder',
-    name: 'Responder Alpha-1',
-    province: 'Surigao del Norte', municipality: 'Del Carmen', barangay: 'Del Carmen Poblacion',
-  },
-  {
-    contact: '09180000002', role: 'responder',
-    name: 'Responder Bravo-2',
-    province: 'Surigao del Norte', municipality: 'Del Carmen', barangay: 'Bitoon',
-  },
-  {
-    contact: '09180000003', role: 'responder',
-    name: 'Responder Charlie-3',
-    province: 'Surigao del Norte', municipality: 'Del Carmen', barangay: 'San Jose',
-  },
-  {
-    contact: '09200000001', role: 'victim',
-    name: 'Maria Santos',
-    province: 'Surigao del Norte', municipality: 'Del Carmen', barangay: 'Del Carmen Poblacion',
-  },
 ]
 
 console.log(`Seeding ${USERS.length} auth users into ${SUPABASE_URL} ...\n`)

@@ -1,5 +1,5 @@
 // Supabase compatibility wrapper — maps old PHP URL patterns to Supabase calls
-import { supabase } from './supabase'
+import { supabase, signupClient } from './supabase'
 
 const TABLE = {
   evacuation_centers: 'evacuation_centers',
@@ -141,6 +141,16 @@ async function post(path, body = {}) {
       const userInfo = profile ?? (meta.role ? { id: data.user.id, ...meta } : null)
 
       if (!userInfo) throwErr('Account not fully set up. Contact your administrator.', 403)
+
+      // Block inactive responders from logging in
+      if (userInfo.role === 'responder') {
+        const { data: respRow } = await supabase
+          .from('responders').select('status').eq('contact_number', userInfo.contact_number).maybeSingle()
+        if (respRow?.status === 'inactive') {
+          throwErr('Your account has been disabled. Contact your administrator.', 403)
+        }
+      }
+
       return { token: data.session.access_token, user: userInfo }
     }
 
@@ -267,6 +277,50 @@ async function post(path, body = {}) {
       .single()
     if (error) sbThrow(error)
     return { ...data, ai_priority_score: score }
+  }
+
+  // ── Responder creation: create Supabase Auth account + profiles row ──
+  if (table === 'responders') {
+    const { password, ...respData } = body
+    if (!password) throwErr('Password is required to create a responder account.', 400)
+
+    const email = `${respData.contact_number}@survaive.ph`
+    const userMeta = {
+      role: 'responder',
+      name: respData.name,
+      contact_number: respData.contact_number,
+      province: respData.province,
+      municipality: respData.municipality,
+      barangay: respData.barangay,
+    }
+
+    const { data: authData, error: authError } = await signupClient.auth.signUp({
+      email,
+      password,
+      options: { data: userMeta },
+    })
+
+    if (authError) {
+      if (authError.message?.toLowerCase().includes('already')) {
+        throwErr(`Contact number ${respData.contact_number} already has an account.`, 409)
+      }
+      throwErr(authError.message || 'Failed to create responder auth account.', 500)
+    }
+
+    const uid = authData.user?.id
+    if (!uid) throwErr('Auth account created but no user ID returned.', 500)
+
+    const { error: profileErr } = await supabase.from('profiles').upsert({
+      id: uid, role: 'responder', name: respData.name,
+      contact_number: respData.contact_number,
+      province: respData.province, municipality: respData.municipality, barangay: respData.barangay,
+    })
+    if (profileErr) throwErr(profileErr.message, 500)
+
+    const { data: respRow, error: respErr } = await supabase
+      .from('responders').insert(respData).select().single()
+    if (respErr) sbThrow(respErr)
+    return respRow
   }
 
   // ── Generic table insert (password field removed — Supabase Auth owns it) ──

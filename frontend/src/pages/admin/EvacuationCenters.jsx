@@ -11,12 +11,6 @@ import api from '../../lib/api'
 import { getBarangays } from '../../lib/philippineLocations'
 import { useAuthStore } from '../../store/auth'
 
-const DEMO = [
-  { id: 1, name: 'Del Carmen Municipal Gymnasium',   province: 'Surigao del Norte', municipality: 'Del Carmen', barangay: 'Del Carmen Poblacion', address: 'Del Carmen Poblacion, Del Carmen, Siargao Island', lat: 9.8520, lng: 126.0730, capacity: 500, contact_number: '09170001001', status: 'open' },
-  { id: 2, name: 'Bitoon Barangay Hall',              province: 'Surigao del Norte', municipality: 'Del Carmen', barangay: 'Bitoon',    address: 'Bitoon, Del Carmen, Siargao Island',    lat: 9.8715, lng: 126.0685, capacity: 150, contact_number: '09170001002', status: 'open' },
-  { id: 3, name: 'Siargao Island Sports Complex',    province: 'Surigao del Norte', municipality: 'Del Carmen', barangay: 'San Jose',     address: 'San Jose, Del Carmen, Siargao Island',     lat: 9.8485, lng: 126.0845, capacity: 800, contact_number: '09170001003', status: 'open' },
-]
-
 const BLANK = { name: '', province: '', municipality: '', barangay: '', address: '', lat: '', lng: '', capacity: '', contact_number: '', status: 'open' }
 
 const shelterIcon = (status, selected) => {
@@ -54,7 +48,7 @@ export function EvacuationCenters() {
   useEffect(() => {
     api.get(muni ? `/evacuation_centers?municipality=${encodeURIComponent(muni)}` : '/evacuation_centers')
       .then(rows => setData(rows))
-      .catch(() => setData(DEMO))
+      .catch(() => setData([]))
       .finally(() => setLoading(false))
   }, [])
 

@@ -4,3 +4,11 @@ export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY
 )
+
+// Non-persistent client used to create new auth accounts from the Admin UI
+// without overwriting the currently logged-in admin's session.
+export const signupClient = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY,
+  { auth: { persistSession: false, autoRefreshToken: false, storageKey: 'sb-signup-tmp' } }
+)
