@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Phone, Mail, ArrowLeft, Check, Eye, EyeOff, ChevronDown } from 'lucide-react'
+import { Phone, Mail, ArrowLeft, Check } from 'lucide-react'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassInput, GlassSelect, GlassTextarea } from '../../components/ui/GlassInput'
@@ -18,10 +18,10 @@ export function ProfileLogin() {
   const { login } = useAuthStore()
 
   const [step, setStep] = useState(0)
-  const [method, setMethod] = useState(null) // 'sms' | 'google'
-  const [contact, setContact] = useState('')
+  const [method, setMethod] = useState(null)    // 'phone' | 'email'
+  const [identifier, setIdentifier] = useState('') // raw phone or email typed in Step 0
+  const [contact, setContact] = useState('')       // phone number used for DB (pre-filled or user-entered)
   const [otp, setOtp] = useState('')
-  const [demoOtp, setDemoOtp] = useState('')
   const [otpSent, setOtpSent] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -30,7 +30,6 @@ export function ProfileLogin() {
     name: '', province: '', municipality: '', barangay: '', sitio: '',
     household_count: 1, vulnerabilities: [], medical_conditions: '',
     emergency_contact_name: '', emergency_contact_number: '', emergency_contact_relationship: 'Parent',
-    pin: '',
   })
 
   const f = (k) => (v) => setForm((p) => ({ ...p, [k]: typeof v === 'function' ? v(p[k]) : v }))
@@ -46,35 +45,55 @@ export function ProfileLogin() {
     })
   }
 
+  const switchMethod = (m) => {
+    setMethod(m)
+    setIdentifier('')
+    setOtp('')
+    setOtpSent(false)
+    setError('')
+  }
+
   const sendOtp = async () => {
     setError(''); setLoading(true)
     try {
-      const cleaned = contact.replace(/\D/g, '')
-      const res = await api.post('/auth/otp', { action: 'send', contact: cleaned })
-      setDemoOtp(res.demo_otp ?? '')
+      if (method === 'phone') {
+        const cleaned = identifier.replace(/\D/g, '')
+        if (cleaned.length < 10) { setError('Enter a valid Philippine mobile number (09XXXXXXXXX)'); setLoading(false); return }
+        await api.post('/auth/otp', { action: 'send', method: 'phone', contact: cleaned })
+      } else {
+        if (!identifier.includes('@')) { setError('Enter a valid email address'); setLoading(false); return }
+        await api.post('/auth/otp', { action: 'send', method: 'email', email: identifier })
+      }
       setOtpSent(true)
-    } catch (e) { setError(e.error ?? 'Failed to send OTP') }
+    } catch (e) { setError(e.error ?? e.message ?? 'Failed to send OTP') }
     setLoading(false)
   }
 
   const verifyOtp = async () => {
     setError(''); setLoading(true)
     try {
-      const cleaned = contact.replace(/\D/g, '')
-      const res = await api.post('/auth/otp', { action: 'verify', contact: cleaned, otp })
+      const payload = method === 'phone'
+        ? { action: 'verify', method: 'phone', contact: identifier.replace(/\D/g, ''), otp }
+        : { action: 'verify', method: 'email', email: identifier, otp }
+      const res = await api.post('/auth/otp', payload)
       if (res.existing_user) {
         login(res.token, res.user)
         navigate('/home')
       } else {
+        if (method === 'phone') setContact(identifier.replace(/\D/g, ''))
         setStep(1)
       }
-    } catch (e) { setError(e.error ?? 'Invalid OTP') }
+    } catch (e) { setError(e.error ?? e.message ?? 'Invalid OTP') }
     setLoading(false)
   }
 
   const submitProfile = () => {
     if (!form.name || !form.province || !form.municipality || !form.barangay) {
-      setError('Please fill all required fields'); return
+      setError('Please fill all required fields (*)'); return
+    }
+    if (method === 'email') {
+      const cleaned = contact.replace(/\D/g, '')
+      if (cleaned.length < 10) { setError('Enter a valid Philippine mobile number'); return }
     }
     setError(''); setStep(2)
   }
@@ -83,11 +102,12 @@ export function ProfileLogin() {
     setLoading(true); setError('')
     try {
       const res = await api.post('/auth/register', {
-        ...form, contact_number: contact.replace(/\D/g, ''),
+        ...form,
+        contact_number: contact.replace(/\D/g, ''),
       })
       login(res.token, res.user)
       navigate('/home')
-    } catch (e) { setError(e.error ?? 'Registration failed') }
+    } catch (e) { setError(e.error ?? e.message ?? 'Registration failed. Please try again.') }
     setLoading(false)
   }
 
@@ -96,7 +116,8 @@ export function ProfileLogin() {
       <div className="w-full max-w-sm">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => step > 0 ? setStep(s => s - 1) : navigate('/')}
+          <button
+            onClick={() => step > 0 ? setStep((s) => s - 1) : navigate('/')}
             className="text-slate-400 hover:text-white transition-colors">
             <ArrowLeft size={20} />
           </button>
@@ -116,69 +137,121 @@ export function ProfileLogin() {
         </div>
 
         <AnimatePresence mode="wait">
-          {/* STEP 0 – Credential */}
+          {/* ── STEP 0 — Method chooser ── */}
           {step === 0 && (
             <motion.div key="cred" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
               <GlassCard className="space-y-4">
                 <p className="text-sm text-slate-300 font-medium">Choose how to verify your identity</p>
 
-                {/* SMS method */}
-                <div className={`rounded-xl border p-3 cursor-pointer transition-all ${
-                  method === 'sms' ? 'border-[rgba(0,212,255,0.5)] bg-[rgba(0,212,255,0.05)]' : 'border-[rgba(255,255,255,0.08)]'
-                }`} onClick={() => setMethod('sms')}>
+                {/* Phone method */}
+                <div
+                  className={`rounded-xl border p-3 cursor-pointer transition-all ${
+                    method === 'phone' ? 'border-[rgba(0,212,255,0.5)] bg-[rgba(0,212,255,0.05)]' : 'border-[rgba(255,255,255,0.08)]'
+                  }`}
+                  onClick={() => switchMethod('phone')}
+                >
                   <div className="flex items-center gap-3">
                     <Phone size={18} className="text-[#00d4ff]" />
                     <div>
                       <p className="text-sm font-medium text-white">Mobile Number + OTP</p>
                       <p className="text-xs text-slate-500">Receive a 6-digit code via SMS</p>
                     </div>
-                    {method === 'sms' && <Check size={16} className="text-[#00d4ff] ml-auto" />}
+                    {method === 'phone' && <Check size={16} className="text-[#00d4ff] ml-auto" />}
                   </div>
                 </div>
 
-                {method === 'sms' && (
+                {method === 'phone' && (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-3">
                     <GlassInput
                       label="Philippine Mobile Number"
-                      placeholder="+63 or 09XXXXXXXXX"
-                      value={contact}
-                      onChange={(e) => setContact(e.target.value)}
+                      placeholder="09XXXXXXXXX"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
                       icon={Phone}
                       disabled={otpSent}
                     />
                     {!otpSent ? (
-                      <NeonButton onClick={sendOtp} loading={loading} className="w-full">Send OTP</NeonButton>
+                      <NeonButton onClick={sendOtp} loading={loading} className="w-full">Send OTP via SMS</NeonButton>
                     ) : (
                       <>
-                        {demoOtp && <p className="text-xs text-[#f59e0b] text-center">Demo OTP: <strong>{demoOtp}</strong></p>}
-                        <GlassInput label="6-Digit OTP" placeholder="000000" value={otp}
-                          onChange={(e) => setOtp(e.target.value)} maxLength={6} />
+                        <p className="text-xs text-[#00d4ff] text-center">OTP sent to {identifier}</p>
+                        <GlassInput
+                          label="6-Digit OTP"
+                          placeholder="000000"
+                          value={otp}
+                          onChange={(e) => setOtp(e.target.value)}
+                          maxLength={6}
+                        />
                         <NeonButton onClick={verifyOtp} loading={loading} className="w-full">Verify OTP</NeonButton>
+                        <button
+                          onClick={() => { setOtpSent(false); setOtp('') }}
+                          className="w-full text-xs text-slate-400 hover:text-white text-center py-1"
+                        >
+                          Resend OTP
+                        </button>
                       </>
                     )}
                   </motion.div>
                 )}
 
-                {/* Google method (simulated) */}
-                <div className={`rounded-xl border p-3 cursor-pointer transition-all ${
-                  method === 'google' ? 'border-[rgba(0,212,255,0.5)] bg-[rgba(0,212,255,0.05)]' : 'border-[rgba(255,255,255,0.08)]'
-                }`} onClick={() => { setMethod('google'); setStep(1) }}>
+                {/* Email method */}
+                <div
+                  className={`rounded-xl border p-3 cursor-pointer transition-all ${
+                    method === 'email' ? 'border-[rgba(0,212,255,0.5)] bg-[rgba(0,212,255,0.05)]' : 'border-[rgba(255,255,255,0.08)]'
+                  }`}
+                  onClick={() => switchMethod('email')}
+                >
                   <div className="flex items-center gap-3">
                     <Mail size={18} className="text-[#f97316]" />
                     <div>
-                      <p className="text-sm font-medium text-white">Continue with Google</p>
-                      <p className="text-xs text-slate-500">Sign in using your Gmail account</p>
+                      <p className="text-sm font-medium text-white">Email Address + OTP</p>
+                      <p className="text-xs text-slate-500">Receive a 6-digit code via email</p>
                     </div>
-                    {method === 'google' && <Check size={16} className="text-[#00d4ff] ml-auto" />}
+                    {method === 'email' && <Check size={16} className="text-[#00d4ff] ml-auto" />}
                   </div>
                 </div>
+
+                {method === 'email' && (
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-3">
+                    <GlassInput
+                      label="Email Address"
+                      placeholder="you@example.com"
+                      type="email"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      icon={Mail}
+                      disabled={otpSent}
+                    />
+                    {!otpSent ? (
+                      <NeonButton onClick={sendOtp} loading={loading} className="w-full">Send OTP via Email</NeonButton>
+                    ) : (
+                      <>
+                        <p className="text-xs text-[#00d4ff] text-center">OTP sent to {identifier}</p>
+                        <GlassInput
+                          label="6-Digit OTP"
+                          placeholder="000000"
+                          value={otp}
+                          onChange={(e) => setOtp(e.target.value)}
+                          maxLength={6}
+                        />
+                        <NeonButton onClick={verifyOtp} loading={loading} className="w-full">Verify OTP</NeonButton>
+                        <button
+                          onClick={() => { setOtpSent(false); setOtp('') }}
+                          className="w-full text-xs text-slate-400 hover:text-white text-center py-1"
+                        >
+                          Resend OTP
+                        </button>
+                      </>
+                    )}
+                  </motion.div>
+                )}
 
                 {error && <p className="text-xs text-[#ef4444] text-center">{error}</p>}
               </GlassCard>
             </motion.div>
           )}
 
-          {/* STEP 1 – Profile form */}
+          {/* ── STEP 1 — Profile form ── */}
           {step === 1 && (
             <motion.div key="form" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
               className="space-y-4">
@@ -187,7 +260,15 @@ export function ProfileLogin() {
                 <div className="space-y-3">
                   <GlassInput label="Full Name *" placeholder="Juan Dela Cruz" value={form.name}
                     onChange={(e) => f('name')(e.target.value)} />
-                  <GlassInput label="Contact Number" value={contact} disabled />
+                  {method === 'phone' ? (
+                    <GlassInput label="Contact Number" value={identifier} disabled />
+                  ) : (
+                    <>
+                      <GlassInput label="Philippine Mobile Number *" placeholder="09XXXXXXXXX"
+                        value={contact} onChange={(e) => setContact(e.target.value)} icon={Phone} />
+                      <GlassInput label="Email" value={identifier} disabled />
+                    </>
+                  )}
                 </div>
               </GlassCard>
 
@@ -250,9 +331,6 @@ export function ProfileLogin() {
                   </GlassSelect>
                   <GlassInput label="Contact Number *" value={form.emergency_contact_number}
                     onChange={(e) => f('emergency_contact_number')(e.target.value)} />
-                  <GlassInput type="password" label="4-Digit Offline PIN"
-                    placeholder="For offline access" maxLength={4}
-                    value={form.pin} onChange={(e) => f('pin')(e.target.value)} />
                 </div>
               </GlassCard>
 
@@ -261,7 +339,7 @@ export function ProfileLogin() {
             </motion.div>
           )}
 
-          {/* STEP 2 – Confirm */}
+          {/* ── STEP 2 — Confirm ── */}
           {step === 2 && (
             <motion.div key="confirm" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
               className="space-y-4">
@@ -272,7 +350,8 @@ export function ProfileLogin() {
                 </div>
                 <div className="space-y-2 text-sm">
                   <Row label="Name" value={form.name} />
-                  <Row label="Contact" value={contact} />
+                  <Row label="Verified via" value={identifier} />
+                  <Row label="Contact" value={method === 'phone' ? identifier : contact} />
                   <Row label="Location" value={[form.province, form.municipality, form.barangay, form.sitio].filter(Boolean).join(', ')} />
                   <Row label="Household" value={`${form.household_count} member(s)`} />
                   <Row label="Vulnerabilities" value={form.vulnerabilities.join(', ') || 'None'} />

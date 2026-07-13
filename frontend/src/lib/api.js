@@ -138,29 +138,42 @@ async function post(path, body = {}) {
     }
 
     if (action === 'otp') {
-      const email = `${body.contact}@survAIve.ph`
-
       if (body.action === 'send') {
+        if (body.method === 'phone') {
+          const digits = body.contact.replace(/\D/g, '')
+          const phone = '+63' + (digits.startsWith('0') ? digits.slice(1) : digits)
+          const { error } = await supabase.auth.signInWithOtp({ phone })
+          if (error) throwErr(error.message)
+          return { message: 'OTP sent via SMS' }
+        }
+        // email method
         const { error } = await supabase.auth.signInWithOtp({
-          email,
+          email: body.email,
           options: { shouldCreateUser: true },
         })
         if (error) throwErr(error.message)
-        return { message: 'OTP sent to email', demo_otp: 'Check email: ' + email }
+        return { message: 'OTP sent to email' }
       }
 
       if (body.action === 'verify') {
-        const { data, error } = await supabase.auth.verifyOtp({
-          email,
-          token: body.otp,
-          type: 'email',
-        })
+        let authResult
+        if (body.method === 'phone') {
+          const digits = body.contact.replace(/\D/g, '')
+          const phone = '+63' + (digits.startsWith('0') ? digits.slice(1) : digits)
+          authResult = await supabase.auth.verifyOtp({ phone, token: body.otp, type: 'sms' })
+        } else {
+          authResult = await supabase.auth.verifyOtp({ email: body.email, token: body.otp, type: 'email' })
+        }
+        const { data, error } = authResult
         if (error) throwErr('Invalid or expired OTP')
+
         const { data: profile } = await supabase
           .from('profiles').select('*').eq('id', data.user.id).maybeSingle()
         if (profile) {
-          const { data: victim } = await supabase
-            .from('victims').select('*').eq('contact_number', body.contact).maybeSingle()
+          const { data: victim } = body.method === 'phone'
+            ? await supabase.from('victims').select('*')
+                .eq('contact_number', body.contact.replace(/\D/g, '')).maybeSingle()
+            : { data: null }
           return {
             existing_user: true,
             token: data.session.access_token,
@@ -189,8 +202,7 @@ async function post(path, body = {}) {
         emergency_contact_number:       body.emergency_contact_number ?? null,
         emergency_contact_relationship: body.emergency_contact_relationship ?? null,
       }
-      const { data: victim, error: ve } = await supabase
-        .from('victims').insert(victimData).select().single()
+      const { error: ve } = await supabase.from('victims').insert(victimData)
       if (ve) sbThrow(ve)
 
       const { error: pe } = await supabase.from('profiles').upsert({
@@ -208,13 +220,13 @@ async function post(path, body = {}) {
       return {
         token: sess.session?.access_token ?? null,
         user: {
-          id:           user.id,
-          role:         'victim',
-          name:         body.name,
-          municipality: body.municipality,
-          province:     body.province,
-          barangay:     body.barangay,
+          id:             user.id,
+          role:           'victim',
+          name:           body.name,
           contact_number: body.contact_number,
+          municipality:   body.municipality,
+          province:       body.province,
+          barangay:       body.barangay,
         },
       }
     }
