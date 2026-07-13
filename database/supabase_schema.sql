@@ -383,34 +383,20 @@ INSERT INTO superadmins (name, contact_number, gmail, province, status, is_verif
 VALUES ('DOST Provincial Director - Caraga', '09170000001', 'dost@survAIve.ph', 'Surigao del Norte', 'active', TRUE, 'HIGH')
 ON CONFLICT (contact_number) DO NOTHING;
 
-INSERT INTO admins (name, contact_number, gmail, province, municipality, status, is_verified, trust_score)
-VALUES
-  ('DRRM Officer - Del Carmen', '09170000002', 'drrm.delcarmen@survAIve.ph', 'Surigao del Norte', 'Del Carmen', 'active', TRUE, 'HIGH'),
-  ('DRRM Officer - Dapa',       '09170000003', 'drrm.dapa@survAIve.ph',      'Surigao del Norte', 'Dapa',       'active', TRUE, 'HIGH')
-ON CONFLICT (contact_number) DO NOTHING;
-
+-- Admin accounts are created through the app (SuperAdmin → Staff Management → Admins tab).
+-- Responder accounts are created through the app (Admin → Staff Management → Responders tab).
 -- Demo seed data removed. Insert real data through the app.
 
 -- ============================================================
--- AUTH USER SETUP (run AFTER creating users in Supabase Dashboard)
+-- AUTH USER SETUP
 -- ============================================================
--- 1. Go to Authentication → Users → Add User for each contact:
+-- Only the SuperAdmin account needs to be created manually in Supabase Dashboard:
 --
---    09170000001@survAIve.ph  |  password  (superadmin)
---    09170000002@survAIve.ph  |  password  (admin – Del Carmen)
---    09170000003@survAIve.ph  |  password  (admin – Dapa)
---    09180000001@survAIve.ph  |  password  (responder Alpha-1)
---    09180000002@survAIve.ph  |  password  (responder Bravo-2)
---    09180000003@survAIve.ph  |  password  (responder Charlie-3)
---    09200000001@survAIve.ph  |  password  (victim Maria Santos)
+-- 1. Go to Authentication → Users → Add User:
+--    09170000001@survAIve.ph  |  <password>  (superadmin)
 --
--- 2. Copy each user's UUID from Auth → Users, then run:
+-- 2. Copy the UUID, then run:
+-- INSERT INTO profiles (id, role, name, contact_number, province)
+-- VALUES ('<uuid-superadmin>', 'superadmin', '<Your Name>', '09170000001', '<Your Province>');
 --
--- INSERT INTO profiles (id, role, name, contact_number, province, municipality, barangay) VALUES
---   ('<uuid-superadmin>',  'superadmin', 'DOST Provincial Director - Caraga', '09170000001', 'Surigao del Norte', NULL,          NULL),
---   ('<uuid-admin-dc>',    'admin',      'DRRM Officer - Del Carmen',          '09170000002', 'Surigao del Norte', 'Del Carmen',  NULL),
---   ('<uuid-admin-dapa>',  'admin',      'DRRM Officer - Dapa',                '09170000003', 'Surigao del Norte', 'Dapa',        NULL),
---   ('<uuid-resp-alpha>',  'responder',  'Responder Alpha-1',                  '09180000001', 'Surigao del Norte', 'Del Carmen',  'Del Carmen Poblacion'),
---   ('<uuid-resp-bravo>',  'responder',  'Responder Bravo-2',                  '09180000002', 'Surigao del Norte', 'Del Carmen',  'Bitoon'),
---   ('<uuid-resp-charlie>','responder',  'Responder Charlie-3',                '09180000003', 'Surigao del Norte', 'Del Carmen',  'San Jose'),
---   ('<uuid-victim-maria>','victim',     'Maria Santos',                       '09200000001', 'Surigao del Norte', 'Del Carmen',  'Del Carmen Poblacion');
+-- All other accounts (admins, responders) are created through the app UI.
