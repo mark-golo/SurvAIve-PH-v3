@@ -7,14 +7,6 @@ import { GlassCard } from '../../components/ui/GlassCard'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 
-const MUNICIPALITIES = [
-  { id: 1, name: 'Del Carmen',   lgu: 'Mayor Alfredo Coro',          total: 9, critical: 3, rescued: 1, verified: 5, guest: 4, lastSync: '2m ago',  severity: 'EMERGENCY'  },
-  { id: 2, name: 'Dapa',         lgu: 'Mayor Jay-ann Santos',        total: 4, critical: 1, rescued: 0, verified: 2, guest: 2, lastSync: '5m ago',  severity: 'EMERGENCY'  },
-  { id: 3, name: 'General Luna', lgu: 'Mayor Sol Matugas',           total: 1, critical: 0, rescued: 1, verified: 1, guest: 0, lastSync: '8m ago',  severity: 'MONITORING' },
-  { id: 4, name: 'Santa Monica', lgu: 'Mayor Amor Palma',            total: 0, critical: 0, rescued: 0, verified: 0, guest: 0, lastSync: '12m ago', severity: 'STABLE'     },
-  { id: 5, name: 'Pilar',        lgu: 'Mayor Felix Cabilin',         total: 0, critical: 0, rescued: 0, verified: 0, guest: 0, lastSync: '15m ago', severity: 'STABLE'     },
-]
-
 const SEVERITY_COLORS = {
   EMERGENCY:  { border: 'border-[rgba(239,68,68,0.4)]',   badge: 'bg-[rgba(239,68,68,0.15)] text-[#ef4444] border-[rgba(239,68,68,0.4)]'   },
   MONITORING: { border: 'border-[rgba(245,158,11,0.4)]',  badge: 'bg-[rgba(245,158,11,0.15)] text-[#f59e0b] border-[rgba(245,158,11,0.4)]'  },
@@ -35,7 +27,6 @@ export function MunicipalityList() {
   }, [prov])
 
   const liveMunicipalities = useMemo(() => {
-    if (!sosData.length) return MUNICIPALITIES
     const map = {}
     sosData.forEach(r => {
       const name = r.municipality ?? 'Unknown'
@@ -120,7 +111,7 @@ export function MunicipalityList() {
 
               <GlassCard className="mb-4">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Barangay Breakdown</p>
-                <p className="text-xs text-slate-500">Lipata · Sabang · Day-asan · Luna · Cagniog</p>
+                <p className="text-xs text-slate-500">No barangay data</p>
               </GlassCard>
 
               <button onClick={() => alert('Escalate to NDRRMC – would flag this municipality for national attention')}

@@ -1,27 +1,13 @@
+import { useState, useEffect } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  LineChart, Line, Legend, Cell
+  LineChart, Line, Legend
 } from 'recharts'
 import { Download, TrendingUp } from 'lucide-react'
 import { SuperAdminLayout } from './SuperAdminLayout'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { NeonButton } from '../../components/ui/NeonButton'
-
-const MUN_DATA = [
-  { name: 'Del Carmen',   total: 9, critical: 3, rescued: 1 },
-  { name: 'Dapa',         total: 4, critical: 1, rescued: 0 },
-  { name: 'Gen. Luna',    total: 1, critical: 0, rescued: 1 },
-  { name: 'Santa Monica', total: 0, critical: 0, rescued: 0 },
-  { name: 'Pilar',        total: 0, critical: 0, rescued: 0 },
-]
-
-const TREND = [
-  { hour: '08:00', del_carmen: 1, dapa: 0, luna: 0 },
-  { hour: '10:00', del_carmen: 3, dapa: 1, luna: 0 },
-  { hour: '12:00', del_carmen: 6, dapa: 2, luna: 1 },
-  { hour: '14:00', del_carmen: 8, dapa: 4, luna: 1 },
-  { hour: '16:00', del_carmen: 9, dapa: 4, luna: 1 },
-]
+import api from '../../lib/api'
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
@@ -36,7 +22,40 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export function ProvincialAnalytics() {
-  const SURGE = MUN_DATA.find(m => m.total >= 5) // AI surge detection
+  const [sos, setSos]         = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get('/sos').then(setSos).catch(() => setSos([])).finally(() => setLoading(false))
+  }, [])
+
+  // Group by municipality
+  const munMap = {}
+  sos.forEach(r => {
+    const name = r.municipality ?? 'Unknown'
+    if (!munMap[name]) munMap[name] = { name, total: 0, critical: 0, rescued: 0 }
+    munMap[name].total++
+    if (r.priority === 'CRITICAL') munMap[name].critical++
+    if (r.rescue_status === 'rescued') munMap[name].rescued++
+  })
+  const munData = Object.values(munMap).sort((a, b) => b.total - a.total)
+
+  // SOS trend by hour (last 5 hours, total count)
+  const trendData = Array.from({ length: 5 }, (_, i) => {
+    const now  = new Date()
+    const hour = ((now.getHours() - 4 + i) + 24) % 24
+    const label = `${String(hour).padStart(2, '0')}:00`
+    const count = sos.filter(r => r.created_at && new Date(r.created_at).getHours() === hour).length
+    return { hour: label, total: count }
+  })
+
+  const SURGE = munData.find(m => m.total >= 5)
+
+  if (loading) return (
+    <SuperAdminLayout title="Provincial Analytics">
+      <div className="flex items-center justify-center h-64 text-slate-400 text-sm">Loading…</div>
+    </SuperAdminLayout>
+  )
 
   return (
     <SuperAdminLayout title="Provincial Analytics">
@@ -59,56 +78,63 @@ export function ProvincialAnalytics() {
           </NeonButton>
         </div>
 
-        {/* Bar chart */}
-        <GlassCard>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Incident Count per Municipality</p>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={MUN_DATA} margin={{ top: 4, right: 12, bottom: 0, left: -20 }}>
-              <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 11 }} />
-              <YAxis tick={{ fill: '#64748b', fontSize: 10 }} />
-              <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="total" fill="#00d4ff" radius={[4,4,0,0]} name="Total" />
-              <Bar dataKey="critical" fill="#ef4444" radius={[4,4,0,0]} name="Critical" />
-              <Bar dataKey="rescued" fill="#22c55e" radius={[4,4,0,0]} name="Rescued" />
-            </BarChart>
-          </ResponsiveContainer>
-        </GlassCard>
+        {munData.length === 0 ? (
+          <GlassCard>
+            <p className="text-xs text-slate-500 text-center py-8">No SOS data yet</p>
+          </GlassCard>
+        ) : (
+          <>
+            {/* Bar chart */}
+            <GlassCard>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Incident Count per Municipality</p>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={munData} margin={{ top: 4, right: 12, bottom: 0, left: -20 }}>
+                  <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 11 }} />
+                  <YAxis tick={{ fill: '#64748b', fontSize: 10 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="total"    fill="#00d4ff" radius={[4,4,0,0]} name="Total" />
+                  <Bar dataKey="critical" fill="#ef4444" radius={[4,4,0,0]} name="Critical" />
+                  <Bar dataKey="rescued"  fill="#22c55e" radius={[4,4,0,0]} name="Rescued" />
+                </BarChart>
+              </ResponsiveContainer>
+            </GlassCard>
 
-        {/* Line chart trends */}
-        <GlassCard>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">SOS Trend Today (Cumulative)</p>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={TREND} margin={{ top: 4, right: 12, bottom: 0, left: -20 }}>
-              <XAxis dataKey="hour" tick={{ fill: '#64748b', fontSize: 10 }} />
-              <YAxis tick={{ fill: '#64748b', fontSize: 10 }} />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend formatter={v => <span style={{ color: '#94a3b8', fontSize: '10px', textTransform: 'capitalize' }}>{v}</span>} />
-              <Line type="monotone" dataKey="del_carmen" stroke="#ef4444"  strokeWidth={2} dot={false} name="Del Carmen" />
-              <Line type="monotone" dataKey="dapa"      stroke="#f97316"  strokeWidth={2} dot={false} name="Dapa" />
-              <Line type="monotone" dataKey="luna"      stroke="#f59e0b"  strokeWidth={2} dot={false} name="Gen. Luna" />
-            </LineChart>
-          </ResponsiveContainer>
-        </GlassCard>
+            {/* Line chart trends */}
+            <GlassCard>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">SOS Trend Today (by Hour)</p>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={trendData} margin={{ top: 4, right: 12, bottom: 0, left: -20 }}>
+                  <XAxis dataKey="hour" tick={{ fill: '#64748b', fontSize: 10 }} />
+                  <YAxis tick={{ fill: '#64748b', fontSize: 10 }} allowDecimals={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend formatter={v => <span style={{ color: '#94a3b8', fontSize: '10px' }}>{v}</span>} />
+                  <Line type="monotone" dataKey="total" stroke="#ef4444" strokeWidth={2} dot={false} name="Total SOS" />
+                </LineChart>
+              </ResponsiveContainer>
+            </GlassCard>
 
-        {/* Province heatmap proxy */}
-        <GlassCard>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Province Severity Heatmap</p>
-          <div className="space-y-2">
-            {MUN_DATA.map(m => {
-              const pct = Math.min((m.total / 8) * 100, 100)
-              const color = m.critical >= 2 ? '#ef4444' : m.critical >= 1 ? '#f97316' : m.total > 0 ? '#f59e0b' : '#22c55e'
-              return (
-                <div key={m.name} className="flex items-center gap-3">
-                  <p className="text-xs text-slate-400 w-20 shrink-0">{m.name}</p>
-                  <div className="flex-1 h-5 rounded-full bg-slate-800 overflow-hidden">
-                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color, boxShadow: `0 0 8px ${color}40` }} />
-                  </div>
-                  <span className="text-xs font-bold w-6 text-right" style={{ color }}>{m.total}</span>
-                </div>
-              )
-            })}
-          </div>
-        </GlassCard>
+            {/* Province heatmap proxy */}
+            <GlassCard>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Province Severity Heatmap</p>
+              <div className="space-y-2">
+                {munData.map(m => {
+                  const maxTotal = Math.max(...munData.map(x => x.total), 1)
+                  const pct   = Math.min((m.total / maxTotal) * 100, 100)
+                  const color = m.critical >= 2 ? '#ef4444' : m.critical >= 1 ? '#f97316' : m.total > 0 ? '#f59e0b' : '#22c55e'
+                  return (
+                    <div key={m.name} className="flex items-center gap-3">
+                      <p className="text-xs text-slate-400 w-24 shrink-0 truncate">{m.name}</p>
+                      <div className="flex-1 h-5 rounded-full bg-slate-800 overflow-hidden">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color, boxShadow: `0 0 8px ${color}40` }} />
+                      </div>
+                      <span className="text-xs font-bold w-6 text-right" style={{ color }}>{m.total}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </GlassCard>
+          </>
+        )}
       </div>
     </SuperAdminLayout>
   )

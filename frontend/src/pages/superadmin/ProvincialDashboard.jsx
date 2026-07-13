@@ -7,24 +7,25 @@ import { StatCard } from '../../components/ui/StatCard'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 
-const MUNICIPALITIES = [
-  { name: 'Del Carmen',   severity: 'RED',   coords: [[9.83,126.04],[9.88,126.08],[9.87,126.11],[9.82,126.10],[9.80,126.06]], total: 9, critical: 3, rescued: 1 },
-  { name: 'Dapa',         severity: 'AMBER', coords: [[9.74,126.02],[9.78,126.06],[9.77,126.09],[9.73,126.08],[9.71,126.04]], total: 4, critical: 1, rescued: 0 },
-  { name: 'General Luna', severity: 'GREEN', coords: [[9.78,126.13],[9.83,126.17],[9.82,126.20],[9.77,126.18],[9.75,126.14]], total: 1, critical: 0, rescued: 1 },
-  { name: 'Santa Monica', severity: 'GRAY',  coords: [[9.89,126.05],[9.93,126.09],[9.92,126.12],[9.88,126.11],[9.86,126.07]], total: 0, critical: 0, rescued: 0 },
+// Geographic boundaries only — no fake counts
+const MUNICIPALITY_BOUNDS = [
+  { name: 'Del Carmen',   coords: [[9.83,126.04],[9.88,126.08],[9.87,126.11],[9.82,126.10],[9.80,126.06]] },
+  { name: 'Dapa',         coords: [[9.74,126.02],[9.78,126.06],[9.77,126.09],[9.73,126.08],[9.71,126.04]] },
+  { name: 'General Luna', coords: [[9.78,126.13],[9.83,126.17],[9.82,126.20],[9.77,126.18],[9.75,126.14]] },
+  { name: 'Santa Monica', coords: [[9.89,126.05],[9.93,126.09],[9.92,126.12],[9.88,126.11],[9.86,126.07]] },
 ]
 
 const COLORS = {
-  RED:   { fill: 'rgba(239,68,68,0.2)',   stroke: 'rgba(239,68,68,0.7)'   },
-  AMBER: { fill: 'rgba(245,158,11,0.2)',  stroke: 'rgba(245,158,11,0.7)'  },
-  GREEN: { fill: 'rgba(34,197,94,0.2)',   stroke: 'rgba(34,197,94,0.7)'   },
-  GRAY:  { fill: 'rgba(107,114,128,0.15)',stroke: 'rgba(107,114,128,0.4)' },
+  RED:   { fill: 'rgba(239,68,68,0.2)',    stroke: 'rgba(239,68,68,0.7)'   },
+  AMBER: { fill: 'rgba(245,158,11,0.2)',   stroke: 'rgba(245,158,11,0.7)'  },
+  GREEN: { fill: 'rgba(34,197,94,0.2)',    stroke: 'rgba(34,197,94,0.7)'   },
+  GRAY:  { fill: 'rgba(107,114,128,0.15)', stroke: 'rgba(107,114,128,0.4)' },
 }
 
 export function ProvincialDashboard() {
   const { scope } = useAuthStore()
   const [selected, setSelected] = useState(null)
-  const [sosData, setSosData] = useState([])
+  const [sosData, setSosData]   = useState([])
 
   const prov = scope?.province
   useEffect(() => {
@@ -34,13 +35,17 @@ export function ProvincialDashboard() {
       .catch(() => {})
   }, [prov])
 
-  // Group live SOS data by municipality
-  const liveMunicipalities = useMemo(() => {
-    if (!sosData.length) return MUNICIPALITIES
+  // Merge live SOS counts with known municipality boundaries
+  const municipalities = useMemo(() => {
     const map = {}
+    // Start all known boundaries at zero
+    MUNICIPALITY_BOUNDS.forEach(m => {
+      map[m.name] = { name: m.name, coords: m.coords, total: 0, critical: 0, rescued: 0 }
+    })
+    // Overlay live SOS data
     sosData.forEach(r => {
       const name = r.municipality ?? 'Unknown'
-      if (!map[name]) map[name] = { name, total: 0, critical: 0, rescued: 0 }
+      if (!map[name]) map[name] = { name, coords: [], total: 0, critical: 0, rescued: 0 }
       map[name].total++
       if (r.priority === 'CRITICAL') map[name].critical++
       if (r.rescue_status === 'rescued') map[name].rescued++
@@ -48,11 +53,8 @@ export function ProvincialDashboard() {
     return Object.values(map).map(m => ({
       ...m,
       severity: m.critical > 0 ? 'RED' : m.total > 0 ? 'AMBER' : 'GRAY',
-      coords: MUNICIPALITIES.find(d => d.name === m.name)?.coords ?? [],
     }))
   }, [sosData])
-
-  const municipalities = liveMunicipalities
 
   const totals = municipalities.reduce((acc, m) => ({
     incidents: acc.incidents + m.total,
@@ -90,10 +92,10 @@ export function ProvincialDashboard() {
           <div className="p-4 border-b border-[rgba(255,255,255,0.08)]">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Province Summary</p>
             <div className="grid grid-cols-2 gap-2">
-              <StatCard label="Incidents" value={totals.incidents} icon={AlertTriangle} color="#ef4444" />
-              <StatCard label="Critical"  value={totals.critical}  icon={AlertTriangle} color="#f97316" />
-              <StatCard label="Rescued"   value={totals.rescued}   icon={CheckCircle}   color="#22c55e" />
-              <StatCard label="Reporting" value={MUNICIPALITIES.filter(m => m.total > 0).length} icon={Building2} color="#8b5cf6" />
+              <StatCard label="Incidents"  value={totals.incidents}                                    icon={AlertTriangle} color="#ef4444" />
+              <StatCard label="Critical"   value={totals.critical}                                     icon={AlertTriangle} color="#f97316" />
+              <StatCard label="Rescued"    value={totals.rescued}                                      icon={CheckCircle}   color="#22c55e" />
+              <StatCard label="Reporting"  value={municipalities.filter(m => m.total > 0).length}      icon={Building2}     color="#8b5cf6" />
             </div>
           </div>
 

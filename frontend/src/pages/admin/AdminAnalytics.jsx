@@ -1,29 +1,11 @@
+import { useState, useEffect } from 'react'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts'
 import { AdminLayout } from './AdminLayout'
 import { GlassCard } from '../../components/ui/GlassCard'
+import api from '../../lib/api'
+import { useAuthStore } from '../../store/auth'
 
-const STATUS_DATA = [
-  { name: 'Rescued',  value: 1, color: '#22c55e' },
-  { name: 'En Route', value: 1, color: '#00d4ff' },
-  { name: 'Pending',  value: 4, color: '#ef4444' },
-]
-
-const TIME_DATA = [
-  { day: 'Mon', verified: 3, guest: 2 },
-  { day: 'Tue', verified: 5, guest: 4 },
-  { day: 'Wed', verified: 8, guest: 6 },
-  { day: 'Thu', verified: 12,guest: 9 },
-  { day: 'Fri', verified: 7, guest: 5 },
-  { day: 'Sat', verified: 4, guest: 3 },
-  { day: 'Sun', verified: 6, guest: 4 },
-]
-
-const PRIORITY_DATA = [
-  { range: 'Critical (80+)', count: 2, color: '#ef4444' },
-  { range: 'High (60-79)',   count: 2, color: '#f97316' },
-  { range: 'Moderate (40)', count: 1, color: '#f59e0b' },
-  { range: 'Low (<40)',      count: 1, color: '#22c55e' },
-]
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
@@ -38,6 +20,47 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export function AdminAnalytics() {
+  const { scope } = useAuthStore()
+  const muni = scope?.municipality
+  const [sos, setSos]       = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const q = muni ? `/sos?municipality=${encodeURIComponent(muni)}` : '/sos'
+    api.get(q).then(setSos).catch(() => setSos([])).finally(() => setLoading(false))
+  }, [])
+
+  // Computed chart data
+  const statusData = [
+    { name: 'Rescued',  value: sos.filter(r => r.rescue_status === 'rescued').length,  color: '#22c55e' },
+    { name: 'En Route', value: sos.filter(r => r.rescue_status === 'en_route').length, color: '#00d4ff' },
+    { name: 'Pending',  value: sos.filter(r => !r.rescue_status || r.rescue_status === 'pending').length, color: '#ef4444' },
+  ]
+
+  const priorityData = [
+    { range: 'Critical (80+)', count: sos.filter(r => (r.ai_priority_score ?? 0) >= 80).length, color: '#ef4444' },
+    { range: 'High (60-79)',   count: sos.filter(r => { const s = r.ai_priority_score ?? 0; return s >= 60 && s < 80 }).length, color: '#f97316' },
+    { range: 'Moderate (40)', count: sos.filter(r => { const s = r.ai_priority_score ?? 0; return s >= 40 && s < 60 }).length, color: '#f59e0b' },
+    { range: 'Low (<40)',      count: sos.filter(r => (r.ai_priority_score ?? 50) < 40).length, color: '#22c55e' },
+  ]
+
+  const timeData = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - (6 - i))
+    const label  = DAYS[d.getDay()]
+    const dateStr = d.toISOString().slice(0, 10)
+    const dayRows = sos.filter(r => r.created_at?.slice(0, 10) === dateStr)
+    return { day: label, verified: dayRows.filter(r => r.is_verified).length, guest: dayRows.filter(r => !r.is_verified).length }
+  })
+
+  const verifiedRate = sos.length ? Math.round(sos.filter(r => r.is_verified).length / sos.length * 100) : 0
+  const guestRatio   = sos.length ? Math.round(sos.filter(r => !r.is_verified).length / sos.length * 100) : 0
+
+  if (loading) return (
+    <AdminLayout title="Analytics">
+      <div className="flex items-center justify-center h-64 text-slate-400 text-sm">Loading…</div>
+    </AdminLayout>
+  )
+
   return (
     <AdminLayout title="Analytics">
       <div className="p-4 space-y-4">
@@ -47,9 +70,9 @@ export function AdminAnalytics() {
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Victim Status Distribution</p>
             <ResponsiveContainer width="100%" height={200}>
               <PieChart>
-                <Pie data={STATUS_DATA} cx="50%" cy="50%" innerRadius={55} outerRadius={80}
+                <Pie data={statusData} cx="50%" cy="50%" innerRadius={55} outerRadius={80}
                   paddingAngle={3} dataKey="value">
-                  {STATUS_DATA.map((entry, i) => (
+                  {statusData.map((entry, i) => (
                     <Cell key={i} fill={entry.color} stroke="rgba(255,255,255,0.1)" />
                   ))}
                 </Pie>
@@ -63,12 +86,12 @@ export function AdminAnalytics() {
           <GlassCard>
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">AI Priority Distribution</p>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={PRIORITY_DATA} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
+              <BarChart data={priorityData} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
                 <XAxis dataKey="range" tick={{ fill: '#64748b', fontSize: 9 }} />
                 <YAxis tick={{ fill: '#64748b', fontSize: 10 }} />
                 <Tooltip content={<CustomTooltip />} />
                 <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                  {PRIORITY_DATA.map((entry, i) => (
+                  {priorityData.map((entry, i) => (
                     <Cell key={i} fill={entry.color} />
                   ))}
                 </Bar>
@@ -81,7 +104,7 @@ export function AdminAnalytics() {
         <GlassCard>
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Reports Over Time (Last 7 Days)</p>
           <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={TIME_DATA} margin={{ top: 4, right: 16, bottom: 0, left: -20 }}>
+            <LineChart data={timeData} margin={{ top: 4, right: 16, bottom: 0, left: -20 }}>
               <XAxis dataKey="day" tick={{ fill: '#64748b', fontSize: 11 }} />
               <YAxis tick={{ fill: '#64748b', fontSize: 10 }} />
               <Tooltip content={<CustomTooltip />} />
@@ -93,11 +116,9 @@ export function AdminAnalytics() {
         </GlassCard>
 
         {/* Key metrics */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <MetricCard label="Avg Response" value="18 min" color="#00d4ff" />
-          <MetricCard label="Verified Rate" value="50%" color="#22c55e" />
-          <MetricCard label="AI Accuracy" value="87%" color="#8b5cf6" />
-          <MetricCard label="Mesh Uptime" value="94%" color="#f97316" />
+        <div className="grid grid-cols-2 gap-3">
+          <MetricCard label="Verified Rate"  value={`${verifiedRate}%`} color="#22c55e" />
+          <MetricCard label="Total Reports"  value={sos.length}         color="#00d4ff" />
         </div>
 
         {/* Spam indicator */}
@@ -105,9 +126,9 @@ export function AdminAnalytics() {
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Spam / False Report Indicator</p>
           <div className="flex items-center gap-3">
             <div className="flex-1 h-4 rounded-full bg-slate-700 overflow-hidden">
-              <div className="h-full rounded-full bg-gradient-to-r from-[#22c55e] to-[#f59e0b]" style={{ width: '50%' }} />
+              <div className="h-full rounded-full bg-gradient-to-r from-[#22c55e] to-[#f59e0b]" style={{ width: `${guestRatio}%` }} />
             </div>
-            <span className="text-sm font-bold text-[#f59e0b]">50%</span>
+            <span className="text-sm font-bold text-[#f59e0b]">{guestRatio}%</span>
             <span className="text-xs text-slate-500">guest reports</span>
           </div>
           <p className="text-xs text-slate-500 mt-2">Ratio below 60% is acceptable. High guest ratio may indicate spam activity.</p>

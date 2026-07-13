@@ -1,28 +1,34 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { AlertOctagon, Check, Filter, Clock, MessageSquare } from 'lucide-react'
 import { SuperAdminLayout } from './SuperAdminLayout'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { GlassTextarea } from '../../components/ui/GlassInput'
-
-const SEED = [
-  { id: 1, municipality: 'Del Carmen', summary: '12 critical SOS reports unaddressed in Zones 1-3. Responder capacity exceeded.', reason: 'Insufficient rescue teams', acknowledged: false, time: '14:35', notes: '' },
-  { id: 2, municipality: 'Dapa',       summary: 'Flooding in 5 barangays. 40+ victims, only 2 active responders.',                reason: 'Request for additional resources', acknowledged: true,  time: '13:20', notes: 'Noted. Coordinating with NDRRMC for additional deployment.' },
-]
+import api from '../../lib/api'
 
 export function EscalationFeed() {
-  const [items, setItems] = useState(SEED)
+  const [items, setItems]   = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get('/escalations')
+      .then(rows => setItems(rows.map(r => ({ ...r, notes: r.notes ?? '' }))))
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false))
+  }, [])
   const [filter, setFilter] = useState('all')
   const [noteFor, setNoteFor] = useState(null)
   const [noteText, setNoteText] = useState('')
 
   const acknowledge = (id) => {
     setItems(d => d.map(e => e.id === id ? { ...e, acknowledged: true } : e))
+    api.put('/escalations/' + id, { acknowledged: true }).catch(() => {})
   }
 
   const saveNote = (id) => {
     setItems(d => d.map(e => e.id === id ? { ...e, notes: noteText } : e))
+    api.put('/escalations/' + id, { notes: noteText }).catch(() => {})
     setNoteFor(null); setNoteText('')
   }
 
@@ -105,10 +111,12 @@ export function EscalationFeed() {
           ))}
         </div>
 
-        {displayed.length === 0 && (
+        {!loading && displayed.length === 0 && (
           <div className="text-center py-16">
             <Check size={32} className="text-[#22c55e] mx-auto mb-3" />
-            <p className="text-slate-400 text-sm">All escalations acknowledged</p>
+            <p className="text-slate-400 text-sm">
+              {items.length === 0 ? 'No escalations' : 'All escalations acknowledged'}
+            </p>
           </div>
         )}
       </div>
