@@ -102,6 +102,26 @@ async function get(path) {
     return (data ?? []).map(normalizeSos)
   }
 
+  // ── Constituents (victims enriched with account status from profiles) ──
+  if (resource === 'constituents' && !id) {
+    let q = supabase.from('victims').select('*')
+    for (const [key, val] of params.entries()) {
+      if (FILTER_COLS.has(key)) q = q.eq(key, val)
+    }
+    const { data: victims, error: ve } = await q
+    if (ve) sbThrow(ve)
+
+    const contacts = (victims ?? []).map(v => v.contact_number).filter(Boolean)
+    let profileMap = {}
+    if (contacts.length) {
+      const { data: profs } = await supabase
+        .from('profiles').select('contact_number, status').eq('role', 'victim')
+        .in('contact_number', contacts)
+      for (const p of profs ?? []) profileMap[p.contact_number] = p.status
+    }
+    return (victims ?? []).map(v => ({ ...v, account_status: profileMap[v.contact_number] ?? null }))
+  }
+
   // ── Single item (non-SOS) ──
   if (id) {
     const { data, error } = await supabase.from(table).select('*').eq('id', id).single()
@@ -192,6 +212,9 @@ async function post(path, body = {}) {
         const { data: profile } = await supabase
           .from('profiles').select('*').eq('id', data.user.id).maybeSingle()
         if (profile) {
+          if (profile.status === 'inactive') {
+            throwErr('Your account has been disabled. Contact your administrator.', 403)
+          }
           const { data: victim } = body.method === 'phone'
             ? await supabase.from('victims').select('*')
                 .eq('contact_number', body.contact.replace(/\D/g, '')).maybeSingle()
@@ -351,6 +374,19 @@ async function put(path, body = {}) {
     return data ?? {}
   }
 
+  // ── Constituent update: strip account_active and sync it to profiles.status ──
+  if (resource === 'constituents' && id) {
+    const { account_active, password: _pw, ...updateData } = body
+    const { data, error } = await supabase.from('victims').update(updateData).eq('id', id).select().single()
+    if (error) sbThrow(error)
+    if (typeof account_active === 'boolean' && data?.contact_number) {
+      await supabase.from('profiles')
+        .update({ status: account_active ? 'active' : 'inactive' })
+        .eq('contact_number', data.contact_number).eq('role', 'victim')
+    }
+    return data
+  }
+
   if (!id) throwErr('ID required for update')
   const { password: _pw, ...updateData } = body
   const { data, error } = await supabase.from(table).update(updateData).eq('id', id).select().single()
@@ -360,8 +396,22 @@ async function put(path, body = {}) {
 
 // ── DELETE ─────────────────────────────────────────────────────────────────────
 async function del(path) {
-  const { id, table } = parsePath(path)
+  const { resource, id, table } = parsePath(path)
   if (!id) throwErr('ID required for delete')
+
+  // Constituent delete: remove victims row + profiles row (blocks login; auth user remains)
+  if (resource === 'constituents') {
+    const { data: victim } = await supabase
+      .from('victims').select('contact_number').eq('id', id).maybeSingle()
+    const { error } = await supabase.from('victims').delete().eq('id', id)
+    if (error) sbThrow(error)
+    if (victim?.contact_number) {
+      await supabase.from('profiles').delete()
+        .eq('contact_number', victim.contact_number).eq('role', 'victim')
+    }
+    return {}
+  }
+
   const { error } = await supabase.from(table).delete().eq('id', id)
   if (error) sbThrow(error)
   return {}

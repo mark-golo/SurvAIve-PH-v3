@@ -7,15 +7,6 @@ import { GlassCard } from '../../components/ui/GlassCard'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 
-const DEMO_CONSTITUENTS = [
-  { id: 1, name: 'Maria Santos',    contact: '+63920000001', barangay: 'Del Carmen Poblacion', household: 4, status: 'sos_sent', verified: true,  vulnerabilities: ['Elderly', 'Infant'] },
-  { id: 2, name: 'Juan Dela Cruz',  contact: '+63920000002', barangay: 'Bitoon',    household: 2, status: 'sos_sent', verified: true,  vulnerabilities: [] },
-  { id: 3, name: 'Rosa Villanueva', contact: '+63920000003', barangay: 'Caub',      household: 6, status: 'sos_sent', verified: true,  vulnerabilities: ['Pregnant', 'PWD'] },
-  { id: 4, name: 'Pedro Ramos',     contact: '+63920000004', barangay: 'Domoyog',   household: 1, status: 'active',   verified: true,  vulnerabilities: [] },
-  { id: 5, name: 'Ana Reyes',       contact: '+63920000005', barangay: 'Esperanza', household: 3, status: 'rescued',  verified: true,  vulnerabilities: ['Elderly'] },
-  { id: 6, name: 'Carlos Garcia (manual)', contact: '+63920000006', barangay: 'San Jose', household: 5, status: 'unknown', verified: false, vulnerabilities: ['Elderly'] },
-]
-
 const STATUS_COLORS = {
   active:   { bg: 'bg-[rgba(34,197,94,0.1)]',  text: 'text-[#22c55e]',  label: 'Active'   },
   sos_sent: { bg: 'bg-[rgba(239,68,68,0.1)]',  text: 'text-[#ef4444]',  label: 'SOS Sent' },
@@ -47,15 +38,20 @@ export function ConstituentRegistry() {
         status: r.status,
         verified: !!r.is_verified,
         vulnerabilities: r.vulnerabilities ?? [],
+        account_status: r.account_status,   // null | 'active' | 'inactive'
       }))))
-      .catch(() => setData(DEMO_CONSTITUENTS))
+      .catch(() => setData([]))
       .finally(() => setLoading(false))
   }, [])
 
   function openEdit(c) {
     setShowAdd(false)
     setEditId(c.id)
-    setEditForm({ name: c.name, contact_number: c.contact, barangay: c.barangay, household_count: c.household, status: c.status })
+    setEditForm({
+      name: c.name, contact_number: c.contact, barangay: c.barangay,
+      household_count: c.household, status: c.status,
+      account_active: c.account_status !== null ? c.account_status !== 'inactive' : null,
+    })
   }
 
   async function handleUpdate() {
@@ -63,7 +59,9 @@ export function ConstituentRegistry() {
     try {
       await api.put(`/constituents/${editId}`, editForm)
       setData(prev => prev.map(r => r.id === editId
-        ? { ...r, name: editForm.name, contact: editForm.contact_number, barangay: editForm.barangay, household: Number(editForm.household_count), status: editForm.status }
+        ? { ...r, name: editForm.name, contact: editForm.contact_number, barangay: editForm.barangay,
+            household: Number(editForm.household_count), status: editForm.status,
+            account_status: editForm.account_active === null ? null : (editForm.account_active ? 'active' : 'inactive') }
         : r))
       setEditId(null)
     } catch { /* silently keep state */ }
@@ -165,7 +163,7 @@ export function ConstituentRegistry() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-[rgba(255,255,255,0.06)]">
-                  {['Name', 'Contact', 'Barangay', 'Household', 'Vulnerabilities', 'Status', 'Verified', 'Actions'].map(h => (
+                  {['Name', 'Contact', 'Barangay', 'Household', 'Vulnerabilities', 'Status', 'Account', 'Verified', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -194,6 +192,17 @@ export function ConstituentRegistry() {
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc.bg} ${sc.text}`}>{sc.label}</span>
                         </td>
                         <td className="px-4 py-3">
+                          {c.account_status === 'inactive' && (
+                            <span className="text-xs px-2 py-0.5 rounded bg-[rgba(239,68,68,0.15)] text-[#ef4444]">Disabled</span>
+                          )}
+                          {c.account_status === 'active' && (
+                            <span className="text-xs px-2 py-0.5 rounded bg-[rgba(34,197,94,0.12)] text-[#22c55e]">Active</span>
+                          )}
+                          {c.account_status === null && (
+                            <span className="text-xs px-2 py-0.5 rounded bg-[rgba(107,114,128,0.1)] text-[#9ca3af]">No Account</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
                           {c.verified
                             ? <span className="text-[11px] text-[#00d4ff] font-medium flex items-center gap-1"><UserCheck size={11} /> Verified</span>
                             : <span className="text-[11px] text-[#f59e0b]">Admin-Entered</span>
@@ -214,7 +223,7 @@ export function ConstituentRegistry() {
                       </tr>
                       {editId === c.id && (
                         <tr key={`edit-${c.id}`} className="bg-[rgba(0,212,255,0.03)]">
-                          <td colSpan={8} className="px-4 py-3">
+                          <td colSpan={9} className="px-4 py-3">
                             <GlassCard>
                               <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-3">Edit — {c.name}</p>
                               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -229,6 +238,22 @@ export function ConstituentRegistry() {
                                   <option value="unknown">Unknown</option>
                                 </GlassSelect>
                               </div>
+                              {editForm.account_active !== null && (
+                                <div className="flex items-center justify-between mt-3 p-2 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
+                                  <span className="text-xs text-slate-400">Account Login Access</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditForm(f => ({ ...f, account_active: !f.account_active }))}
+                                    className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                                      editForm.account_active
+                                        ? 'bg-[rgba(34,197,94,0.15)] text-[#22c55e] hover:bg-[rgba(239,68,68,0.15)] hover:text-[#ef4444]'
+                                        : 'bg-[rgba(239,68,68,0.15)] text-[#ef4444] hover:bg-[rgba(34,197,94,0.15)] hover:text-[#22c55e]'
+                                    }`}
+                                  >
+                                    {editForm.account_active ? 'Enabled — click to Disable' : 'Disabled — click to Enable'}
+                                  </button>
+                                </div>
+                              )}
                               <div className="flex gap-2 mt-3">
                                 <NeonButton size="sm" onClick={handleUpdate} disabled={saving}>{saving ? 'Saving…' : 'Update'}</NeonButton>
                                 <NeonButton variant="ghost" size="sm" onClick={() => setEditId(null)}>Cancel</NeonButton>
