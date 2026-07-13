@@ -61,7 +61,8 @@ console.log(`Seeding ${USERS.length} auth users into ${SUPABASE_URL} ...\n`)
 for (const u of USERS) {
   const email = `${u.contact}@survAIve.ph`
 
-  // Create auth user (email_confirm: true skips the confirmation email)
+  let uid
+
   const { data, error } = await supabase.auth.admin.createUser({
     email,
     password: 'password',
@@ -70,16 +71,27 @@ for (const u of USERS) {
 
   if (error) {
     if (error.message.includes('already been registered') || error.message.includes('already exists')) {
-      console.log(`  SKIP   ${email} — already exists`)
+      // Auth user exists — look up their UUID so we can still upsert the profiles row
+      const { data: list } = await supabase.auth.admin.listUsers({ perPage: 50 })
+      const existing = list?.users?.find((x) => x.email === email)
+      if (!existing) {
+        console.error(`  ERROR  ${email}: exists but UUID not found`)
+        continue
+      }
+      uid = existing.id
+      console.log(`  EXISTS  ${email} — upserting profile`)
     } else {
       console.error(`  ERROR  ${email}: ${error.message}`)
+      continue
     }
-    continue
+  } else {
+    uid = data.user.id
+    console.log(`  OK     ${email}  (${u.role})`)
   }
 
-  // Insert matching profiles row
-  const { error: pe } = await supabase.from('profiles').insert({
-    id:             data.user.id,
+  // Upsert profiles row (safe for both new and pre-existing auth users)
+  const { error: pe } = await supabase.from('profiles').upsert({
+    id:             uid,
     role:           u.role,
     name:           u.name,
     contact_number: u.contact,
@@ -88,11 +100,7 @@ for (const u of USERS) {
     barangay:       u.barangay,
   })
 
-  if (pe) {
-    console.error(`  PROFILE ERROR  ${email}: ${pe.message}`)
-  } else {
-    console.log(`  OK     ${email}  (${u.role})`)
-  }
+  if (pe) console.error(`  PROFILE ERROR  ${email}: ${pe.message}`)
 }
 
 console.log('\nDone! Check Supabase Dashboard → Authentication → Users to verify.')
