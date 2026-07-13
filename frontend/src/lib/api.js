@@ -131,10 +131,17 @@ async function post(path, body = {}) {
       const email = `${body.contact_number}@survAIve.ph`
       const { data, error } = await supabase.auth.signInWithPassword({ email, password: body.password })
       if (error) throwErr('Invalid credentials. Check your contact number and password.', 401)
-      const { data: profile, error: pe } = await supabase
-        .from('profiles').select('*').eq('id', data.user.id).single()
-      if (pe || !profile) throwErr('Account not fully set up. Contact your administrator.', 403)
-      return { token: data.session.access_token, user: profile }
+
+      // Try profiles table first
+      const { data: profile } = await supabase
+        .from('profiles').select('*').eq('id', data.user.id).maybeSingle()
+
+      // Fall back to user_metadata in JWT (set by seed script or Fix A SQL)
+      const meta = data.user.user_metadata ?? {}
+      const userInfo = profile ?? (meta.role ? { id: data.user.id, ...meta } : null)
+
+      if (!userInfo) throwErr('Account not fully set up. Contact your administrator.', 403)
+      return { token: data.session.access_token, user: userInfo }
     }
 
     if (action === 'otp') {

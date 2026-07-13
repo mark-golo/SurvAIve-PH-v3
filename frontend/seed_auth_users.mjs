@@ -61,25 +61,37 @@ console.log(`Seeding ${USERS.length} auth users into ${SUPABASE_URL} ...\n`)
 for (const u of USERS) {
   const email = `${u.contact}@survAIve.ph`
 
+  const userMeta = {
+    role:         u.role,
+    name:         u.name,
+    contact_number: u.contact,
+    province:     u.province,
+    municipality: u.municipality,
+    barangay:     u.barangay,
+  }
+
   let uid
 
   const { data, error } = await supabase.auth.admin.createUser({
     email,
     password: 'password',
     email_confirm: true,
+    user_metadata: userMeta,
   })
 
   if (error) {
     if (error.message.includes('already been registered') || error.message.includes('already exists')) {
-      // Auth user exists — look up their UUID so we can still upsert the profiles row
+      // Auth user exists — look up their UUID (Supabase stores emails lowercase)
       const { data: list } = await supabase.auth.admin.listUsers({ perPage: 50 })
-      const existing = list?.users?.find((x) => x.email === email)
+      const existing = list?.users?.find((x) => x.email === email.toLowerCase())
       if (!existing) {
         console.error(`  ERROR  ${email}: exists but UUID not found`)
         continue
       }
       uid = existing.id
-      console.log(`  EXISTS  ${email} — upserting profile`)
+      // Patch metadata on the existing user so login works even without profiles row
+      await supabase.auth.admin.updateUserById(uid, { user_metadata: userMeta })
+      console.log(`  EXISTS  ${email} — metadata patched, upserting profile`)
     } else {
       console.error(`  ERROR  ${email}: ${error.message}`)
       continue
