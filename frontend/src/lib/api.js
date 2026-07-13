@@ -346,6 +346,49 @@ async function post(path, body = {}) {
     return respRow
   }
 
+  // ── Admin creation: create Supabase Auth account + profiles row ──
+  if (table === 'admins') {
+    const { password, ...adminData } = body
+    if (!password) throwErr('Password is required to create an admin account.', 400)
+
+    const email = `${adminData.contact_number}@survaive.ph`
+    const userMeta = {
+      role: 'admin',
+      name: adminData.name,
+      contact_number: adminData.contact_number,
+      province: adminData.province,
+      municipality: adminData.municipality,
+    }
+
+    const { data: authData, error: authError } = await signupClient.auth.signUp({
+      email,
+      password,
+      options: { data: userMeta },
+    })
+
+    if (authError) {
+      if (authError.message?.toLowerCase().includes('already')) {
+        throwErr(`Contact number ${adminData.contact_number} already has an account.`, 409)
+      }
+      throwErr(authError.message || 'Failed to create admin auth account.', 500)
+    }
+
+    const uid = authData.user?.id
+    if (!uid) throwErr('Auth account created but no user ID returned.', 500)
+
+    const { error: profileErr } = await supabase.from('profiles').upsert({
+      id: uid, role: 'admin', name: adminData.name,
+      contact_number: adminData.contact_number,
+      province: adminData.province, municipality: adminData.municipality,
+    })
+    if (profileErr) throwErr(profileErr.message, 500)
+
+    const { data: adminRow, error: adminErr } = await supabase
+      .from('admins').insert(adminData).select().single()
+    if (adminErr) sbThrow(adminErr)
+    return adminRow
+  }
+
   // ── Generic table insert (password field removed — Supabase Auth owns it) ──
   const { password: _pw, ...insertData } = body
   const { data, error } = await supabase.from(table).insert(insertData).select().single()
