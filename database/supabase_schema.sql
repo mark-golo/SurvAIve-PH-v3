@@ -149,6 +149,32 @@ CREATE TABLE IF NOT EXISTS mesh_events (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ── activity_logs ─────────────────────────────────────────────
+-- Audit trail: who did what, when. actor_id is NULL when the auth user is deleted.
+CREATE TABLE IF NOT EXISTS activity_logs (
+  id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  actor_id     UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  actor_role   TEXT,
+  action       TEXT NOT NULL,
+  target_table TEXT,
+  target_id    TEXT,
+  details      JSONB,
+  created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ── notifications ─────────────────────────────────────────────
+-- Per-user in-app notifications. Cascade-deleted when the user is deleted.
+CREATE TABLE IF NOT EXISTS notifications (
+  id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  recipient_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  type         TEXT NOT NULL,
+  title        TEXT NOT NULL,
+  body         TEXT,
+  read         BOOLEAN NOT NULL DEFAULT FALSE,
+  data         JSONB,
+  created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ============================================================
 -- INDEXES
 -- ============================================================
@@ -166,6 +192,11 @@ CREATE INDEX IF NOT EXISTS idx_sos_rescue_status    ON sos_reports(rescue_status
 CREATE INDEX IF NOT EXISTS idx_sos_priority         ON sos_reports(ai_priority_score DESC);
 CREATE INDEX IF NOT EXISTS idx_evac_municipality    ON evacuation_centers(municipality);
 CREATE INDEX IF NOT EXISTS idx_mesh_device          ON mesh_events(device_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_actor   ON activity_logs(actor_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_table   ON activity_logs(target_table);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_created ON activity_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread    ON notifications(recipient_id, read);
 
 -- ============================================================
 -- ROW LEVEL SECURITY
@@ -179,13 +210,16 @@ ALTER TABLE sos_reports         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE evacuation_centers  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE escalations         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE mesh_events         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE activity_logs       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications       ENABLE ROW LEVEL SECURITY;
 
 -- ── profiles policies ─────────────────────────────────────────
+-- JWT check avoids recursive subquery on the profiles table itself.
 CREATE POLICY "own profile read"
   ON profiles FOR SELECT
   USING (
     id = auth.uid() OR
-    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role IN ('superadmin','admin'))
+    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('superadmin','admin')
   );
 
 CREATE POLICY "own profile update"
@@ -202,19 +236,19 @@ CREATE POLICY "public read centers"
 CREATE POLICY "admin insert centers"
   ON evacuation_centers FOR INSERT
   WITH CHECK (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin','superadmin'))
+    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
 CREATE POLICY "admin update centers"
   ON evacuation_centers FOR UPDATE
   USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin','superadmin'))
+    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
 CREATE POLICY "admin delete centers"
   ON evacuation_centers FOR DELETE
   USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin','superadmin'))
+    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
 -- ── sos_reports policies ──────────────────────────────────────
@@ -226,13 +260,13 @@ CREATE POLICY "anyone submit sos"
 CREATE POLICY "staff read sos"
   ON sos_reports FOR SELECT
   USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin','superadmin','responder'))
+    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin','responder')
   );
 
 CREATE POLICY "staff update sos"
   ON sos_reports FOR UPDATE
   USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin','superadmin','responder'))
+    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin','responder')
   );
 
 -- ── victims policies ──────────────────────────────────────────
@@ -242,67 +276,67 @@ CREATE POLICY "anyone register victim"
 CREATE POLICY "staff read victims"
   ON victims FOR SELECT
   USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin','superadmin'))
+    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
 CREATE POLICY "staff mutate victims"
   ON victims FOR UPDATE
   USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin','superadmin'))
+    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
 CREATE POLICY "staff delete victims"
   ON victims FOR DELETE
   USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin','superadmin'))
+    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
 -- ── responders policies ───────────────────────────────────────
 CREATE POLICY "staff read responders"
   ON responders FOR SELECT
   USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin','superadmin','responder'))
+    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin','responder')
   );
 
 CREATE POLICY "admin mutate responders"
   ON responders FOR ALL
   USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin','superadmin'))
+    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
--- Responders can update their own duty_status
+-- Responders can update their own row (e.g. duty_status toggle)
 CREATE POLICY "responder update own"
   ON responders FOR UPDATE
   USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'responder'
-            AND contact_number = (SELECT contact_number FROM responders WHERE id = responders.id))
+    (auth.jwt() -> 'user_metadata' ->> 'role') = 'responder'
+    AND contact_number = (auth.jwt() -> 'user_metadata' ->> 'contact_number')
   );
 
 -- ── admins policies ───────────────────────────────────────────
 CREATE POLICY "superadmin manage admins"
   ON admins FOR ALL
   USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'superadmin')
+    (auth.jwt() -> 'user_metadata' ->> 'role') = 'superadmin'
   );
 
 CREATE POLICY "admin read self"
   ON admins FOR SELECT
   USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin','superadmin'))
+    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
 -- ── superadmins policies ──────────────────────────────────────
 CREATE POLICY "superadmin manage superadmins"
   ON superadmins FOR ALL
   USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'superadmin')
+    (auth.jwt() -> 'user_metadata' ->> 'role') = 'superadmin'
   );
 
 -- ── escalations policies ──────────────────────────────────────
 CREATE POLICY "staff manage escalations"
   ON escalations FOR ALL
   USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin','superadmin'))
+    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
 -- ── mesh_events policies ──────────────────────────────────────
@@ -312,8 +346,32 @@ CREATE POLICY "auth insert mesh"
 CREATE POLICY "staff read mesh"
   ON mesh_events FOR SELECT
   USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin','superadmin','responder'))
+    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin','responder')
   );
+
+-- ── activity_logs policies ────────────────────────────────────
+-- Staff can read logs; any authenticated session can write (service role inserts)
+CREATE POLICY "staff read activity logs"
+  ON activity_logs FOR SELECT
+  USING (
+    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
+  );
+
+CREATE POLICY "service insert activity logs"
+  ON activity_logs FOR INSERT WITH CHECK (true);
+
+-- ── notifications policies ────────────────────────────────────
+-- Users can only see and mark-read their own notifications
+CREATE POLICY "own notifications read"
+  ON notifications FOR SELECT
+  USING (recipient_id = auth.uid());
+
+CREATE POLICY "own notifications update"
+  ON notifications FOR UPDATE
+  USING (recipient_id = auth.uid());
+
+CREATE POLICY "service insert notifications"
+  ON notifications FOR INSERT WITH CHECK (true);
 
 -- ============================================================
 -- RPC: get_sos_with_priority

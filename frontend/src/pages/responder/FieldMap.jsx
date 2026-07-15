@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { List, Map, Radio, Settings } from 'lucide-react'
+import { Home, List, Map, Radio, Settings } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 
 const NAV = [
+  { icon: Home,     label: 'Home',     path: '/responder'          },
   { icon: List,     label: 'Queue',    path: '/responder/queue'    },
   { icon: Map,      label: 'Map',      path: '/responder/map'      },
   { icon: Radio,    label: 'Relay',    path: '/responder/relay'    },

@@ -1,19 +1,21 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { AlertTriangle, Map, Radio, Settings, List, RefreshCw, Power, Users, ArrowUpDown } from 'lucide-react'
+import { AlertTriangle, Home, Map, Radio, Settings, List, RefreshCw, Power, Users, ArrowUpDown } from 'lucide-react'
 import { MobileNavBar, TopBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { mesh } from '../../lib/mesh'
 import api from '../../lib/api'
+import { supabase } from '../../lib/supabase'
 
 const NAV = [
-  { icon: List,    label: 'Queue',    path: '/responder/queue'    },
-  { icon: Map,     label: 'Map',      path: '/responder/map'      },
-  { icon: Radio,   label: 'Relay',    path: '/responder/relay'    },
-  { icon: Settings,label: 'Settings', path: '/responder/settings' },
+  { icon: Home,     label: 'Home',     path: '/responder'          },
+  { icon: List,     label: 'Queue',    path: '/responder/queue'    },
+  { icon: Map,      label: 'Map',      path: '/responder/map'      },
+  { icon: Radio,    label: 'Relay',    path: '/responder/relay'    },
+  { icon: Settings, label: 'Settings', path: '/responder/settings' },
 ]
 
 export function ResponderHome() {
@@ -22,7 +24,22 @@ export function ResponderHome() {
   const [assignedCount, setAssignedCount] = useState(3)
   const [criticalCount, setCriticalCount] = useState(2)
   const [syncing, setSyncing] = useState(false)
+  const [profile, setProfile] = useState(null)
   const stats = mesh.getStats()
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+      const contact = authUser?.user_metadata?.contact_number
+      if (!contact) return
+      supabase.from('responders').select('name,unit_name,assigned_zone,duty_status').eq('contact_number', contact).single()
+        .then(({ data }) => {
+          if (data) {
+            setProfile(data)
+            setOnDuty(data.duty_status === 'on_duty')
+          }
+        })
+    })
+  }, [])
 
   const syncNow = async () => {
     setSyncing(true)
@@ -43,7 +60,7 @@ export function ResponderHome() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="font-bold text-white text-sm">Responder Dashboard</h1>
-            <p className="text-[10px] text-slate-500">Alpha Unit · Zone 1</p>
+            <p className="text-[10px] text-slate-500">{profile?.unit_name ?? 'Responder'} · {profile?.assigned_zone ?? '—'}</p>
           </div>
           <div className="flex items-center gap-2">
             <StatusBadge status={onDuty ? 'ACTIVE' : 'STANDBY'} pulse={onDuty} />

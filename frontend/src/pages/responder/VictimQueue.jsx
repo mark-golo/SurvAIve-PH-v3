@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { List, Map, Radio, Settings, RefreshCw, SortAsc } from 'lucide-react'
+import { Home, List, Map, Radio, Settings, RefreshCw, SortAsc } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { PriorityCard } from '../../components/ui/PriorityCard'
 import { NeonButton } from '../../components/ui/NeonButton'
@@ -9,6 +9,7 @@ import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 
 const NAV = [
+  { icon: Home,     label: 'Home',     path: '/responder'          },
   { icon: List,     label: 'Queue',    path: '/responder/queue'    },
   { icon: Map,      label: 'Map',      path: '/responder/map'      },
   { icon: Radio,    label: 'Relay',    path: '/responder/relay'    },

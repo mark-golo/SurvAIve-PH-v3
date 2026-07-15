@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Radio, Wifi, ArrowUpDown, Battery, AlertTriangle, List, Map, Settings } from 'lucide-react'
+import { Radio, Wifi, ArrowUpDown, Battery, AlertTriangle, Home, List, Map, Settings } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { mesh } from '../../lib/mesh'
 
 const NAV = [
+  { icon: Home,     label: 'Home',     path: '/responder'          },
   { icon: List,     label: 'Queue',    path: '/responder/queue'    },
   { icon: Map,      label: 'Map',      path: '/responder/map'      },
   { icon: Radio,    label: 'Relay',    path: '/responder/relay'    },
