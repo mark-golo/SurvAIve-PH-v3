@@ -92,7 +92,7 @@ export function FieldMap() {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
             last_seen_at: new Date().toISOString(),
-          }).eq('contact_number', contact)
+          }).eq('contact_number', contact).select()
         })
       },
       () => setGpsError(true),
