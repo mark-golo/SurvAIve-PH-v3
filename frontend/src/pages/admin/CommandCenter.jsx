@@ -9,6 +9,7 @@ import { StatCard } from '../../components/ui/StatCard'
 import { NeonButton } from '../../components/ui/NeonButton'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
+import { supabase } from '../../lib/supabase'
 
 const COLORS = { CRITICAL: '#ef4444', HIGH: '#f97316', MODERATE: '#f59e0b', SAFE: '#22c55e' }
 
@@ -18,6 +19,13 @@ const pinIcon = (color, verified) => L.divIcon({
          border:${verified ? '2px solid white' : '2px dashed rgba(255,255,255,0.5)'};border-radius:50%;
          box-shadow:0 0 10px ${color}"></div>`,
   iconSize: [14, 14], iconAnchor: [7, 7],
+})
+
+const responderMarkerIcon = () => L.divIcon({
+  className: '',
+  html: `<div style="width:20px;height:20px;background:#00d4ff;border:3px solid white;border-radius:50%;
+         box-shadow:0 0 12px #00d4ff"></div>`,
+  iconSize: [20, 20], iconAnchor: [10, 10],
 })
 
 const shelterIcon = (status) => {
@@ -36,6 +44,7 @@ export function CommandCenter() {
   const [syncing, setSyncing] = useState(false)
   const [reports, setReports] = useState([])
   const [centers, setCenters] = useState([])
+  const [activeResponders, setActiveResponders] = useState([])
 
   const muni = scope?.municipality
 
@@ -43,6 +52,15 @@ export function CommandCenter() {
     api.get(muni ? `/evacuation_centers?municipality=${encodeURIComponent(muni)}` : '/evacuation_centers')
       .then(rows => setCenters(rows))
       .catch(() => setCenters([]))
+  }, [])
+
+  useEffect(() => {
+    let q = supabase.from('responders')
+      .select('id,name,unit_name,assigned_zone,lat,lng,last_seen_at')
+      .eq('duty_status', 'on_duty')
+      .not('lat', 'is', null)
+    if (muni) q = q.eq('municipality', muni)
+    q.then(({ data }) => setActiveResponders(data ?? []))
   }, [])
 
   useEffect(() => { sync() }, [])
@@ -114,6 +132,22 @@ export function CommandCenter() {
                 </Popup>
               </Marker>
             ))}
+            {/* Active responders */}
+            {activeResponders.map(r => (
+              <Marker key={`resp-${r.id}`} position={[r.lat, r.lng]} icon={responderMarkerIcon()}>
+                <Popup>
+                  <div className="bg-[#0f172a] text-white text-xs p-2 rounded min-w-[140px]">
+                    <p className="font-bold text-[#00d4ff]">{r.name}</p>
+                    <p className="text-slate-400">{r.unit_name ?? '—'} · {r.assigned_zone ?? '—'}</p>
+                    {r.last_seen_at && (
+                      <p className="text-slate-500 text-[10px] mt-1">
+                        Last seen: {new Date(r.last_seen_at).toLocaleTimeString()}
+                      </p>
+                    )}
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
           </MapContainer>
         </div>
 
@@ -178,6 +212,10 @@ export function CommandCenter() {
               <div className="flex items-center gap-1.5">
                 <div className="w-4 h-4 rounded bg-[#22c55e] flex items-center justify-center text-[9px]">⛺</div>
                 <span className="text-[10px] text-slate-400">Evacuation</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full border-2 border-white bg-[#00d4ff]" style={{ boxShadow: '0 0 6px #00d4ff' }} />
+                <span className="text-[10px] text-slate-400">Responder</span>
               </div>
             </div>
           </div>

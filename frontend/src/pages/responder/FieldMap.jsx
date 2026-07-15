@@ -83,8 +83,19 @@ export function FieldMap() {
   useEffect(() => {
     if (!navigator.geolocation) { setGpsError(true); return }
     navigator.geolocation.getCurrentPosition(
-      pos => setMyPos([pos.coords.latitude, pos.coords.longitude]),
-      ()  => setGpsError(true),
+      pos => {
+        setMyPos([pos.coords.latitude, pos.coords.longitude])
+        supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+          const contact = authUser?.user_metadata?.contact_number
+          if (!contact) return
+          supabase.from('responders').update({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            last_seen_at: new Date().toISOString(),
+          }).eq('contact_number', contact)
+        })
+      },
+      () => setGpsError(true),
       { enableHighAccuracy: true, timeout: 10000 }
     )
   }, [])

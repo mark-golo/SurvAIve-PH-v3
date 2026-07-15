@@ -62,6 +62,9 @@ CREATE TABLE IF NOT EXISTS responders (
   assigned_barangay TEXT,
   duty_status       TEXT NOT NULL DEFAULT 'standby' CHECK (duty_status IN ('on_duty','standby')),
   active_mesh_relay BOOLEAN NOT NULL DEFAULT FALSE,
+  lat               DOUBLE PRECISION,
+  lng               DOUBLE PRECISION,
+  last_seen_at      TIMESTAMPTZ,
   created_at        TIMESTAMPTZ DEFAULT NOW()
 );
 

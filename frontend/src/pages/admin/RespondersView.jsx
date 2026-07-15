@@ -1,11 +1,20 @@
 import { useState, useEffect } from 'react'
-import { MapContainer, TileLayer } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { Radio, MapPin } from 'lucide-react'
 import { AdminLayout } from './AdminLayout'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
+import { supabase } from '../../lib/supabase'
+
+const responderMarkerIcon = () => L.divIcon({
+  className: '',
+  html: `<div style="width:20px;height:20px;background:#00d4ff;border:3px solid white;border-radius:50%;
+         box-shadow:0 0 12px #00d4ff"></div>`,
+  iconSize: [20, 20], iconAnchor: [10, 10],
+})
 
 export function RespondersView() {
   const { scope } = useAuthStore()
@@ -13,10 +22,20 @@ export function RespondersView() {
   const [responders, setResponders] = useState([])
   const [loading, setLoading]       = useState(true)
   const [selected, setSelected]     = useState(null)
+  const [activeOnMap, setActiveOnMap] = useState([])
 
   useEffect(() => {
     const q = muni ? `/responders?municipality=${encodeURIComponent(muni)}` : '/responders'
     api.get(q).then(setResponders).catch(() => setResponders([])).finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    let q = supabase.from('responders')
+      .select('id,name,unit_name,assigned_zone,lat,lng,last_seen_at')
+      .eq('duty_status', 'on_duty')
+      .not('lat', 'is', null)
+    if (muni) q = q.eq('municipality', muni)
+    q.then(({ data }) => setActiveOnMap(data ?? []))
   }, [])
 
   return (
@@ -27,6 +46,21 @@ export function RespondersView() {
           <MapContainer center={[9.852, 126.073]} zoom={13}
             style={{ height: '100%', background: '#0a1628' }} zoomControl>
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
+            {activeOnMap.map(r => (
+              <Marker key={`r-${r.id}`} position={[r.lat, r.lng]} icon={responderMarkerIcon()}>
+                <Popup>
+                  <div className="bg-[#0f172a] text-white text-xs p-2 rounded min-w-[140px]">
+                    <p className="font-bold text-[#00d4ff]">{r.name}</p>
+                    <p className="text-slate-400">{r.unit_name ?? '—'} · {r.assigned_zone ?? '—'}</p>
+                    {r.last_seen_at && (
+                      <p className="text-slate-500 text-[10px] mt-1">
+                        Last seen: {new Date(r.last_seen_at).toLocaleTimeString()}
+                      </p>
+                    )}
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
           </MapContainer>
         </div>
 
