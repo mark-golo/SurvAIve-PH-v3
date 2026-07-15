@@ -20,8 +20,8 @@ export function ResponderSettings() {
   const navigate = useNavigate()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [autoRelay, setAutoRelay] = useState(true)
-  const [offlineForce, setOfflineForce] = useState(false)
+  const [autoRelay,    setAutoRelay]    = useState(() => localStorage.getItem('resp_autoRelay')    !== 'false')
+  const [offlineForce, setOfflineForce] = useState(() => localStorage.getItem('resp_offlineForce') === 'true')
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user: authUser } }) => {
@@ -84,8 +84,10 @@ export function ResponderSettings() {
         <GlassCard>
           <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-3">Network Settings</p>
           <div className="space-y-3">
-            <ToggleRow label="Auto-Relay Mode"    sub="Background mesh forwarding"  on={autoRelay}    onToggle={() => setAutoRelay(v => !v)} />
-            <ToggleRow label="Force Offline Mode" sub="Disable all network requests" on={offlineForce} onToggle={() => setOfflineForce(v => !v)} />
+            <ToggleRow label="Auto-Relay Mode"    sub="Background mesh forwarding"  on={autoRelay}
+              onToggle={() => setAutoRelay(v => { const n = !v; localStorage.setItem('resp_autoRelay', String(n)); return n })} />
+            <ToggleRow label="Force Offline Mode" sub="Disable all network requests" on={offlineForce}
+              onToggle={() => setOfflineForce(v => { const n = !v; localStorage.setItem('resp_offlineForce', String(n)); return n })} />
           </div>
         </GlassCard>
 
