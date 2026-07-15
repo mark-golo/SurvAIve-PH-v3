@@ -9,6 +9,7 @@ import { NeonButton } from '../../components/ui/NeonButton'
 import { mesh } from '../../lib/mesh'
 import api from '../../lib/api'
 import { supabase } from '../../lib/supabase'
+import { useAuthStore } from '../../store/auth'
 
 const NAV = [
   { icon: Home,     label: 'Home',     path: '/responder'          },
@@ -20,9 +21,11 @@ const NAV = [
 
 export function ResponderHome() {
   const navigate = useNavigate()
-  const [onDuty, setOnDuty] = useState(true)
-  const [assignedCount, setAssignedCount] = useState(3)
-  const [criticalCount, setCriticalCount] = useState(2)
+  const { scope } = useAuthStore()
+  const muni = scope?.municipality
+  const [onDuty, setOnDuty] = useState(false)
+  const [assignedCount, setAssignedCount] = useState(0)
+  const [criticalCount, setCriticalCount] = useState(0)
   const [syncing, setSyncing] = useState(false)
   const [profile, setProfile] = useState(null)
   const stats = mesh.getStats()
@@ -40,6 +43,19 @@ export function ResponderHome() {
         })
     })
   }, [])
+
+  useEffect(() => {
+    const url = muni ? `/sos?municipality=${encodeURIComponent(muni)}` : '/sos'
+    api.get(url)
+      .then(rows => {
+        setAssignedCount(rows.length)
+        setCriticalCount(rows.filter(r => r.priority === 'CRITICAL').length)
+      })
+      .catch(() => {
+        setAssignedCount(0)
+        setCriticalCount(0)
+      })
+  }, [muni])
 
   const syncNow = async () => {
     setSyncing(true)
