@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { Home, List, Map, Radio, Settings } from 'lucide-react'
@@ -8,6 +8,7 @@ import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
+import { supabase } from '../../lib/supabase'
 
 const NAV = [
   { icon: Home,     label: 'Home',     path: '/responder'          },
@@ -16,8 +17,6 @@ const NAV = [
   { icon: Radio,    label: 'Relay',    path: '/responder/relay'    },
   { icon: Settings, label: 'Settings', path: '/responder/settings' },
 ]
-
-const RESPONDER_POS = [9.852, 126.073]
 
 const priorityColor = { CRITICAL: '#ef4444', HIGH: '#f97316', MODERATE: '#f59e0b', SAFE: '#22c55e' }
 
@@ -46,11 +45,20 @@ const shelterIcon = (status) => {
   })
 }
 
+function FlyTo({ pos }) {
+  const map = useMap()
+  useEffect(() => { if (pos) map.flyTo(pos, 15, { duration: 1.2 }) }, [pos])
+  return null
+}
+
 export function FieldMap() {
   const navigate = useNavigate()
   const { scope } = useAuthStore()
   const [centers, setCenters]   = useState([])
   const [assigned, setAssigned] = useState([])
+  const [myPos, setMyPos]       = useState(null)
+  const [gpsError, setGpsError] = useState(false)
+  const [profile, setProfile]   = useState(null)
 
   const muni = scope?.municipality
   useEffect(() => {
@@ -72,28 +80,49 @@ export function FieldMap() {
       .catch(() => setAssigned([]))
   }, [])
 
+  useEffect(() => {
+    if (!navigator.geolocation) { setGpsError(true); return }
+    navigator.geolocation.getCurrentPosition(
+      pos => setMyPos([pos.coords.latitude, pos.coords.longitude]),
+      ()  => setGpsError(true),
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }, [])
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+      const contact = authUser?.user_metadata?.contact_number
+      if (!contact) return
+      supabase.from('responders').select('unit_name,assigned_zone').eq('contact_number', contact).single()
+        .then(({ data }) => { if (data) setProfile(data) })
+    })
+  }, [])
+
   return (
     <div className="min-h-screen bg-mesh flex flex-col pb-20">
-      <TopBar title="Field Map" subtitle="Assigned zone · Zone 1" onBack />
+      <TopBar title="Field Map" subtitle={profile?.assigned_zone ?? 'Field Map'} onBack />
 
       {/* Map */}
       <div className="flex-1 mx-3 mt-2 mb-2 rounded-2xl overflow-hidden border border-[rgba(255,255,255,0.08)]" style={{ minHeight: '420px' }}>
         <MapContainer
-          center={RESPONDER_POS}
+          center={myPos ?? [9.852, 126.073]}
           zoom={14}
           style={{ height: '100%', minHeight: '420px', background: '#0a1628' }}
           zoomControl={false}
         >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
+          {myPos && <FlyTo pos={myPos} />}
 
           {/* My position */}
-          <Marker position={RESPONDER_POS} icon={responderIcon()}>
-            <Popup>
-              <div className="text-xs bg-[#0f172a] text-white p-2 rounded">
-                <strong>You</strong> — Alpha Unit
-              </div>
-            </Popup>
-          </Marker>
+          {myPos && (
+            <Marker position={myPos} icon={responderIcon()}>
+              <Popup>
+                <div className="text-xs bg-[#0f172a] text-white p-2 rounded">
+                  <strong>You</strong>{profile?.unit_name ? ` — ${profile.unit_name}` : ''}
+                </div>
+              </Popup>
+            </Marker>
+          )}
 
           {/* Assigned victims */}
           {assigned.map((v) => (
@@ -131,7 +160,7 @@ export function FieldMap() {
           ))}
 
           {/* Range indicator */}
-          <Circle center={RESPONDER_POS} radius={300} pathOptions={{ color: 'rgba(0,212,255,0.3)', fillColor: 'rgba(0,212,255,0.05)', fillOpacity: 1 }} />
+          {myPos && <Circle center={myPos} radius={300} pathOptions={{ color: 'rgba(0,212,255,0.3)', fillColor: 'rgba(0,212,255,0.05)', fillOpacity: 1 }} />}
         </MapContainer>
       </div>
 
