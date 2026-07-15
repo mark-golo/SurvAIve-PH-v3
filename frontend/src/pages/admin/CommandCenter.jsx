@@ -56,11 +56,32 @@ export function CommandCenter() {
 
   useEffect(() => {
     let q = supabase.from('responders')
-      .select('id,name,unit_name,assigned_zone,lat,lng,last_seen_at')
+      .select('id,name,unit_name,assigned_zone,lat,lng,last_seen_at,duty_status,municipality')
       .eq('duty_status', 'on_duty')
       .not('lat', 'is', null)
     if (muni) q = q.eq('municipality', muni)
     q.then(({ data }) => setActiveResponders(data ?? []))
+
+    const channel = supabase.channel('cc-responder-locations')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'responders' },
+        payload => {
+          const r = payload.new
+          if (muni && r.municipality !== muni) return
+          if (r.duty_status === 'on_duty' && r.lat && r.lng) {
+            setActiveResponders(prev => {
+              const idx = prev.findIndex(x => x.id === r.id)
+              if (idx === -1) return [...prev, r]
+              const next = [...prev]
+              next[idx] = { ...next[idx], lat: r.lat, lng: r.lng, last_seen_at: r.last_seen_at }
+              return next
+            })
+          } else {
+            setActiveResponders(prev => prev.filter(x => x.id !== r.id))
+          }
+        })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
   }, [])
 
   useEffect(() => { sync() }, [])

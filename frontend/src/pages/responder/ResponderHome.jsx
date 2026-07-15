@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { AlertTriangle, Home, Map, Radio, Settings, List, RefreshCw, Power, Users, ArrowUpDown } from 'lucide-react'
@@ -42,6 +42,32 @@ export function ResponderHome() {
           }
         })
     })
+  }, [])
+
+  useEffect(() => {
+    if (!navigator.geolocation) return
+    let watchId = null
+    let active = true
+    supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+      if (!active) return
+      const contact = authUser?.user_metadata?.contact_number
+      if (!contact) return
+      watchId = navigator.geolocation.watchPosition(
+        pos => {
+          supabase.from('responders').update({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            last_seen_at: new Date().toISOString(),
+          }).eq('contact_number', contact).select()
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 10000 }
+      )
+    })
+    return () => {
+      active = false
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+    }
   }, [])
 
   useEffect(() => {

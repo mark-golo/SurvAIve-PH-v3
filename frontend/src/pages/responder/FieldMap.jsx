@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
@@ -82,22 +82,30 @@ export function FieldMap() {
 
   useEffect(() => {
     if (!navigator.geolocation) { setGpsError(true); return }
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        setMyPos([pos.coords.latitude, pos.coords.longitude])
-        supabase.auth.getUser().then(({ data: { user: authUser } }) => {
-          const contact = authUser?.user_metadata?.contact_number
-          if (!contact) return
-          supabase.from('responders').update({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            last_seen_at: new Date().toISOString(),
-          }).eq('contact_number', contact).select()
-        })
-      },
-      () => setGpsError(true),
-      { enableHighAccuracy: true, timeout: 10000 }
-    )
+    let watchId = null
+    let active = true
+    supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+      if (!active) return
+      const contact = authUser?.user_metadata?.contact_number
+      watchId = navigator.geolocation.watchPosition(
+        pos => {
+          setMyPos([pos.coords.latitude, pos.coords.longitude])
+          if (contact) {
+            supabase.from('responders').update({
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+              last_seen_at: new Date().toISOString(),
+            }).eq('contact_number', contact).select()
+          }
+        },
+        () => setGpsError(true),
+        { enableHighAccuracy: true, timeout: 10000 }
+      )
+    })
+    return () => {
+      active = false
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+    }
   }, [])
 
   useEffect(() => {
