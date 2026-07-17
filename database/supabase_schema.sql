@@ -222,7 +222,7 @@ CREATE POLICY "own profile read"
   ON profiles FOR SELECT
   USING (
     id = auth.uid() OR
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('superadmin','admin')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('superadmin','admin')
   );
 
 CREATE POLICY "own profile update"
@@ -239,19 +239,19 @@ CREATE POLICY "public read centers"
 CREATE POLICY "admin insert centers"
   ON evacuation_centers FOR INSERT
   WITH CHECK (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
 CREATE POLICY "admin update centers"
   ON evacuation_centers FOR UPDATE
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
 CREATE POLICY "admin delete centers"
   ON evacuation_centers FOR DELETE
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
 -- ── sos_reports policies ──────────────────────────────────────
@@ -263,13 +263,13 @@ CREATE POLICY "anyone submit sos"
 CREATE POLICY "staff read sos"
   ON sos_reports FOR SELECT
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin','responder')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin','responder')
   );
 
 CREATE POLICY "staff update sos"
   ON sos_reports FOR UPDATE
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin','responder')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin','responder')
   );
 
 -- ── victims policies ──────────────────────────────────────────
@@ -279,67 +279,67 @@ CREATE POLICY "anyone register victim"
 CREATE POLICY "staff read victims"
   ON victims FOR SELECT
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
 CREATE POLICY "staff mutate victims"
   ON victims FOR UPDATE
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
 CREATE POLICY "staff delete victims"
   ON victims FOR DELETE
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
 -- ── responders policies ───────────────────────────────────────
 CREATE POLICY "staff read responders"
   ON responders FOR SELECT
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin','responder')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin','responder')
   );
 
 CREATE POLICY "admin mutate responders"
   ON responders FOR ALL
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
 -- Responders can update their own row (e.g. duty_status toggle)
 CREATE POLICY "responder update own"
   ON responders FOR UPDATE
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') = 'responder'
-    AND contact_number = (auth.jwt() -> 'user_metadata' ->> 'contact_number')
+    (auth.jwt() -> 'app_metadata' ->> 'role') = 'responder'
+    AND contact_number = (auth.jwt() -> 'app_metadata' ->> 'contact_number')
   );
 
 -- ── admins policies ───────────────────────────────────────────
 CREATE POLICY "superadmin manage admins"
   ON admins FOR ALL
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') = 'superadmin'
+    (auth.jwt() -> 'app_metadata' ->> 'role') = 'superadmin'
   );
 
 CREATE POLICY "admin read self"
   ON admins FOR SELECT
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
 -- ── superadmins policies ──────────────────────────────────────
 CREATE POLICY "superadmin manage superadmins"
   ON superadmins FOR ALL
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') = 'superadmin'
+    (auth.jwt() -> 'app_metadata' ->> 'role') = 'superadmin'
   );
 
 -- ── escalations policies ──────────────────────────────────────
 CREATE POLICY "staff manage escalations"
   ON escalations FOR ALL
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
 -- ── mesh_events policies ──────────────────────────────────────
@@ -349,7 +349,7 @@ CREATE POLICY "auth insert mesh"
 CREATE POLICY "staff read mesh"
   ON mesh_events FOR SELECT
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin','responder')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin','responder')
   );
 
 -- ── activity_logs policies ────────────────────────────────────
@@ -357,7 +357,7 @@ CREATE POLICY "staff read mesh"
 CREATE POLICY "staff read activity logs"
   ON activity_logs FOR SELECT
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
 CREATE POLICY "service insert activity logs"
@@ -435,6 +435,38 @@ LANGUAGE sql SECURITY DEFINER AS $$
   ORDER BY r.ai_priority_score DESC, r.created_at DESC
   LIMIT 500;
 $$;
+
+-- ============================================================
+-- TRIGGER: sync role → app_metadata on user creation
+-- app_metadata is server-only (unlike user_metadata which users can self-edit).
+-- This trigger ensures all new auth users get their role in the tamper-proof field.
+-- Run backfill after applying: see BACKFILL section below.
+-- ============================================================
+CREATE OR REPLACE FUNCTION auth.sync_role_to_app_metadata()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = auth AS $$
+BEGIN
+  UPDATE auth.users
+  SET raw_app_meta_data = raw_app_meta_data || jsonb_build_object(
+    'role',           NEW.raw_user_meta_data->>'role',
+    'contact_number', NEW.raw_user_meta_data->>'contact_number'
+  )
+  WHERE id = NEW.id;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_role_sync ON auth.users;
+CREATE TRIGGER on_auth_user_role_sync
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION auth.sync_role_to_app_metadata();
+
+-- ── BACKFILL: run once to secure existing users ───────────────
+-- UPDATE auth.users
+-- SET raw_app_meta_data = raw_app_meta_data || jsonb_build_object(
+--   'role',           raw_user_meta_data->>'role',
+--   'contact_number', raw_user_meta_data->>'contact_number'
+-- )
+-- WHERE raw_user_meta_data->>'role' IS NOT NULL;
 
 -- ============================================================
 -- SEED DATA
