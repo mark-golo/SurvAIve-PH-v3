@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Phone, Mail, ArrowLeft, Check } from 'lucide-react'
@@ -25,6 +25,13 @@ export function ProfileLogin() {
   const [otpSent, setOtpSent] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [countdown, setCountdown] = useState(0)
+
+  useEffect(() => {
+    if (countdown <= 0) return
+    const t = setTimeout(() => setCountdown(c => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [countdown])
 
   const [form, setForm] = useState({
     name: '', province: '', municipality: '', barangay: '', sitio: '',
@@ -65,6 +72,7 @@ export function ProfileLogin() {
         await api.post('/auth/otp', { action: 'send', method: 'email', email: identifier })
       }
       setOtpSent(true)
+      setCountdown(60)
     } catch (e) {
       const msg = (typeof e.error === 'string' && e.error) || (typeof e.message === 'string' && e.message) || 'Failed to send OTP. Please try again.'
       setError(msg)
@@ -190,10 +198,13 @@ export function ProfileLogin() {
                         />
                         <NeonButton onClick={verifyOtp} loading={loading} className="w-full">Verify OTP</NeonButton>
                         <button
-                          onClick={() => { setOtpSent(false); setOtp('') }}
-                          className="w-full text-xs text-slate-400 hover:text-white text-center py-1"
+                          onClick={() => { setOtpSent(false); setOtp(''); setCountdown(0) }}
+                          disabled={countdown > 0}
+                          className={`w-full text-xs text-center py-1 transition-colors ${
+                            countdown > 0 ? 'text-slate-600 cursor-not-allowed' : 'text-slate-400 hover:text-white'
+                          }`}
                         >
-                          Resend OTP
+                          {countdown > 0 ? `Resend OTP in ${countdown}s` : 'Resend OTP'}
                         </button>
                       </>
                     )}
@@ -242,10 +253,13 @@ export function ProfileLogin() {
                         />
                         <NeonButton onClick={verifyOtp} loading={loading} className="w-full">Verify OTP</NeonButton>
                         <button
-                          onClick={() => { setOtpSent(false); setOtp('') }}
-                          className="w-full text-xs text-slate-400 hover:text-white text-center py-1"
+                          onClick={() => { setOtpSent(false); setOtp(''); setCountdown(0) }}
+                          disabled={countdown > 0}
+                          className={`w-full text-xs text-center py-1 transition-colors ${
+                            countdown > 0 ? 'text-slate-600 cursor-not-allowed' : 'text-slate-400 hover:text-white'
+                          }`}
                         >
-                          Resend OTP
+                          {countdown > 0 ? `Resend OTP in ${countdown}s` : 'Resend OTP'}
                         </button>
                       </>
                     )}

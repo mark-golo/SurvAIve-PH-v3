@@ -180,7 +180,12 @@ async function post(path, body = {}) {
           const digits = body.contact.replace(/\D/g, '')
           const phone = '+63' + (digits.startsWith('0') ? digits.slice(1) : digits)
           const { error } = await supabase.auth.signInWithOtp({ phone })
-          if (error) throwErr(error.message || `Failed to send SMS OTP (${error.status ?? 500})`)
+          if (error) {
+            const msg = error.message
+              || (error.status === 429 ? 'Too many OTP requests. Please wait a minute and try again.' : null)
+              || `Failed to send SMS OTP (${error.status ?? 500})`
+            throwErr(msg)
+          }
           return { message: 'OTP sent via SMS' }
         }
         // email method
