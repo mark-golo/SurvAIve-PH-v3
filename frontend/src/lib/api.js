@@ -179,13 +179,10 @@ async function post(path, body = {}) {
         if (body.method === 'phone') {
           const digits = body.contact.replace(/\D/g, '')
           const phone = '+63' + (digits.startsWith('0') ? digits.slice(1) : digits)
-          const { error } = await supabase.auth.signInWithOtp({ phone })
-          if (error) {
-            const msg = error.message
-              || (error.status === 429 ? 'Too many OTP requests. Please wait a minute and try again.' : null)
-              || `Failed to send SMS OTP (${error.status ?? 500})`
-            throwErr(msg)
-          }
+          const { data: fnData, error: fnErr } = await supabase.functions.invoke('otp', {
+            body: { action: 'send', phone },
+          })
+          if (fnErr || fnData?.error) throwErr(fnData?.error || fnErr?.message || 'Failed to send OTP via SMS')
           return { message: 'OTP sent via SMS' }
         }
         // email method
@@ -203,32 +200,31 @@ async function post(path, body = {}) {
       }
 
       if (body.action === 'verify') {
-        let authResult
         if (body.method === 'phone') {
           const digits = body.contact.replace(/\D/g, '')
-          const phone = '+63' + (digits.startsWith('0') ? digits.slice(1) : digits)
-          authResult = await supabase.auth.verifyOtp({ phone, token: body.otp, type: 'sms' })
-        } else {
-          authResult = await supabase.auth.verifyOtp({ email: body.email, token: body.otp, type: 'email' })
+          const phone  = '+63' + (digits.startsWith('0') ? digits.slice(1) : digits)
+          const { data: fnData, error: fnErr } = await supabase.functions.invoke('otp', {
+            body: { action: 'verify', phone, otp: body.otp },
+          })
+          if (fnErr || fnData?.error) throwErr(fnData?.error || 'Invalid or expired OTP')
+          const { data, error } = await supabase.auth.verifyOtp({ token_hash: fnData.hashed_token, type: 'email' })
+          if (error || !data?.session) throwErr('Authentication failed. Please try again.')
+          const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle()
+          if (profile) {
+            if (profile.status === 'inactive') throwErr('Your account has been disabled. Contact your administrator.', 403)
+            const { data: victim } = await supabase.from('victims').select('*')
+              .eq('contact_number', body.contact.replace(/\D/g, '')).maybeSingle()
+            return { existing_user: true, token: data.session.access_token, user: { ...profile, ...(victim ?? {}) } }
+          }
+          return { existing_user: false, token: data.session.access_token }
         }
-        const { data, error } = authResult
+        // email path
+        const { data, error } = await supabase.auth.verifyOtp({ email: body.email, token: body.otp, type: 'email' })
         if (error) throwErr('Invalid or expired OTP')
-
-        const { data: profile } = await supabase
-          .from('profiles').select('*').eq('id', data.user.id).maybeSingle()
+        const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle()
         if (profile) {
-          if (profile.status === 'inactive') {
-            throwErr('Your account has been disabled. Contact your administrator.', 403)
-          }
-          const { data: victim } = body.method === 'phone'
-            ? await supabase.from('victims').select('*')
-                .eq('contact_number', body.contact.replace(/\D/g, '')).maybeSingle()
-            : { data: null }
-          return {
-            existing_user: true,
-            token: data.session.access_token,
-            user: { ...profile, ...(victim ?? {}) },
-          }
+          if (profile.status === 'inactive') throwErr('Your account has been disabled. Contact your administrator.', 403)
+          return { existing_user: true, token: data.session.access_token, user: { ...profile } }
         }
         return { existing_user: false, token: data.session.access_token }
       }
