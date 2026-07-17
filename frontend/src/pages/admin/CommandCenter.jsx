@@ -114,7 +114,7 @@ export function CommandCenter() {
             zoomControl={true}
           >
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
-            {reports.map(r => (
+            {reports.filter(r => r.lat && r.lng).map(r => (
               <Marker key={r.id} position={[r.lat, r.lng]} icon={pinIcon(COLORS[r.priority], r.is_verified ?? r.verified)}>
                 <Popup>
                   <div className="bg-[#0f172a] text-white text-xs p-3 rounded-xl min-w-[160px]">
@@ -132,7 +132,7 @@ export function CommandCenter() {
               </Marker>
             ))}
             {/* Heatmap approximation via circles */}
-            {reports.filter(r => ['CRITICAL', 'HIGH'].includes(r.priority)).map(r => (
+            {reports.filter(r => r.lat && r.lng && ['CRITICAL', 'HIGH'].includes(r.priority)).map(r => (
               <Circle key={`circle-${r.id}`} center={[r.lat, r.lng]} radius={150}
                 pathOptions={{ color: `${COLORS[r.priority]}40`, fillColor: `${COLORS[r.priority]}15`, fillOpacity: 1, weight: 1 }} />
             ))}

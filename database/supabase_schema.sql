@@ -430,8 +430,8 @@ LANGUAGE sql SECURITY DEFINER AS $$
   FROM sos_reports r
   LEFT JOIN victims v ON r.user_id = v.id
   WHERE
-    (p_municipality IS NULL OR r.municipality = p_municipality) AND
-    (p_province     IS NULL OR r.province     = p_province)
+    (p_municipality IS NULL OR r.municipality = p_municipality OR r.municipality IS NULL) AND
+    (p_province     IS NULL OR r.province     = p_province     OR r.province     IS NULL)
   ORDER BY r.ai_priority_score DESC, r.created_at DESC
   LIMIT 500;
 $$;

@@ -296,9 +296,9 @@ async function post(path, body = {}) {
     const { data, error } = await supabase
       .from('sos_reports')
       .insert({
-        barangay:         body.barangay     ?? null,
-        municipality:     body.municipality ?? null,
-        province:         body.province     ?? null,
+        barangay:         body.barangay     || null,
+        municipality:     body.municipality || null,
+        province:         body.province     || null,
         lat:              body.lat          ?? null,
         lng:              body.lng          ?? null,
         status:           body.status       ?? 'unknown',
