@@ -293,7 +293,7 @@ async function post(path, body = {}) {
   // ── SOS submit ──
   if (resource === 'sos') {
     const score = calcPriorityScore(body)
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('sos_reports')
       .insert({
         barangay:         body.barangay     || null,
@@ -309,10 +309,8 @@ async function post(path, body = {}) {
         is_verified:      false,
         trust_score:      'LOW',
       })
-      .select()
-      .single()
     if (error) sbThrow(error)
-    return { ...data, ai_priority_score: score }
+    return { ai_priority_score: score }
   }
 
   // ── Responder creation: create Supabase Auth account + profiles row ──

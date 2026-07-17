@@ -70,9 +70,10 @@ export function SOSReport() {
       setPriorityScore(res.ai_priority_score)
       setSubmitted(true)
     } catch (err) {
-      console.error('[SOSReport] insert failed:', err)
+      const msg = err?.message ?? String(err)
+      console.error('[SOSReport] insert failed:', msg)
       await db.queueSOS({ ...payload, isGuest, timestamp: Date.now() })
-      setSosError('Saved offline — will sync when connection is restored.')
+      setSosError(`SOS saved offline. (Error: ${msg})`)
       setSubmitted(true)
     }
     setLoading(false)
