@@ -196,9 +196,9 @@ export function CommandCenter() {
             </div>
             <div className="mt-2 flex items-center gap-1.5">
               <div className="h-1.5 rounded-full flex-1 bg-slate-700">
-                <div className="h-full rounded-full bg-[#f59e0b]" style={{ width: `${(stats.unverified / stats.total) * 100}%` }} />
+                <div className="h-full rounded-full bg-[#f59e0b]" style={{ width: stats.total ? `${(stats.unverified / stats.total) * 100}%` : '0%' }} />
               </div>
-              <span className="text-[10px] text-slate-500">{Math.round((stats.unverified / stats.total) * 100)}% guest</span>
+              <span className="text-[10px] text-slate-500">{stats.total ? Math.round((stats.unverified / stats.total) * 100) : 0}% guest</span>
             </div>
           </div>
 
