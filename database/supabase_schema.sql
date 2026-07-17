@@ -442,23 +442,21 @@ $$;
 -- This trigger ensures all new auth users get their role in the tamper-proof field.
 -- Run backfill after applying: see BACKFILL section below.
 -- ============================================================
-CREATE OR REPLACE FUNCTION auth.sync_role_to_app_metadata()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = auth AS $$
+CREATE OR REPLACE FUNCTION public.sync_role_to_app_metadata()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
-  UPDATE auth.users
-  SET raw_app_meta_data = raw_app_meta_data || jsonb_build_object(
+  NEW.raw_app_meta_data = COALESCE(NEW.raw_app_meta_data, '{}'::jsonb) || jsonb_build_object(
     'role',           NEW.raw_user_meta_data->>'role',
     'contact_number', NEW.raw_user_meta_data->>'contact_number'
-  )
-  WHERE id = NEW.id;
+  );
   RETURN NEW;
 END;
 $$;
 
 DROP TRIGGER IF EXISTS on_auth_user_role_sync ON auth.users;
 CREATE TRIGGER on_auth_user_role_sync
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION auth.sync_role_to_app_metadata();
+  BEFORE INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.sync_role_to_app_metadata();
 
 -- ── BACKFILL: run once to secure existing users ───────────────
 -- UPDATE auth.users

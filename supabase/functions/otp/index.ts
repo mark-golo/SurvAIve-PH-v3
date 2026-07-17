@@ -125,13 +125,18 @@ Deno.serve(async (req: Request) => {
 
     if (!authUser) {
       const { data, error } = await admin.auth.admin.createUser({
-        email: internalEmail, email_confirm: true, user_metadata: { role: 'victim' },
+        email: internalEmail, email_confirm: true,
+        user_metadata: { role: 'victim' },
+        app_metadata:  { role: 'victim' },
       })
       if (error || !data?.user) return json({ error: 'Failed to create user account.' }, 500)
       authUser = data.user
     } else if (!authUser.email) {
       // Existing phone-auth user — add internal email so generateLink works
-      await admin.auth.admin.updateUserById(authUser.id, { email: internalEmail })
+      await admin.auth.admin.updateUserById(authUser.id, {
+        email: internalEmail,
+        app_metadata: { role: 'victim' },
+      })
       authUser = { ...authUser, email: internalEmail }
     }
 
