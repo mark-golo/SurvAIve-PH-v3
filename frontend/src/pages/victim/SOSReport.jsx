@@ -32,10 +32,11 @@ export function SOSReport() {
     municipality: user?.municipality ?? '',
     province: user?.province ?? '',
   })
-  const [lat, setLat] = useState(null)
-  const [lng, setLng] = useState(null)
+  const [lat, setLat] = useState(user?.lat ?? null)
+  const [lng, setLng] = useState(user?.lng ?? null)
   const [loading, setLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [sosError, setSosError] = useState(null)
   const [priorityScore, setPriorityScore] = useState(null)
   const [offline, setOffline] = useState(!navigator.onLine)
 
@@ -68,9 +69,10 @@ export function SOSReport() {
       const res = await api.post('/sos', payload)
       setPriorityScore(res.ai_priority_score)
       setSubmitted(true)
-    } catch {
-      // Fallback to offline queue
+    } catch (err) {
+      console.error('[SOSReport] insert failed:', err)
       await db.queueSOS({ ...payload, isGuest, timestamp: Date.now() })
+      setSosError('Saved offline — will sync when connection is restored.')
       setSubmitted(true)
     }
     setLoading(false)
@@ -91,6 +93,7 @@ export function SOSReport() {
           </div>
           <h2 className="text-xl font-black text-white">SOS Sent!</h2>
           {offline && <p className="text-sm text-[#f59e0b]">Saved offline — will sync when signal returns</p>}
+          {sosError && <p className="text-sm text-[#f59e0b]">{sosError}</p>}
           {priorityScore && (
             <div className="glass rounded-xl p-3">
               <p className="text-xs text-slate-500">AI Priority Score</p>

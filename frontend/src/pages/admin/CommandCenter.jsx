@@ -98,7 +98,9 @@ export function CommandCenter() {
         nodes: prev.nodes,
         unverified: res.filter(r => !r.is_verified).length,
       }))
-    } catch {}
+    } catch (err) {
+      console.error('[CommandCenter] SOS fetch failed:', err)
+    }
     setSyncing(false)
   }
 

@@ -306,6 +306,8 @@ async function post(path, body = {}) {
         notes:            body.notes        ?? null,
         ai_priority_score: score,
         rescue_status:    'pending',
+        is_verified:      false,
+        trust_score:      'LOW',
       })
       .select()
       .single()
