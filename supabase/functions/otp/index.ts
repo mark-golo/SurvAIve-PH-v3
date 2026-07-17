@@ -45,6 +45,8 @@ Deno.serve(async (req: Request) => {
 
   // ── SEND ──────────────────────────────────────────────────────────────────
   if (body.action === 'send') {
+    if (!SEMAPHORE_KEY) return json({ error: 'SMS service not configured. Contact the administrator.' }, 503)
+
     // Rate limit: 1 OTP per 60 seconds per phone
     const { data: recent } = await admin.from('otp_requests')
       .select('id').eq('phone', phone).eq('used', false)
@@ -63,16 +65,18 @@ Deno.serve(async (req: Request) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        apikey:     SEMAPHORE_KEY,
-        number:     phone,
-        message:    `Your SurvAIve PH code is: ${code}. Valid for 5 minutes. Do not share this code.`,
-        sendername: 'SurvAIve',
+        apikey:  SEMAPHORE_KEY,
+        number:  phone.replace('+', ''),
+        message: `Your SurvAIve PH code is: ${code}. Valid for 5 minutes. Do not share this code.`,
       }),
     })
 
     if (!smsRes.ok) {
-      console.error('Semaphore error:', await smsRes.text())
-      return json({ error: 'Failed to send SMS. Please try again.' }, 502)
+      const errText = await smsRes.text()
+      console.error('Semaphore error:', errText)
+      let semMsg = 'Failed to send SMS. Please try again.'
+      try { const j = JSON.parse(errText); semMsg = j.message || j.messages?.[0]?.message || semMsg } catch {}
+      return json({ error: `SMS error: ${semMsg}` }, 502)
     }
 
     return json({ message: 'OTP sent via SMS' })
