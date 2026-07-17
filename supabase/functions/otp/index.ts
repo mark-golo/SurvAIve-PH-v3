@@ -59,25 +59,23 @@ Deno.serve(async (req: Request) => {
     const hash  = await sha256(code + salt + phone)
     const expAt = new Date(Date.now() + 5 * 60_000).toISOString()
 
-    await admin.from('otp_requests').insert({ phone, otp_hash: `${salt}:${hash}`, expires_at: expAt })
-
     const smsRes = await fetch('https://api.semaphore.co/api/v4/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         apikey:  SEMAPHORE_KEY,
-        number:  phone.replace('+', ''),
+        number:  '0' + phone.slice(-10),
         message: `Your SurvAIve PH code is: ${code}. Valid for 5 minutes. Do not share this code.`,
       }),
     })
 
     if (!smsRes.ok) {
       const errText = await smsRes.text()
-      console.error('Semaphore error:', errText)
-      let semMsg = 'Failed to send SMS. Please try again.'
-      try { const j = JSON.parse(errText); semMsg = j.message || j.messages?.[0]?.message || semMsg } catch {}
-      return json({ error: `SMS error: ${semMsg}` }, 502)
+      console.error('Semaphore error:', smsRes.status, errText)
+      return json({ error: `Semaphore [${smsRes.status}]: ${errText.slice(0, 300)}` }, 502)
     }
+
+    await admin.from('otp_requests').insert({ phone, otp_hash: `${salt}:${hash}`, expires_at: expAt })
 
     return json({ message: 'OTP sent via SMS' })
   }
