@@ -182,7 +182,12 @@ async function post(path, body = {}) {
           const { data: fnData, error: fnErr } = await supabase.functions.invoke('otp', {
             body: { action: 'send', phone },
           })
-          if (fnErr || fnData?.error) throwErr(fnData?.error || fnErr?.message || 'Failed to send OTP via SMS')
+          if (fnErr) {
+            let msg = 'Failed to send OTP via SMS'
+            try { const b = await fnErr.context.json(); if (b?.error) msg = b.error } catch {}
+            throwErr(msg)
+          }
+          if (fnData?.error) throwErr(fnData.error)
           return { message: 'OTP sent via SMS' }
         }
         // email method
@@ -206,7 +211,12 @@ async function post(path, body = {}) {
           const { data: fnData, error: fnErr } = await supabase.functions.invoke('otp', {
             body: { action: 'verify', phone, otp: body.otp },
           })
-          if (fnErr || fnData?.error) throwErr(fnData?.error || 'Invalid or expired OTP')
+          if (fnErr) {
+            let msg = 'Invalid or expired OTP'
+            try { const b = await fnErr.context.json(); if (b?.error) msg = b.error } catch {}
+            throwErr(msg)
+          }
+          if (fnData?.error) throwErr(fnData.error)
           const { data, error } = await supabase.auth.verifyOtp({ token_hash: fnData.hashed_token, type: 'email' })
           if (error || !data?.session) throwErr('Authentication failed. Please try again.')
           const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle()
