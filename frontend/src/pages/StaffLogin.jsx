@@ -149,7 +149,7 @@ export function StaffLogin() {
                     src="/logo.png"
                     alt="SurvAIve PH"
                     className="w-full h-full object-contain"
-                    style={{ filter: 'drop-shadow(0 0 6px rgba(139,92,246,0.9)) drop-shadow(0 0 16px rgba(139,92,246,0.5)) drop-shadow(0 0 32px rgba(139,92,246,0.2))' }}
+                    style={{ filter: 'drop-shadow(0 0 8px rgba(0,212,255,0.8)) drop-shadow(0 0 20px rgba(0,212,255,0.4)) drop-shadow(0 0 40px rgba(0,212,255,0.15))' }}
                   />
                 </div>
                 <h1 className="text-2xl font-black text-white mb-1">
