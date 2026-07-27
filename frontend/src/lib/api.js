@@ -148,7 +148,9 @@ async function post(path, body = {}) {
     const action = path.replace(/\?.*/, '').split('/')[2]
 
     if (action === 'login') {
-      const email = `${body.contact_number}@survAIve.ph`
+      const email = body.role === 'victim'
+        ? `${body.contact_number}@internal.survaive.ph`
+        : `${body.contact_number}@survAIve.ph`
       const { data, error } = await supabase.auth.signInWithPassword({ email, password: body.password })
       if (error) throwErr('Invalid credentials. Check your contact number and password.', 401)
 
@@ -271,6 +273,11 @@ async function post(path, body = {}) {
         barangay:       body.barangay ?? null,
       })
       if (pe) sbThrow(pe)
+
+      if (body.password) {
+        const { error: pwErr } = await supabase.auth.updateUser({ password: body.password })
+        if (pwErr) sbThrow(pwErr)
+      }
 
       const { data: sess } = await supabase.auth.getSession()
       return {

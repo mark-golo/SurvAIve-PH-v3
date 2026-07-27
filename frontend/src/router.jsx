@@ -7,6 +7,7 @@ import { StaffLogin } from './pages/StaffLogin'
 import { LandingAuth }     from './pages/victim/LandingAuth'
 import { ProfileLogin }    from './pages/victim/ProfileLogin'
 import { GuestChallenge }  from './pages/victim/GuestChallenge'
+import { VictimSignup }   from './pages/victim/VictimSignup'
 import { HomeScreen }      from './pages/victim/HomeScreen'
 import { SOSReport }       from './pages/victim/SOSReport'
 import { MeshStatus }      from './pages/victim/MeshStatus'
@@ -51,6 +52,7 @@ export const router = createBrowserRouter([
   { path: '/staff-login',  element: <StaffLogin /> },
   { path: '/login',     element: <ProfileLogin /> },
   { path: '/guest',     element: <GuestChallenge /> },
+  { path: '/signup',   element: <VictimSignup /> },
 
   // Victim routes (victim role or guest)
   {

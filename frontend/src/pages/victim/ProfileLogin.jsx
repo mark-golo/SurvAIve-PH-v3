@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Phone, Mail, ArrowLeft, Check } from 'lucide-react'
+import { Phone, Mail, ArrowLeft, Check, Lock } from 'lucide-react'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassInput, GlassSelect, GlassTextarea } from '../../components/ui/GlassInput'
@@ -18,6 +18,8 @@ export function ProfileLogin() {
   const { login } = useAuthStore()
 
   const [step, setStep] = useState(0)
+  const [signInMode, setSignInMode] = useState('otp')  // 'otp' | 'password'
+  const [password, setPassword] = useState('')
   const [method, setMethod] = useState(null)    // 'phone' | 'email'
   const [identifier, setIdentifier] = useState('') // raw phone or email typed in Step 0
   const [contact, setContact] = useState('')       // phone number used for DB (pre-filled or user-entered)
@@ -58,6 +60,20 @@ export function ProfileLogin() {
     setOtp('')
     setOtpSent(false)
     setError('')
+  }
+
+  const signInWithPassword = async () => {
+    setError(''); setLoading(true)
+    try {
+      const cleaned = identifier.replace(/\D/g, '')
+      if (cleaned.length < 10) { setError('Enter a valid Philippine mobile number (09XXXXXXXXX)'); setLoading(false); return }
+      const res = await api.post('/auth/login', { contact_number: cleaned, password, role: 'victim' })
+      login(res.token, res.user)
+      navigate('/home')
+    } catch (e) {
+      setError(e.error ?? e.message ?? 'Incorrect phone number or password.')
+    }
+    setLoading(false)
   }
 
   const sendOtp = async () => {
@@ -155,6 +171,47 @@ export function ProfileLogin() {
           {step === 0 && (
             <motion.div key="cred" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
               <GlassCard className="space-y-4">
+                {/* Sign-in mode tabs */}
+                <div className="flex rounded-xl overflow-hidden border border-[rgba(255,255,255,0.08)]">
+                  {(['otp', 'password'] ).map(m => (
+                    <button key={m} onClick={() => { setSignInMode(m); setError('') }}
+                      className={`flex-1 py-2 text-xs font-semibold transition-colors ${
+                        signInMode === m
+                          ? 'bg-[rgba(0,212,255,0.1)] text-[#00d4ff]'
+                          : 'text-slate-500 hover:text-slate-300'
+                      }`}>
+                      {m === 'otp' ? 'OTP Code' : 'Password'}
+                    </button>
+                  ))}
+                </div>
+
+                {signInMode === 'password' ? (
+                  <div className="space-y-3">
+                    <GlassInput
+                      label="Philippine Mobile Number"
+                      placeholder="09XXXXXXXXX"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      icon={Phone}
+                    />
+                    <GlassInput
+                      label="Password"
+                      type="password"
+                      placeholder="Your password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      icon={Lock}
+                    />
+                    <NeonButton onClick={signInWithPassword} loading={loading} className="w-full">Sign In</NeonButton>
+                    <p className="text-xs text-slate-500 text-center">
+                      Don't have a password?{' '}
+                      <button onClick={() => navigate('/signup')} className="text-[#00d4ff] hover:underline">
+                        Create Account
+                      </button>
+                    </p>
+                  </div>
+                ) : (
+                  <>
                 <p className="text-sm text-slate-300 font-medium">Choose how to verify your identity</p>
 
                 {/* Phone method */}
@@ -266,6 +323,8 @@ export function ProfileLogin() {
                   </motion.div>
                 )}
 
+                  </>
+                )}
                 {error && <p className="text-xs text-[#ef4444] text-center">{error}</p>}
               </GlassCard>
             </motion.div>
