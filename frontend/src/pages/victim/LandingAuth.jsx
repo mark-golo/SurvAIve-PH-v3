@@ -24,10 +24,14 @@ export function LandingAuth() {
           <motion.div
             animate={{ scale: [1, 1.04, 1] }}
             transition={{ duration: 3, repeat: Infinity }}
-            className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4
-                       shadow-[0_0_30px_rgba(0,212,255,0.2)]"
+            className="inline-flex items-center justify-center w-20 h-20 mb-4"
           >
-            <img src="/logo.png" alt="SurvAIve PH" className="w-full h-full object-contain rounded-2xl" />
+            <img
+              src="/logo.png"
+              alt="SurvAIve PH"
+              className="w-full h-full object-contain"
+              style={{ filter: 'drop-shadow(0 0 8px rgba(0,212,255,0.8)) drop-shadow(0 0 20px rgba(0,212,255,0.4)) drop-shadow(0 0 40px rgba(0,212,255,0.15))' }}
+            />
           </motion.div>
           <h1 className="text-3xl font-black text-white tracking-tight mb-1">
             Surv<span className="text-[#00d4ff]">AI</span>ve PH

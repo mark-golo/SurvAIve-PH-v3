@@ -144,9 +144,13 @@ export function StaffLogin() {
           {step === 0 && (
             <motion.div key="role-select" {...slide(direction)}>
               <div className="text-center mb-7">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4
-                                shadow-[0_0_24px_rgba(139,92,246,0.2)]">
-                  <img src="/logo.png" alt="SurvAIve PH" className="w-full h-full object-contain rounded-2xl" />
+                <div className="inline-flex items-center justify-center w-16 h-16 mb-4">
+                  <img
+                    src="/logo.png"
+                    alt="SurvAIve PH"
+                    className="w-full h-full object-contain"
+                    style={{ filter: 'drop-shadow(0 0 6px rgba(139,92,246,0.9)) drop-shadow(0 0 16px rgba(139,92,246,0.5)) drop-shadow(0 0 32px rgba(139,92,246,0.2))' }}
+                  />
                 </div>
                 <h1 className="text-2xl font-black text-white mb-1">
                   Surv<span className="text-[#00d4ff]">AI</span>ve PH
