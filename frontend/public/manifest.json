@@ -8,7 +8,7 @@
   "theme_color": "#00d4ff",
   "orientation": "portrait",
   "icons": [
-    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ],
   "categories": ["utilities", "emergency"],
   "lang": "en-PH"

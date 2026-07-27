@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { User, UserX, ChevronRight, Radio, Wifi, Lock, Satellite, AlertTriangle, Shield } from 'lucide-react'
+import { User, UserX, ChevronRight, Radio, Wifi, Lock, Satellite, Shield } from 'lucide-react'
 import { FeatureIcons } from '../../components/ui/OfflineIndicator'
 
 export function LandingAuth() {
@@ -25,10 +25,9 @@ export function LandingAuth() {
             animate={{ scale: [1, 1.04, 1] }}
             transition={{ duration: 3, repeat: Infinity }}
             className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4
-                       bg-gradient-to-br from-[rgba(0,212,255,0.2)] to-[rgba(139,92,246,0.2)]
-                       border border-[rgba(0,212,255,0.3)] shadow-[0_0_30px_rgba(0,212,255,0.2)]"
+                       shadow-[0_0_30px_rgba(0,212,255,0.2)]"
           >
-            <AlertTriangle size={36} className="text-[#00d4ff]" />
+            <img src="/logo.png" alt="SurvAIve PH" className="w-full h-full object-contain rounded-2xl" />
           </motion.div>
           <h1 className="text-3xl font-black text-white tracking-tight mb-1">
             Surv<span className="text-[#00d4ff]">AI</span>ve PH

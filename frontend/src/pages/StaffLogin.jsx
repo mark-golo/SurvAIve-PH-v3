@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Phone, Lock, Eye, EyeOff, Shield, ChevronRight,
+import { ArrowLeft, Phone, Lock, Eye, EyeOff, ChevronRight,
          Radio, Building2, Globe, MapPin } from 'lucide-react'
 import { GlassInput, GlassSelect } from '../components/ui/GlassInput'
 import { NeonButton } from '../components/ui/NeonButton'
@@ -145,10 +145,8 @@ export function StaffLogin() {
             <motion.div key="role-select" {...slide(direction)}>
               <div className="text-center mb-7">
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4
-                                bg-gradient-to-br from-[rgba(139,92,246,0.2)] to-[rgba(249,115,22,0.2)]
-                                border border-[rgba(139,92,246,0.3)]
                                 shadow-[0_0_24px_rgba(139,92,246,0.2)]">
-                  <Shield size={28} className="text-[#8b5cf6]" />
+                  <img src="/logo.png" alt="SurvAIve PH" className="w-full h-full object-contain rounded-2xl" />
                 </div>
                 <h1 className="text-2xl font-black text-white mb-1">
                   Surv<span className="text-[#00d4ff]">AI</span>ve PH
