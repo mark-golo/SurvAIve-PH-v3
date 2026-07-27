@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { Users, AlertTriangle, CheckCircle, Radio, RefreshCw, Shield } from 'lucide-react'
@@ -38,6 +38,12 @@ const shelterIcon = (status) => {
   })
 }
 
+function FlyTo({ pos }) {
+  const map = useMap()
+  useEffect(() => { if (pos) map.flyTo(pos, 16, { duration: 1.2 }) }, [pos])
+  return null
+}
+
 export function CommandCenter() {
   const { scope } = useAuthStore()
   const [stats, setStats] = useState({ total: 0, critical: 0, rescued: 0, nodes: 0, unverified: 0 })
@@ -45,6 +51,7 @@ export function CommandCenter() {
   const [reports, setReports] = useState([])
   const [centers, setCenters] = useState([])
   const [activeResponders, setActiveResponders] = useState([])
+  const [selectedSOS, setSelectedSOS] = useState(null)
 
   const muni = scope?.municipality
 
@@ -116,6 +123,7 @@ export function CommandCenter() {
             zoomControl={true}
           >
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
+            {selectedSOS && <FlyTo pos={selectedSOS} />}
             {reports.filter(r => r.lat && r.lng).map(r => (
               <Marker key={r.id} position={[r.lat, r.lng]} icon={pinIcon(COLORS[r.priority], r.is_verified ?? r.verified)}>
                 <Popup>
@@ -208,16 +216,28 @@ export function CommandCenter() {
           <div className="flex-1 overflow-y-auto p-4">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Recent Reports</p>
             <div className="space-y-2">
-              {reports.map(r => (
-                <div key={r.id} className="glass rounded-xl p-2.5 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full shrink-0" style={{ background: COLORS[r.priority], boxShadow: `0 0 6px ${COLORS[r.priority]}` }} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-white truncate">{r.name ?? 'Anonymous'}</p>
-                    <p className="text-[10px] text-slate-500">{r.barangay}</p>
+              {reports.map(r => {
+                const isSelected = selectedSOS && r.lat === selectedSOS[0] && r.lng === selectedSOS[1]
+                return (
+                  <div
+                    key={r.id}
+                    onClick={() => r.lat && r.lng && setSelectedSOS([r.lat, r.lng])}
+                    className={`rounded-xl p-2.5 flex items-center gap-2 transition-all ${
+                      r.lat && r.lng ? 'cursor-pointer hover:bg-[rgba(255,255,255,0.05)]' : ''
+                    } ${isSelected
+                      ? 'bg-[rgba(0,212,255,0.12)] border border-[rgba(0,212,255,0.3)]'
+                      : 'glass'
+                    }`}
+                  >
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ background: COLORS[r.priority], boxShadow: `0 0 6px ${COLORS[r.priority]}` }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-white truncate">{r.name ?? 'Anonymous'}</p>
+                      <p className="text-[10px] text-slate-500">{r.barangay}</p>
+                    </div>
+                    <StatusBadge status={r.priority} className="shrink-0 text-[9px] !py-0.5 !px-1.5" />
                   </div>
-                  <StatusBadge status={r.priority} className="shrink-0 text-[9px] !py-0.5 !px-1.5" />
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 
