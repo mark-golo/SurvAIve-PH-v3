@@ -16,7 +16,6 @@ const CAPTCHA_ICONS = [
   { id: 'rescue',    emoji: '⛑️',  label: 'Rescue Helmet' },
   { id: 'heart',     emoji: '❤️',  label: 'Heart' },
 ]
-const CORRECT_ID = 'rescue'
 
 export function GuestChallenge() {
   const navigate = useNavigate()
@@ -30,12 +29,14 @@ export function GuestChallenge() {
   const [municipality, setMunicipality] = useState('')
   const [barangay, setBarangay] = useState('')
   const [shuffled, setShuffled] = useState([])
+  const [target, setTarget] = useState(null)
   const [selected, setSelected] = useState(null)
   const [captchaError, setCaptchaError] = useState(false)
   const [accepted, setAccepted] = useState(false)
 
   useEffect(() => {
     setShuffled([...CAPTCHA_ICONS].sort(() => Math.random() - 0.5))
+    setTarget(CAPTCHA_ICONS[Math.floor(Math.random() * CAPTCHA_ICONS.length)])
   }, [])
 
   const detectGPS = () => {
@@ -50,7 +51,7 @@ export function GuestChallenge() {
   useEffect(() => { if (step === 0) detectGPS() }, [step])
 
   const verifyCaptha = () => {
-    if (selected !== CORRECT_ID) { setCaptchaError(true); setSelected(null); return }
+    if (selected !== target?.id) { setCaptchaError(true); setSelected(null); return }
     setCaptchaError(false); setStep(2)
   }
 
@@ -155,7 +156,7 @@ export function GuestChallenge() {
               <GlassCard className="space-y-4">
                 <div className="text-center">
                   <p className="font-semibold text-white text-sm">Verify you're a real person</p>
-                  <p className="text-xs text-slate-400 mt-1">Tap the <strong className="text-white">Rescue Helmet ⛑️</strong></p>
+                  <p className="text-xs text-slate-400 mt-1">Tap the <strong className="text-white">{target?.label} {target?.emoji}</strong></p>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   {shuffled.map(icon => (
