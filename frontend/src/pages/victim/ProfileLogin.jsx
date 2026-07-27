@@ -444,6 +444,15 @@ export function ProfileLogin() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {step === 0 && (
+          <p className="text-center text-[11px] text-slate-500 mt-4">
+            Don't have an account?{' '}
+            <button onClick={() => navigate('/signup')} className="text-[#8b5cf6] font-semibold tracking-wide hover:underline">
+              SIGN UP
+            </button>
+          </p>
+        )}
       </div>
     </div>
   )

@@ -190,19 +190,12 @@ export function VictimSignup() {
                 {error && <p className="text-xs text-[#ef4444] text-center">{error}</p>}
 
                 {alreadyExists && (
-                  <p className="text-xs text-slate-400 text-center">
-                    <button onClick={() => navigate('/login')} className="text-[#00d4ff] hover:underline">
-                      Sign in instead →
+                  <p className="text-[11px] text-slate-500 text-center">
+                    <button onClick={() => navigate('/login')} className="text-[#00d4ff] font-semibold hover:underline">
+                      Sign In instead →
                     </button>
                   </p>
                 )}
-
-                <p className="text-xs text-slate-500 text-center">
-                  Already have an account?{' '}
-                  <button onClick={() => navigate('/login')} className="text-[#00d4ff] hover:underline">
-                    Sign In
-                  </button>
-                </p>
               </GlassCard>
             </motion.div>
           )}
@@ -331,6 +324,15 @@ export function VictimSignup() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {step === 0 && (
+          <p className="text-center text-[11px] text-slate-500 mt-4">
+            Already have an account?{' '}
+            <button onClick={() => navigate('/login')} className="text-[#00d4ff] font-semibold tracking-wide hover:underline">
+              SIGN IN
+            </button>
+          </p>
+        )}
       </div>
     </div>
   )
