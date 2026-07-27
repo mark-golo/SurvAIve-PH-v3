@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { User, UserX, UserPlus, ChevronRight, Radio, Wifi, Lock, Satellite, AlertTriangle, Shield } from 'lucide-react'
+import { User, UserX, ChevronRight, Radio, Wifi, Lock, Satellite, AlertTriangle, Shield } from 'lucide-react'
 import { FeatureIcons } from '../../components/ui/OfflineIndicator'
 
 export function LandingAuth() {
@@ -100,35 +100,22 @@ export function LandingAuth() {
             </div>
           </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.5 }}
-            onClick={() => navigate('/signup')}
-            className="glass rounded-2xl p-5 cursor-pointer group
-                       hover:border-[rgba(139,92,246,0.4)] transition-all duration-300"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-[rgba(139,92,246,0.1)]
-                              border border-[rgba(139,92,246,0.2)] flex items-center justify-center shrink-0">
-                <UserPlus size={22} className="text-[#8b5cf6]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-white text-sm">Create Account</p>
-                <p className="text-xs text-slate-400 mt-0.5">New user · Verify via SMS · Set your password</p>
-              </div>
-              <ChevronRight size={18} className="text-slate-500 group-hover:text-[#8b5cf6] transition-colors" />
-            </div>
-            <div className="mt-3 flex gap-2">
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(139,92,246,0.1)] border border-[rgba(139,92,246,0.2)] text-[#8b5cf6]">
-                SMS Verified
-              </span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(34,197,94,0.1)] border border-[rgba(34,197,94,0.2)] text-[#22c55e]">
-                High Trust Score
-              </span>
-            </div>
-          </motion.div>
         </div>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className="text-center text-[11px] text-slate-500 mt-4"
+        >
+          Don't have an account?{' '}
+          <button
+            onClick={() => navigate('/signup')}
+            className="text-[#8b5cf6] font-semibold tracking-wide hover:underline"
+          >
+            SIGN UP
+          </button>
+        </motion.p>
 
         {/* Difference tooltip */}
         <motion.div
