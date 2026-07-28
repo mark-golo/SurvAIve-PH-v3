@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -10,6 +10,7 @@ import { NeonButton } from '../../components/ui/NeonButton'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 import { supabase } from '../../lib/supabase'
+import { fetchWeather, getWeatherLabel } from '../../lib/weatherService'
 
 const COLORS = { CRITICAL: '#ef4444', HIGH: '#f97316', MODERATE: '#f59e0b', SAFE: '#22c55e' }
 
@@ -185,11 +186,37 @@ export function CommandCenter() {
   const [centers, setCenters] = useState([])
   const [activeResponders, setActiveResponders] = useState([])
   const [selectedSOS, setSelectedSOS] = useState(null)
+  const [weather, setWeather] = useState(null)
+  const [weatherError, setWeatherError] = useState(false)
 
   const muni = scope?.municipality
   const muniGeo   = muni ? (MUNICIPALITY_CENTERS[muni] ?? null) : null
   const mapCenter = muniGeo ? [muniGeo[0], muniGeo[1]] : [9.852, 126.073]
   const mapZoom   = muniGeo ? muniGeo[2] : 12
+
+  useEffect(() => {
+    if (muniGeo) {
+      fetchWeather(muniGeo[0], muniGeo[1])
+        .then(setWeather)
+        .catch(() => setWeatherError(true))
+    }
+  }, [])
+
+  const weatherBonus = weather?.scoreBonus ?? 0
+  const adjustedReports = useMemo(() => {
+    if (weatherBonus === 0) return reports
+    return reports.map(r => {
+      const mins      = Number(r.minutes_ago) || 0
+      const timeBonus = mins >= 240 ? 20 : mins >= 120 ? 15 : mins >= 60 ? 10 : mins >= 30 ? 5 : 0
+      const display   = Math.min((r.ai_priority_score ?? 50) + timeBonus + weatherBonus, 99)
+      return {
+        ...r,
+        priority: display >= 80 ? 'CRITICAL' : display >= 60 ? 'HIGH' : display >= 40 ? 'MODERATE' : 'LOW',
+      }
+    })
+  }, [reports, weatherBonus])
+
+  const criticalCount = adjustedReports.filter(r => r.priority === 'CRITICAL').length
 
   useEffect(() => {
     api.get(muni ? `/evacuation_centers?municipality=${encodeURIComponent(muni)}` : '/evacuation_centers')
@@ -260,7 +287,7 @@ export function CommandCenter() {
           >
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
             {selectedSOS && <FlyTo pos={selectedSOS} />}
-            {reports.filter(r => r.lat && r.lng).map(r => (
+            {adjustedReports.filter(r => r.lat && r.lng).map(r => (
               <Marker key={r.id} position={[r.lat, r.lng]} icon={pinIcon(COLORS[r.priority], r.is_verified ?? r.verified)}>
                 <Popup>
                   <div className="bg-[#0f172a] text-white text-xs p-3 rounded-xl min-w-[160px]">
@@ -278,7 +305,7 @@ export function CommandCenter() {
               </Marker>
             ))}
             {/* Heatmap approximation via circles */}
-            {reports.filter(r => r.lat && r.lng && ['CRITICAL', 'HIGH'].includes(r.priority)).map(r => (
+            {adjustedReports.filter(r => r.lat && r.lng && ['CRITICAL', 'HIGH'].includes(r.priority)).map(r => (
               <Circle key={`circle-${r.id}`} center={[r.lat, r.lng]} radius={150}
                 pathOptions={{ color: `${COLORS[r.priority]}40`, fillColor: `${COLORS[r.priority]}15`, fillOpacity: 1, weight: 1 }} />
             ))}
@@ -329,7 +356,7 @@ export function CommandCenter() {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <StatCard label="Total SOS"   value={stats.total}      icon={Users}         color="#00d4ff" />
-              <StatCard label="Critical"    value={stats.critical}   icon={AlertTriangle} color="#ef4444" />
+              <StatCard label="Critical"    value={criticalCount}    icon={AlertTriangle} color="#ef4444" />
               <StatCard label="Rescued"     value={stats.rescued}    icon={CheckCircle}   color="#22c55e" />
               <StatCard label="Mesh Nodes"  value={stats.nodes}      icon={Radio}         color="#8b5cf6" />
             </div>
@@ -348,11 +375,51 @@ export function CommandCenter() {
             </div>
           </div>
 
+          {/* Weather Risk Widget */}
+          {(weather || weatherError) && (
+            <div className="px-4 pb-3 border-b border-[rgba(255,255,255,0.08)]">
+              {weather && (
+                <div className={`glass rounded-xl p-3 border ${
+                  weather.riskLevel === 'EXTREME'  ? 'border-[rgba(239,68,68,0.4)]'  :
+                  weather.riskLevel === 'HIGH'     ? 'border-[rgba(249,115,22,0.4)]' :
+                  weather.riskLevel === 'MODERATE' ? 'border-[rgba(245,158,11,0.3)]' :
+                                                     'border-[rgba(255,255,255,0.08)]'
+                }`}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">
+                      Weather Risk · {muni ?? 'Area'}
+                    </p>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      weather.riskLevel === 'EXTREME'  ? 'bg-[rgba(239,68,68,0.2)] text-[#ef4444]'  :
+                      weather.riskLevel === 'HIGH'     ? 'bg-[rgba(249,115,22,0.2)] text-[#f97316]' :
+                      weather.riskLevel === 'MODERATE' ? 'bg-[rgba(245,158,11,0.2)] text-[#f59e0b]' :
+                                                         'bg-[rgba(34,197,94,0.2)] text-[#22c55e]'
+                    }`}>{weather.riskLevel}</span>
+                  </div>
+                  <p className="text-xs text-white font-medium">{getWeatherLabel(weather.weatherCode)}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {weather.rainfall.toFixed(1)} mm/h rainfall · {weather.windSpeed.toFixed(0)} km/h wind
+                  </p>
+                  {weather.scoreBonus > 0 && (
+                    <p className="text-[10px] text-[#f59e0b] mt-1.5 font-medium">
+                      ⚠ Scores elevated +{weather.scoreBonus} due to weather
+                    </p>
+                  )}
+                </div>
+              )}
+              {weatherError && (
+                <div className="glass rounded-xl p-2.5 border border-[rgba(255,255,255,0.05)]">
+                  <p className="text-[10px] text-slate-600">Weather data unavailable</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Recent activity */}
           <div className="flex-1 overflow-y-auto p-4">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Recent Reports</p>
             <div className="space-y-2">
-              {reports.map(r => {
+              {adjustedReports.map(r => {
                 const isSelected = selectedSOS && r.lat === selectedSOS[0] && r.lng === selectedSOS[1]
                 return (
                   <div
