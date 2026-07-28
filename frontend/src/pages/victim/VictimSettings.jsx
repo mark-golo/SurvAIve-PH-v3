@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { autoSOS } from '../../lib/autoSOS'
 import { Bell, Shield, Battery, LogOut, Phone, User, Radio, ChevronRight, Home, Map, Settings, MessageSquare } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
@@ -36,10 +37,14 @@ function Toggle({ on, onToggle, label, sub }) {
 export function VictimSettings() {
   const navigate = useNavigate()
   const { user, isGuest, logout } = useAuthStore()
-  const [shakeAlert, setShakeAlert] = useState(true)
-  const [volumeAlert, setVolumeAlert] = useState(false)
+
+  const { shake: initShake, volume: initVolume } = autoSOS.getSettings()
+  const [shakeAlert, setShakeAlert]   = useState(initShake)
+  const [volumeAlert, setVolumeAlert] = useState(initVolume)
   const [batterySaver, setBatterySaver] = useState(false)
   const [meshRelay, setMeshRelay] = useState(true)
+
+  useEffect(() => { autoSOS.init() }, [])
 
   const handleLogout = () => { logout(); navigate('/') }
 
@@ -82,12 +87,29 @@ export function VictimSettings() {
           <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-3">Auto-SOS Triggers</p>
           <div className="divide-y divide-[rgba(255,255,255,0.05)]">
             <Toggle
-              on={shakeAlert} onToggle={() => setShakeAlert(v => !v)}
+              on={shakeAlert}
+              onToggle={async () => {
+                const next = !shakeAlert
+                if (next && typeof DeviceMotionEvent !== 'undefined' &&
+                    typeof DeviceMotionEvent.requestPermission === 'function') {
+                  try {
+                    const perm = await DeviceMotionEvent.requestPermission()
+                    if (perm !== 'granted') return
+                  } catch { return }
+                }
+                setShakeAlert(next)
+                autoSOS.setShake(next)
+              }}
               label="Shake to SOS"
               sub="Shake device 3× within 5 seconds to trigger SOS"
             />
             <Toggle
-              on={volumeAlert} onToggle={() => setVolumeAlert(v => !v)}
+              on={volumeAlert}
+              onToggle={() => {
+                const next = !volumeAlert
+                setVolumeAlert(next)
+                autoSOS.setVolume(next)
+              }}
               label="Volume Button SOS"
               sub="Hold volume down 5 seconds to send SOS"
             />

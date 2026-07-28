@@ -1,12 +1,12 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Map, Radio, Settings, MessageSquare, Battery, Satellite, Home } from 'lucide-react'
+import { Map, Radio, Settings, MessageSquare, Battery, Satellite, Home, Wifi, WifiOff } from 'lucide-react'
 import { SOSButton } from '../../components/ui/SOSButton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
-import { OfflineIndicator } from '../../components/ui/OfflineIndicator'
 import { MobileNavBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { mesh } from '../../lib/mesh'
+import { autoSOS } from '../../lib/autoSOS'
 import { useState, useEffect } from 'react'
 
 const STATUS_OPTIONS = [
@@ -28,9 +28,39 @@ export function HomeScreen() {
   const { user, isGuest } = useAuthStore()
   const [quickStatus, setQuickStatus] = useState(null)
   const [peers] = useState(mesh.getPeers())
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const [gpsState, setGpsState] = useState('unknown') // 'active' | 'denied' | 'unknown'
+  const [battery, setBattery]   = useState(null)      // null = API not available
 
   useEffect(() => {
     document.title = 'SurvAIve PH – Home'
+    autoSOS.init()
+
+    const goOnline  = () => setIsOnline(true)
+    const goOffline = () => setIsOnline(false)
+    window.addEventListener('online',  goOnline)
+    window.addEventListener('offline', goOffline)
+
+    if (navigator.permissions) {
+      const stateMap = { granted: 'active', denied: 'denied', prompt: 'unknown' }
+      navigator.permissions.query({ name: 'geolocation' }).then(result => {
+        setGpsState(stateMap[result.state] ?? 'unknown')
+        result.addEventListener('change', () => setGpsState(stateMap[result.state] ?? 'unknown'))
+      }).catch(() => {})
+    }
+
+    if (navigator.getBattery) {
+      navigator.getBattery().then(bat => {
+        const update = () => setBattery(Math.round(bat.level * 100))
+        update()
+        bat.addEventListener('levelchange', update)
+      }).catch(() => {})
+    }
+
+    return () => {
+      window.removeEventListener('online',  goOnline)
+      window.removeEventListener('offline', goOffline)
+    }
   }, [])
 
   const handleSOS = () => navigate('/sos')
@@ -62,15 +92,27 @@ export function HomeScreen() {
       <main className="flex-1 p-5 space-y-5">
         {/* Status indicators */}
         <div className="flex items-center gap-2 flex-wrap">
-          <OfflineIndicator meshConnected={peers.length > 0} peerCount={peers.length} />
+          {/* Internet */}
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full glass border border-[rgba(255,255,255,0.08)]">
-            <Satellite size={12} className="text-[#00d4ff]" />
-            <span className="text-[11px] text-[#00d4ff] font-medium">GPS Active</span>
+            {isOnline
+              ? <><Wifi size={12} className="text-[#22c55e]" /><span className="text-[11px] text-[#22c55e] font-medium">Online</span></>
+              : <><WifiOff size={12} className="text-slate-500" /><span className="text-[11px] text-slate-500 font-medium">Offline</span></>
+            }
           </div>
+          {/* GPS */}
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full glass border border-[rgba(255,255,255,0.08)]">
-            <Battery size={12} className="text-[#22c55e]" />
-            <span className="text-[11px] text-[#22c55e] font-medium">87%</span>
+            <Satellite size={12} className={gpsState === 'active' ? 'text-[#00d4ff]' : gpsState === 'denied' ? 'text-[#ef4444]' : 'text-slate-500'} />
+            <span className={`text-[11px] font-medium ${gpsState === 'active' ? 'text-[#00d4ff]' : gpsState === 'denied' ? 'text-[#ef4444]' : 'text-slate-500'}`}>
+              {gpsState === 'active' ? 'GPS Active' : gpsState === 'denied' ? 'GPS Denied' : 'GPS Unknown'}
+            </span>
           </div>
+          {/* Battery — hidden if API not available */}
+          {battery !== null && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full glass border border-[rgba(255,255,255,0.08)]">
+              <Battery size={12} className={battery > 20 ? 'text-[#22c55e]' : 'text-[#ef4444]'} />
+              <span className={`text-[11px] font-medium ${battery > 20 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>{battery}%</span>
+            </div>
+          )}
         </div>
 
         {/* SOS Button — center piece */}
