@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, Legend
@@ -8,6 +8,7 @@ import { SuperAdminLayout } from './SuperAdminLayout'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { NeonButton } from '../../components/ui/NeonButton'
 import api from '../../lib/api'
+import { clusterSOS } from '../../lib/kmeans'
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
@@ -49,7 +50,7 @@ export function ProvincialAnalytics() {
     return { hour: label, total: count }
   })
 
-  const SURGE = munData.find(m => m.total >= 5)
+  const clusters = useMemo(() => clusterSOS(sos), [sos])
 
   if (loading) return (
     <SuperAdminLayout title="Provincial Analytics">
@@ -60,14 +61,38 @@ export function ProvincialAnalytics() {
   return (
     <SuperAdminLayout title="Provincial Analytics">
       <div className="p-4 space-y-4">
-        {/* Surge alert */}
-        {SURGE && (
-          <div className="glass rounded-xl p-3 border border-[rgba(239,68,68,0.5)] flex items-center gap-3">
-            <TrendingUp size={18} className="text-[#ef4444] shrink-0" />
-            <div>
-              <p className="text-sm font-bold text-[#ef4444]">AI Surge Detected: {SURGE.name}</p>
-              <p className="text-xs text-slate-400">Abnormal spike — {SURGE.total} incidents, {SURGE.critical} critical</p>
+        {/* AI Cluster Analysis */}
+        {clusters.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingUp size={14} className="text-[#ef4444]" />
+              <p className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                AI Cluster Analysis · {clusters.length} Hotspot{clusters.length > 1 ? 's' : ''} Detected
+              </p>
             </div>
+            {clusters.map((cl, idx) => {
+              const color = cl.priority === 'CRITICAL' ? '#ef4444' : cl.priority === 'HIGH' ? '#f97316' : cl.priority === 'MODERATE' ? '#f59e0b' : '#22c55e'
+              return (
+                <div key={idx} className="glass rounded-xl p-3 border" style={{ borderColor: `${color}40` }}>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs font-bold" style={{ color }}>
+                      Cluster {idx + 1} · {cl.count} report{cl.count > 1 ? 's' : ''}
+                    </p>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${color}20`, color }}>
+                      {cl.priority}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    {cl.criticalCount > 0 ? `${cl.criticalCount} critical · ` : ''}Avg score {cl.avgScore}
+                  </p>
+                  {cl.barangays.length > 0 && (
+                    <p className="text-[10px] text-slate-500 mt-0.5 truncate">
+                      {cl.barangays.slice(0, 3).join(', ')}{cl.barangays.length > 3 ? ` +${cl.barangays.length - 3} more` : ''}
+                    </p>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
 

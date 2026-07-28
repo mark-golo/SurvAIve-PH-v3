@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
@@ -9,6 +9,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 import { supabase } from '../../lib/supabase'
+import { clusterSOS } from '../../lib/kmeans'
 
 const NAV = [
   { icon: Home,     label: 'Home',     path: '/responder'          },
@@ -60,6 +61,8 @@ export function FieldMap() {
   const [gpsError, setGpsError] = useState(false)
   const [profile, setProfile]   = useState(null)
 
+  const clusters = useMemo(() => clusterSOS(assigned), [assigned])
+
   const muni = scope?.municipality
   useEffect(() => {
     api.get(muni ? `/evacuation_centers?municipality=${encodeURIComponent(muni)}` : '/evacuation_centers')
@@ -72,6 +75,7 @@ export function FieldMap() {
       .then(rows => setAssigned(rows.map((r, i) => ({
         id: r.id, lat: r.lat, lng: r.lng,
         priority: r.priority ?? 'LOW',
+        ai_priority_score: r.ai_priority_score ?? 50,
         label: String(i + 1),
         name: r.name ?? 'Unknown',
         barangay: r.barangay ?? '',
@@ -180,6 +184,35 @@ export function FieldMap() {
 
           {/* Range indicator */}
           {myPos && <Circle center={myPos} radius={300} pathOptions={{ color: 'rgba(0,212,255,0.3)', fillColor: 'rgba(0,212,255,0.05)', fillOpacity: 1 }} />}
+
+          {/* Hotspot cluster overlays */}
+          {clusters.map((cl, idx) => {
+            const clusterColor = { CRITICAL: '#ef4444', HIGH: '#f97316', MODERATE: '#f59e0b', LOW: '#22c55e' }[cl.priority]
+            return (
+              <Circle
+                key={`cluster-${idx}`}
+                center={cl.centroid}
+                radius={600}
+                pathOptions={{
+                  color: clusterColor,
+                  fillColor: clusterColor,
+                  fillOpacity: 0.08,
+                  weight: 1.5,
+                  dashArray: '6 4',
+                }}
+              >
+                <Popup>
+                  <div className="bg-[#0f172a] text-white text-xs p-2 rounded min-w-[140px]">
+                    <p className="font-bold" style={{ color: clusterColor }}>Hotspot Cluster {idx + 1}</p>
+                    <p className="text-slate-400">{cl.count} reports · {cl.priority}</p>
+                    {cl.barangays.length > 0 && (
+                      <p className="text-slate-500 mt-0.5">{cl.barangays.slice(0, 2).join(', ')}</p>
+                    )}
+                  </div>
+                </Popup>
+              </Circle>
+            )
+          })}
         </MapContainer>
       </div>
 
@@ -200,6 +233,12 @@ export function FieldMap() {
             <div className="w-4 h-4 rounded bg-[#22c55e] flex items-center justify-center text-[9px]">⛺</div>
             <span className="text-[10px] text-slate-400">Evacuation</span>
           </div>
+          {clusters.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-4 rounded-full border-2 border-[#ef4444] opacity-60" style={{ borderStyle: 'dashed' }} />
+              <span className="text-[10px] text-slate-400">Hotspot</span>
+            </div>
+          )}
         </div>
       </div>
 
