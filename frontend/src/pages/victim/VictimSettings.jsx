@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { autoSOS } from '../../lib/autoSOS'
+import { deviceSettings } from '../../lib/deviceSettings'
 import { Bell, Shield, Battery, LogOut, Phone, User, Radio, ChevronRight, Home, Map, Settings, MessageSquare } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
@@ -41,10 +42,11 @@ export function VictimSettings() {
   const { shake: initShake, volume: initVolume } = autoSOS.getSettings()
   const [shakeAlert, setShakeAlert]   = useState(initShake)
   const [volumeAlert, setVolumeAlert] = useState(initVolume)
-  const [batterySaver, setBatterySaver] = useState(false)
-  const [meshRelay, setMeshRelay] = useState(true)
+  const { meshRelay: initRelay, batterySaver: initBattery } = deviceSettings.getSettings()
+  const [batterySaver, setBatterySaver] = useState(initBattery)
+  const [meshRelay, setMeshRelay]       = useState(initRelay)
 
-  useEffect(() => { autoSOS.init() }, [])
+  useEffect(() => { autoSOS.init(); deviceSettings.init() }, [])
 
   const handleLogout = () => { logout(); navigate('/') }
 
@@ -121,12 +123,22 @@ export function VictimSettings() {
           <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-3">Network &amp; Power</p>
           <div className="divide-y divide-[rgba(255,255,255,0.05)]">
             <Toggle
-              on={meshRelay} onToggle={() => setMeshRelay(v => !v)}
+              on={meshRelay}
+              onToggle={() => {
+                const next = !meshRelay
+                setMeshRelay(next)
+                deviceSettings.setMeshRelay(next)
+              }}
               label="Mesh Relay Mode"
               sub="Forward messages from nearby devices (uses more battery)"
             />
             <Toggle
-              on={batterySaver} onToggle={() => setBatterySaver(v => !v)}
+              on={batterySaver}
+              onToggle={() => {
+                const next = !batterySaver
+                setBatterySaver(next)
+                deviceSettings.setBatterySaver(next)
+              }}
               label="Battery Saver Mode"
               sub="Reduces background scanning, prolongs battery life"
             />

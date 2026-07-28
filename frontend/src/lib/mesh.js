@@ -14,4 +14,7 @@ export const mesh = {
   broadcast() { return false },
   onMessage(fn) { return () => {} },
   refresh() { return [] },
+
+  setRelay(enabled) { this._relayEnabled = enabled },
+  setBatterySaver(enabled) { this._batterySaver = enabled },
 }
