@@ -120,6 +120,8 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   lng                   DECIMAL(10,7) DEFAULT NULL,
   status                ENUM('injured','trapped','missing','safe','unknown') NOT NULL DEFAULT 'unknown',
   people_count          TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  victim_age_group      VARCHAR(10) NOT NULL DEFAULT 'adult',
+  special_conditions    VARCHAR(255) NOT NULL DEFAULT '',
   notes                 TEXT DEFAULT NULL,
   is_verified           TINYINT(1) NOT NULL DEFAULT 0,
   trust_score           VARCHAR(20) DEFAULT 'LOW',

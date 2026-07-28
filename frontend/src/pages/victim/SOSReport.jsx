@@ -32,6 +32,8 @@ export function SOSReport() {
     municipality: user?.municipality ?? '',
     province: user?.province ?? '',
   })
+  const [ageGroup, setAgeGroup]     = useState('adult')
+  const [conditions, setConditions] = useState([])
   const [lat, setLat] = useState(user?.lat ?? null)
   const [lng, setLng] = useState(user?.lng ?? null)
   const [loading, setLoading] = useState(false)
@@ -53,9 +55,16 @@ export function SOSReport() {
 
   const f = (k) => (v) => setForm(p => ({ ...p, [k]: typeof v === 'function' ? v(p[k]) : v }))
 
+  const toggleCondition = (key) =>
+    setConditions(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
+
   const submit = async () => {
     setLoading(true)
-    const payload = { ...form, lat, lng }
+    const payload = {
+      ...form, lat, lng,
+      victim_age_group:   ageGroup,
+      special_conditions: conditions.join(','),
+    }
 
     if (offline) {
       await db.queueSOS({ ...payload, isGuest, timestamp: Date.now() })
@@ -175,6 +184,68 @@ export function SOSReport() {
             {form.barangay && (
               <p className="text-xs text-slate-500">{[form.barangay, form.municipality, form.province].filter(Boolean).join(', ')}</p>
             )}
+          </div>
+        </GlassCard>
+
+        {/* Victim age group */}
+        <GlassCard>
+          <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-3">Victim Age Group</p>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { value: 'child',  label: 'Child',  sub: 'Under 18' },
+              { value: 'adult',  label: 'Adult',  sub: '18–59' },
+              { value: 'senior', label: 'Senior', sub: '60+' },
+            ].map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setAgeGroup(opt.value)}
+                className={`glass rounded-xl py-3 flex flex-col items-center gap-1 transition-all border ${
+                  ageGroup === opt.value
+                    ? 'border-[rgba(0,212,255,0.5)] bg-[rgba(0,212,255,0.08)]'
+                    : 'border-[rgba(255,255,255,0.08)] hover:border-[rgba(255,255,255,0.2)]'
+                }`}
+              >
+                <span className="text-sm font-bold" style={{ color: ageGroup === opt.value ? '#00d4ff' : '#94a3b8' }}>
+                  {opt.label}
+                </span>
+                <span className="text-[10px] text-slate-500">{opt.sub}</span>
+              </button>
+            ))}
+          </div>
+        </GlassCard>
+
+        {/* Special conditions */}
+        <GlassCard>
+          <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-3">
+            Special Conditions <span className="text-slate-600 normal-case font-normal">(select all that apply)</span>
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { key: 'medical_emergency',   label: 'Medical Emergency', icon: '🏥' },
+              { key: 'fire',                label: 'Fire',              icon: '🔥' },
+              { key: 'flooding',            label: 'Flooding',          icon: '🌊' },
+              { key: 'structural_collapse', label: 'Structural Collapse', icon: '🏚️' },
+            ].map(cond => {
+              const active = conditions.includes(cond.key)
+              return (
+                <button
+                  key={cond.key}
+                  type="button"
+                  onClick={() => toggleCondition(cond.key)}
+                  className={`glass rounded-xl p-3 flex items-center gap-2 transition-all border ${
+                    active
+                      ? 'border-[rgba(239,68,68,0.5)] bg-[rgba(239,68,68,0.08)]'
+                      : 'border-[rgba(255,255,255,0.08)] hover:border-[rgba(255,255,255,0.2)]'
+                  }`}
+                >
+                  <span className="text-base">{cond.icon}</span>
+                  <span className="text-xs font-medium text-left leading-tight" style={{ color: active ? '#ef4444' : '#94a3b8' }}>
+                    {cond.label}
+                  </span>
+                </button>
+              )
+            })}
           </div>
         </GlassCard>
 

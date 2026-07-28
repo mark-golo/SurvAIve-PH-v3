@@ -28,28 +28,58 @@ function parsePath(rawPath) {
   return { resource, id, table, params }
 }
 
-// Heuristic priority score matching the PHP backend logic
+// Unified heuristic priority score — matches PHP backend exactly
 function calcPriorityScore(body) {
   let score = 50
   const s = (body.status ?? '').toLowerCase()
-  if (s === 'trapped') score += 30
+  if      (s === 'trapped') score += 30
   else if (s === 'injured') score += 20
   else if (s === 'missing') score += 15
+
   const n = Number(body.people_count) || 1
-  if (n >= 10) score += 25
-  else if (n >= 5) score += 15
-  else if (n >= 2) score += 5
+  if      (n >= 10) score += 25
+  else if (n >= 5)  score += 15
+  else if (n >= 2)  score += 5
+
+  const age = body.victim_age_group ?? 'adult'
+  if      (age === 'senior') score += 20
+  else if (age === 'child')  score += 15
+
+  const conds = typeof body.special_conditions === 'string'
+    ? body.special_conditions.split(',').filter(Boolean)
+    : []
+  if (conds.includes('medical_emergency'))   score += 20
+  if (conds.includes('fire'))                score += 15
+  if (conds.includes('structural_collapse')) score += 10
+  if (conds.includes('flooding'))            score += 10
+
+  if (!body.is_verified) score -= 10
+
   return Math.min(score, 99)
 }
 
-// Normalize SOS row: add priority label and human-readable time_ago
+// Normalize SOS row: add priority label (time-escalated) and human-readable time_ago
 function normalizeSos(r) {
   if (!r) return r
-  const score = r.ai_priority_score ?? 50
-  const priority = score >= 80 ? 'CRITICAL' : score >= 60 ? 'HIGH' : score >= 40 ? 'MODERATE' : 'LOW'
+  const rawScore   = r.ai_priority_score ?? 50
+  const minutesAgo = r.minutes_ago != null
+    ? Number(r.minutes_ago)
+    : r.created_at
+      ? Math.round((Date.now() - new Date(r.created_at).getTime()) / 60000)
+      : 0
+  const timeBonus = minutesAgo >= 240 ? 20
+                  : minutesAgo >= 120 ? 15
+                  : minutesAgo >= 60  ? 10
+                  : minutesAgo >= 30  ? 5
+                  : 0
+  const displayScore = Math.min(rawScore + timeBonus, 99)
+  const priority = displayScore >= 80 ? 'CRITICAL'
+                 : displayScore >= 60 ? 'HIGH'
+                 : displayScore >= 40 ? 'MODERATE'
+                 : 'LOW'
   let time_ago = ''
   if (r.created_at) {
-    const mins = Math.round((Date.now() - new Date(r.created_at).getTime()) / 60000)
+    const mins = minutesAgo
     time_ago = mins < 1 ? 'just now' : mins < 60 ? `${mins}m ago` : `${Math.round(mins / 60)}h ago`
   }
   // victims join comes back as r.victims.name when using select('*, victims(name,...)')
@@ -303,18 +333,20 @@ async function post(path, body = {}) {
     const { error } = await supabase
       .from('sos_reports')
       .insert({
-        barangay:         body.barangay     || null,
-        municipality:     body.municipality || null,
-        province:         body.province     || null,
-        lat:              body.lat          ?? null,
-        lng:              body.lng          ?? null,
-        status:           body.status       ?? 'unknown',
-        people_count:     Number(body.people_count) || 1,
-        notes:            body.notes        ?? null,
+        barangay:          body.barangay          || null,
+        municipality:      body.municipality      || null,
+        province:          body.province          || null,
+        lat:               body.lat               ?? null,
+        lng:               body.lng               ?? null,
+        status:            body.status            ?? 'unknown',
+        people_count:      Number(body.people_count) || 1,
+        victim_age_group:  body.victim_age_group  ?? 'adult',
+        special_conditions:body.special_conditions ?? '',
+        notes:             body.notes             ?? null,
         ai_priority_score: score,
-        rescue_status:    'pending',
-        is_verified:      false,
-        trust_score:      'LOW',
+        rescue_status:     'pending',
+        is_verified:       false,
+        trust_score:       'LOW',
       })
     if (error) sbThrow(error)
     return { ai_priority_score: score }

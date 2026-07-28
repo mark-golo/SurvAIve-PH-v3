@@ -103,6 +103,8 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   status                TEXT NOT NULL DEFAULT 'unknown'
                           CHECK (status IN ('injured','trapped','missing','safe','unknown')),
   people_count          SMALLINT NOT NULL DEFAULT 1,
+  victim_age_group      TEXT NOT NULL DEFAULT 'adult',
+  special_conditions    TEXT NOT NULL DEFAULT '',
   notes                 TEXT,
   is_verified           BOOLEAN NOT NULL DEFAULT FALSE,
   trust_score           TEXT DEFAULT 'LOW',
@@ -395,6 +397,8 @@ RETURNS TABLE (
   lng                   NUMERIC,
   status                TEXT,
   people_count          SMALLINT,
+  victim_age_group      TEXT,
+  special_conditions    TEXT,
   notes                 TEXT,
   is_verified           BOOLEAN,
   trust_score           TEXT,
@@ -413,7 +417,7 @@ RETURNS TABLE (
 LANGUAGE sql SECURITY DEFINER AS $$
   SELECT
     r.id, r.user_id, r.barangay, r.municipality, r.province,
-    r.lat, r.lng, r.status, r.people_count, r.notes,
+    r.lat, r.lng, r.status, r.people_count, r.victim_age_group, r.special_conditions, r.notes,
     r.is_verified, r.trust_score, r.ai_priority_score,
     r.assigned_responder_id, r.rescue_status, r.field_notes, r.created_at,
     v.name,

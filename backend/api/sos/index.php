@@ -49,21 +49,39 @@ if ($method === 'POST') {
         if ($payload) { $userId = $payload['id']; $isVerified = true; $trustScore = 'HIGH'; }
     }
 
-    // AI priority scoring (simple heuristic)
-    $score = 50;
-    $status = strtolower($body['status'] ?? '');
-    if ($status === 'trapped')  $score += 30;
-    if ($status === 'injured')  $score += 20;
-    $people = (int)($body['people_count'] ?? 1);
-    if ($people >= 5)  $score += 15;
-    if ($people >= 10) $score += 10;
-    if (!$isVerified)  $score -= 10;
+    // AI priority scoring — unified heuristic
+    $score    = 50;
+    $status   = strtolower($body['status'] ?? '');
+    $people   = (int)($body['people_count'] ?? 1);
+    $ageGroup = $body['victim_age_group']   ?? 'adult';
+    $conds    = $body['special_conditions'] ?? '';
+
+    if      ($status === 'trapped') $score += 30;
+    elseif  ($status === 'injured') $score += 20;
+    elseif  ($status === 'missing') $score += 15;
+
+    if      ($people >= 10) $score += 25;
+    elseif  ($people >= 5)  $score += 15;
+    elseif  ($people >= 2)  $score += 5;
+
+    if      ($ageGroup === 'senior') $score += 20;
+    elseif  ($ageGroup === 'child')  $score += 15;
+
+    $condList = array_filter(explode(',', $conds));
+    if (in_array('medical_emergency',   $condList)) $score += 20;
+    if (in_array('fire',                $condList)) $score += 15;
+    if (in_array('structural_collapse', $condList)) $score += 10;
+    if (in_array('flooding',            $condList)) $score += 10;
+
+    if (!$isVerified) $score -= 10;
+    $score = min(99, $score);
 
     $stmt = $db->prepare("
         INSERT INTO sos_reports
-          (user_id, barangay, municipality, province, lat, lng, status, people_count, notes,
+          (user_id, barangay, municipality, province, lat, lng, status, people_count,
+           victim_age_group, special_conditions, notes,
            is_verified, trust_score, ai_priority_score, rescue_status, timestamp)
-        VALUES (?,?,?,?,?,?,?,?,?, ?,?,?,'pending', NOW())
+        VALUES (?,?,?,?,?,?,?,?, ?,?,?, ?,?,?,'pending', NOW())
     ");
     $stmt->execute([
         $userId,
@@ -74,17 +92,19 @@ if ($method === 'POST') {
         $body['lng']          ?? null,
         $body['status']       ?? 'unknown',
         $people,
+        $ageGroup,
+        $conds,
         $body['notes']        ?? null,
         $isVerified ? 1 : 0,
         $trustScore,
-        min(100, $score),
+        $score,
     ]);
 
     if ($userId) {
         $db->prepare("UPDATE victims SET status='sos_sent' WHERE id=?")->execute([$userId]);
     }
 
-    jsonResponse(['id' => $db->lastInsertId(), 'ai_priority_score' => min(100, $score)], 201);
+    jsonResponse(['id' => $db->lastInsertId(), 'ai_priority_score' => $score], 201);
 }
 
 errorResponse('Method not allowed', 405);
