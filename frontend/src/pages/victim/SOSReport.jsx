@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { AlertTriangle, MapPin, Users, FileText, Send, Check } from 'lucide-react'
+import { AlertTriangle, MapPin, Users, FileText, Send, Check, Mic } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { GlassSelect, GlassInput, GlassTextarea } from '../../components/ui/GlassInput'
@@ -41,6 +41,11 @@ export function SOSReport() {
   const [sosError, setSosError] = useState(null)
   const [priorityScore, setPriorityScore] = useState(null)
   const [offline, setOffline] = useState(!navigator.onLine)
+  const [listening, setListening]           = useState(false)
+  const [voiceSupported, setVoiceSupported] = useState(false)
+  const [interimText, setInterimText]       = useState('')
+  const [voiceDetected, setVoiceDetected]   = useState([])
+  const recognitionRef = useRef(null)
 
   useEffect(() => {
     navigator.geolocation?.getCurrentPosition(
@@ -50,6 +55,7 @@ export function SOSReport() {
     const handler = () => setOffline(!navigator.onLine)
     window.addEventListener('online', handler)
     window.addEventListener('offline', handler)
+    setVoiceSupported(!!(window.SpeechRecognition || window.webkitSpeechRecognition))
     return () => { window.removeEventListener('online', handler); window.removeEventListener('offline', handler) }
   }, [])
 
@@ -57,6 +63,77 @@ export function SOSReport() {
 
   const toggleCondition = (key) =>
     setConditions(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
+
+  const applyKeywords = (text) => {
+    const t = text.toLowerCase()
+    const detected = []
+
+    if (/trapped|stuck|cannot move|can't move|hindi makalabas/.test(t)) {
+      setForm(p => ({ ...p, status: 'trapped' })); detected.push('Trapped')
+    } else if (/injur|hurt|bleeding|broken|wound|sugat|nasaktan/.test(t)) {
+      setForm(p => ({ ...p, status: 'injured' })); detected.push('Injured')
+    } else if (/missing|nawala/.test(t)) {
+      setForm(p => ({ ...p, status: 'missing' })); detected.push('Missing')
+    }
+
+    setConditions(prev => {
+      const next = [...prev]
+      if (/fire|burning|flames|nasusunog|sunog/.test(t) && !next.includes('fire')) {
+        next.push('fire'); detected.push('Fire')
+      }
+      if (/flood|baha|submerged|water rising/.test(t) && !next.includes('flooding')) {
+        next.push('flooding'); detected.push('Flooding')
+      }
+      if (/medical|heart|seizure|unconscious|breathing|stroke|diabetic/.test(t) && !next.includes('medical_emergency')) {
+        next.push('medical_emergency'); detected.push('Medical Emergency')
+      }
+      if (/collaps|debris|rubble|building fell|gusali/.test(t) && !next.includes('structural_collapse')) {
+        next.push('structural_collapse'); detected.push('Structural Collapse')
+      }
+      return next
+    })
+
+    if (/child|bata|baby|infant|kid/.test(t)) { setAgeGroup('child'); detected.push('Child') }
+    else if (/senior|elderly|matanda|lolo|lola|old/.test(t)) { setAgeGroup('senior'); detected.push('Senior') }
+
+    if (detected.length > 0) {
+      setVoiceDetected(detected)
+      setTimeout(() => setVoiceDetected([]), 4000)
+    }
+  }
+
+  const startVoice = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SR) return
+    const rec = new SR()
+    rec.lang = 'en-PH'
+    rec.interimResults = true
+    rec.continuous = false
+    rec.maxAlternatives = 1
+
+    rec.onresult = (e) => {
+      let interim = '', final = ''
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const txt = e.results[i][0].transcript
+        if (e.results[i].isFinal) final += txt
+        else interim += txt
+      }
+      setInterimText(interim)
+      if (final) {
+        setForm(p => ({ ...p, notes: (p.notes ? p.notes + ' ' : '') + final.trim() }))
+        setInterimText('')
+        applyKeywords(final)
+      }
+    }
+    rec.onend   = () => { setListening(false); setInterimText('') }
+    rec.onerror = () => { setListening(false); setInterimText('') }
+
+    recognitionRef.current = rec
+    rec.start()
+    setListening(true)
+  }
+
+  const stopVoice = () => { recognitionRef.current?.stop(); setListening(false) }
 
   const submit = async () => {
     setLoading(true)
@@ -250,7 +327,42 @@ export function SOSReport() {
         </GlassCard>
 
         <GlassCard>
-          <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-3">Additional Information</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider">Additional Information</p>
+            {voiceSupported && (
+              <button
+                type="button"
+                onClick={listening ? stopVoice : startVoice}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-medium transition-all border ${
+                  listening
+                    ? 'bg-[rgba(239,68,68,0.15)] border-[rgba(239,68,68,0.4)] text-[#ef4444]'
+                    : 'glass border-[rgba(255,255,255,0.12)] text-slate-400 hover:text-white hover:border-[rgba(255,255,255,0.25)]'
+                }`}
+              >
+                <Mic size={13} className={listening ? 'animate-pulse' : ''} />
+                {listening ? 'Stop' : 'Speak'}
+              </button>
+            )}
+          </div>
+
+          {listening && (
+            <div className="mb-2 flex items-center gap-2 px-3 py-2 glass rounded-xl border border-[rgba(239,68,68,0.3)]">
+              <div className="w-2 h-2 rounded-full bg-[#ef4444] animate-pulse shrink-0" />
+              <p className="text-xs text-[#ef4444] font-medium shrink-0">Listening…</p>
+              {interimText && <p className="text-xs text-slate-400 truncate flex-1 italic">{interimText}</p>}
+            </div>
+          )}
+
+          {voiceDetected.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {voiceDetected.map(d => (
+                <span key={d} className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(0,212,255,0.1)] text-[#00d4ff] border border-[rgba(0,212,255,0.2)]">
+                  ✓ {d}
+                </span>
+              ))}
+            </div>
+          )}
+
           <GlassTextarea
             label="Notes (Optional)"
             placeholder="Describe your situation, landmarks, injuries, special needs…"
