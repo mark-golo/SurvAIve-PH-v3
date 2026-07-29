@@ -6,6 +6,20 @@ import { GlassCard } from '../../components/ui/GlassCard'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 
+const todayKey = (muni) => `welfare_${muni ?? 'all'}_${new Date().toISOString().slice(0, 10)}`
+
+const loadChecked = (muni) => {
+  try { return new Set(JSON.parse(localStorage.getItem(todayKey(muni)) ?? '[]')) }
+  catch { return new Set() }
+}
+
+const saveChecked = (muni, id, current) => {
+  const next = new Set(current)
+  next.add(id)
+  try { localStorage.setItem(todayKey(muni), JSON.stringify([...next])) } catch {}
+  return next
+}
+
 export function SafetyVerification() {
   const { scope } = useAuthStore()
   const muni = scope?.municipality
@@ -13,6 +27,7 @@ export function SafetyVerification() {
   const [noReport, setNoReport] = useState([])
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(new Set())
+  const [checkedIds, setCheckedIds] = useState(() => loadChecked(scope?.municipality))
 
   useEffect(() => {
     const q = muni ? `?municipality=${encodeURIComponent(muni)}` : ''
@@ -36,7 +51,7 @@ export function SafetyVerification() {
           barangay:      v.barangay ?? '—',
           contact:       v.contact_number ?? '—',
           vulnerability: (v.vulnerabilities ?? []).join(', '),
-          accounted:     v.status === 'safe',
+          accounted:     checkedIds.has(v.id),
         }))
       )
     })
@@ -48,19 +63,19 @@ export function SafetyVerification() {
   const accounted = reported.filter(r => r.accounted).length + noReport.filter(r => r.accounted).length
 
   const markAccounted = async (id, fromNoReport = false) => {
-    setSaving(s => { const n = new Set(s); n.add(id); return n })
-    try {
-      if (fromNoReport) {
-        await api.put(`/constituents/${id}`, { status: 'safe' })
-        setNoReport(d => d.map(r => r.id === id ? { ...r, accounted: true } : r))
-      } else {
+    if (fromNoReport) {
+      setCheckedIds(prev => saveChecked(muni, id, prev))
+      setNoReport(d => d.map(r => r.id === id ? { ...r, accounted: true } : r))
+    } else {
+      setSaving(s => { const n = new Set(s); n.add(id); return n })
+      try {
         await api.put(`/sos/${id}`, { rescue_status: 'rescued' })
         setReported(d => d.map(r => r.id === id ? { ...r, accounted: true } : r))
+      } catch {
+        alert('Failed to save. Please try again.')
+      } finally {
+        setSaving(s => { const n = new Set(s); n.delete(id); return n })
       }
-    } catch {
-      alert('Failed to save. Please try again.')
-    } finally {
-      setSaving(s => { const n = new Set(s); n.delete(id); return n })
     }
   }
 
@@ -165,9 +180,9 @@ export function SafetyVerification() {
                         {r.accounted ? (
                           <span className="text-xs text-[#22c55e] flex items-center gap-1"><CheckCircle size={12} />Done</span>
                         ) : (
-                          <NeonButton size="sm" variant="green" onClick={() => markAccounted(r.id, true)} disabled={saving.has(r.id)}>
+                          <NeonButton size="sm" variant="green" onClick={() => markAccounted(r.id, true)}>
                             <CheckCircle size={11} className="mr-1" />
-                            {saving.has(r.id) ? 'Saving…' : 'Accounted'}
+                            Accounted
                           </NeonButton>
                         )}
                       </div>
