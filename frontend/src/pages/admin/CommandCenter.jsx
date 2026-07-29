@@ -352,38 +352,27 @@ export function CommandCenter() {
         </div>
 
         {/* Sidebar stats */}
-        <aside className="w-full lg:w-72 xl:w-80 glass border-t lg:border-t-0 lg:border-l border-[rgba(255,255,255,0.08)] flex flex-col">
-          <div className="p-4 border-b border-[rgba(255,255,255,0.08)]">
-            <div className="flex items-center justify-between mb-3">
+        <aside className="w-full lg:w-72 xl:w-80 glass border-t lg:border-t-0 lg:border-l border-[rgba(255,255,255,0.08)] flex flex-col overflow-hidden">
+
+          {/* 1 — Live Stats */}
+          <div className="p-3 border-b border-[rgba(255,255,255,0.08)]">
+            <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Live Stats</p>
               <NeonButton size="sm" variant="ghost" onClick={sync} loading={syncing}>
                 <RefreshCw size={11} className={syncing ? 'animate-spin' : ''} />
               </NeonButton>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <StatCard label="Total SOS"   value={stats.total}      icon={Users}         color="#00d4ff" />
-              <StatCard label="Critical"    value={criticalCount}    icon={AlertTriangle} color="#ef4444" />
-              <StatCard label="Rescued"     value={stats.rescued}    icon={CheckCircle}   color="#22c55e" />
-              <StatCard label="Mesh Nodes"  value={stats.nodes}      icon={Radio}         color="#8b5cf6" />
+            <div className="grid grid-cols-2 gap-1.5">
+              <StatCard label="Total SOS"  value={stats.total}   icon={Users}         color="#00d4ff" className="!p-2.5 !gap-0.5 !rounded-xl" />
+              <StatCard label="Critical"   value={criticalCount} icon={AlertTriangle} color="#ef4444" className="!p-2.5 !gap-0.5 !rounded-xl" />
+              <StatCard label="Rescued"    value={stats.rescued} icon={CheckCircle}   color="#22c55e" className="!p-2.5 !gap-0.5 !rounded-xl" />
+              <StatCard label="Mesh Nodes" value={stats.nodes}   icon={Radio}         color="#8b5cf6" className="!p-2.5 !gap-0.5 !rounded-xl" />
             </div>
           </div>
 
-          <div className="p-4 border-b border-[rgba(255,255,255,0.08)]">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Unverified Reports</p>
-              <span className="text-xs font-black text-[#f59e0b]">{stats.unverified}</span>
-            </div>
-            <div className="mt-2 flex items-center gap-1.5">
-              <div className="h-1.5 rounded-full flex-1 bg-slate-700">
-                <div className="h-full rounded-full bg-[#f59e0b]" style={{ width: stats.total ? `${(stats.unverified / stats.total) * 100}%` : '0%' }} />
-              </div>
-              <span className="text-[10px] text-slate-500">{stats.total ? Math.round((stats.unverified / stats.total) * 100) : 0}% guest</span>
-            </div>
-          </div>
-
-          {/* Weather Risk Widget */}
+          {/* 2 — Weather Risk Widget */}
           {(weather || weatherError) && (
-            <div className="px-4 pb-3 border-b border-[rgba(255,255,255,0.08)]">
+            <div className="px-3 py-2.5 border-b border-[rgba(255,255,255,0.08)]">
               {weather && (
                 <div className={`glass rounded-xl p-3 border ${
                   weather.riskLevel === 'EXTREME'  ? 'border-[rgba(239,68,68,0.4)]'  :
@@ -404,11 +393,11 @@ export function CommandCenter() {
                   </div>
                   <p className="text-xs text-white font-medium">{getWeatherLabel(weather.weatherCode)}</p>
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    {weather.rainfall.toFixed(1)} mm/h rainfall · {weather.windSpeed.toFixed(0)} km/h wind
+                    {weather.rainfall.toFixed(1)} mm/h · {weather.windSpeed.toFixed(0)} km/h wind
                   </p>
                   {weather.scoreBonus > 0 && (
-                    <p className="text-[10px] text-[#f59e0b] mt-1.5 font-medium">
-                      ⚠ Scores elevated +{weather.scoreBonus} due to weather
+                    <p className="text-[10px] text-[#f59e0b] mt-1 font-medium">
+                      ⚠ Scores elevated +{weather.scoreBonus}
                     </p>
                   )}
                 </div>
@@ -421,8 +410,8 @@ export function CommandCenter() {
             </div>
           )}
 
-          {/* Resource Forecast Widget */}
-          <div className="px-4 pb-3 border-b border-[rgba(255,255,255,0.08)]">
+          {/* 3 — Resource Forecast Widget */}
+          <div className="px-3 py-2.5 border-b border-[rgba(255,255,255,0.08)]">
             {(() => {
               const f = resourceForecast
               const color =
@@ -432,34 +421,31 @@ export function CommandCenter() {
               const pct = Math.min(f.loadRatio * 100, 100)
               return (
                 <div className="glass rounded-xl p-3 border" style={{ borderColor: `${color}40` }}>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-1.5">
                     <p className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">Resource Forecast</p>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
                       style={{ background: `${color}20`, color }}>
                       {f.alertLevel}
                     </span>
                   </div>
-                  <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-2">
+                  <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-1.5">
                     <div className="h-full rounded-full transition-all"
                       style={{ width: `${pct}%`, background: color, boxShadow: `0 0 6px ${color}60` }} />
                   </div>
                   <p className="text-[10px] text-slate-400 mb-1">
-                    {f.activeLoad} active / {f.capacity} capacity
-                    {' · '}{f.onDutyCount} responder{f.onDutyCount !== 1 ? 's' : ''} on duty
+                    {f.activeLoad} active / {f.capacity} capacity · {f.onDutyCount} on duty
                   </p>
                   {f.alertLevel === 'OVERWHELMED' && (
-                    <p className="text-[10px] font-bold text-[#ef4444]">Responders at capacity — request reinforcements</p>
+                    <p className="text-[10px] font-bold text-[#ef4444]">At capacity — request reinforcements</p>
                   )}
                   {f.alertLevel === 'AT_RISK' && (
                     <p className="text-[10px] font-bold text-[#f97316]">
-                      {f.minutesToOverwhelm != null
-                        ? `Teams may be overwhelmed in ~${f.minutesToOverwhelm} min`
-                        : 'Capacity threshold approaching'}
-                      {f.surging ? ' — surge detected' : ''}
+                      {f.minutesToOverwhelm != null ? `Overwhelmed in ~${f.minutesToOverwhelm} min` : 'Threshold approaching'}
+                      {f.surging ? ' — surge' : ''}
                     </p>
                   )}
                   {f.alertLevel === 'ELEVATED' && (
-                    <p className="text-[10px] text-[#f59e0b]">Load elevated — monitor incoming rate</p>
+                    <p className="text-[10px] text-[#f59e0b]">Load elevated — monitor rate</p>
                   )}
                   {f.alertLevel === 'NORMAL' && (
                     <p className="text-[10px] text-[#22c55e]">Capacity sufficient</p>
@@ -469,17 +455,17 @@ export function CommandCenter() {
             })()}
           </div>
 
-          {/* Recent activity */}
-          <div className="flex-1 overflow-y-auto p-4">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Recent Reports</p>
-            <div className="space-y-2">
+          {/* 4 — Recent Reports */}
+          <div className="flex-1 overflow-y-auto p-3 min-h-0">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Recent Reports</p>
+            <div className="space-y-1.5">
               {adjustedReports.map(r => {
                 const isSelected = selectedSOS && r.lat === selectedSOS[0] && r.lng === selectedSOS[1]
                 return (
                   <div
                     key={r.id}
                     onClick={() => r.lat && r.lng && setSelectedSOS([r.lat, r.lng])}
-                    className={`rounded-xl p-2.5 flex items-center gap-2 transition-all ${
+                    className={`rounded-xl p-2 flex items-center gap-2 transition-all ${
                       r.lat && r.lng ? 'cursor-pointer hover:bg-[rgba(255,255,255,0.05)]' : ''
                     } ${isSelected
                       ? 'bg-[rgba(0,212,255,0.12)] border border-[rgba(0,212,255,0.3)]'
@@ -498,16 +484,30 @@ export function CommandCenter() {
             </div>
           </div>
 
-          {/* Map legend */}
-          <div className="p-4 border-t border-[rgba(255,255,255,0.08)]">
-            <div className="flex flex-wrap gap-3">
+          {/* 5 — Unverified Reports */}
+          <div className="p-3 border-t border-[rgba(255,255,255,0.08)]">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Unverified Reports</p>
+              <span className="text-xs font-black text-[#f59e0b]">{stats.unverified}</span>
+            </div>
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <div className="h-1.5 rounded-full flex-1 bg-slate-700">
+                <div className="h-full rounded-full bg-[#f59e0b]" style={{ width: stats.total ? `${(stats.unverified / stats.total) * 100}%` : '0%' }} />
+              </div>
+              <span className="text-[10px] text-slate-500">{stats.total ? Math.round((stats.unverified / stats.total) * 100) : 0}% guest</span>
+            </div>
+          </div>
+
+          {/* 6 — Map Legend */}
+          <div className="p-3 border-t border-[rgba(255,255,255,0.08)]">
+            <div className="flex flex-wrap gap-2.5">
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-full border-2 border-white/50" style={{ background: '#ef4444' }} />
-                <span className="text-[10px] text-slate-400">Verified pin</span>
+                <span className="text-[10px] text-slate-400">Verified</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-full border-2 border-dashed border-white/50" style={{ background: '#f97316' }} />
-                <span className="text-[10px] text-slate-400">Guest pin</span>
+                <span className="text-[10px] text-slate-400">Guest</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <div className="w-4 h-4 rounded bg-[#22c55e] flex items-center justify-center text-[9px]">⛺</div>
