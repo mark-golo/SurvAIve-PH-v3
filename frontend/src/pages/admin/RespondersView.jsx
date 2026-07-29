@@ -1,7 +1,4 @@
 import { useState, useEffect } from 'react'
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
 import { Radio, MapPin } from 'lucide-react'
 import { AdminLayout } from './AdminLayout'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -9,83 +6,102 @@ import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 import { supabase } from '../../lib/supabase'
 
-const responderMarkerIcon = () => L.divIcon({
-  className: '',
-  html: `<div style="width:20px;height:20px;background:#00d4ff;border:3px solid white;border-radius:50%;
-         box-shadow:0 0 12px #00d4ff"></div>`,
-  iconSize: [20, 20], iconAnchor: [10, 10],
-})
+const RESCUE_STATUS = {
+  on_scene:     { label: 'On Scene',     color: '#f59e0b', bg: 'rgba(245,158,11,0.15)'  },
+  en_route:     { label: 'En Route',     color: '#00d4ff', bg: 'rgba(0,212,255,0.15)'   },
+  cannot_reach: { label: 'Cannot Reach', color: '#ef4444', bg: 'rgba(239,68,68,0.15)'   },
+  rescued:      { label: 'Rescued',      color: '#22c55e', bg: 'rgba(34,197,94,0.15)'   },
+  pending:      { label: 'Pending',      color: '#6b7280', bg: 'rgba(107,114,128,0.12)' },
+}
+
+const SORT_ORDER = { on_scene: 0, en_route: 1, cannot_reach: 2, rescued: 3, pending: 4 }
 
 export function RespondersView() {
   const { scope } = useAuthStore()
   const muni = scope?.municipality
+
   const [responders, setResponders] = useState([])
   const [loading, setLoading]       = useState(true)
   const [selected, setSelected]     = useState(null)
-  const [activeOnMap, setActiveOnMap] = useState([])
 
+  const [sosReports, setSosReports] = useState([])
+  const [sosLoading, setSosLoading] = useState(true)
+
+  // Fetch responders
   useEffect(() => {
     const q = muni ? `/responders?municipality=${encodeURIComponent(muni)}` : '/responders'
     api.get(q).then(setResponders).catch(() => setResponders([])).finally(() => setLoading(false))
   }, [])
 
+  // Fetch SOS reports (rescue status feed)
   useEffect(() => {
-    let q = supabase.from('responders')
-      .select('id,name,unit_name,assigned_zone,lat,lng,last_seen_at,duty_status,municipality')
-      .eq('duty_status', 'on_duty')
-      .not('lat', 'is', null)
-    if (muni) q = q.eq('municipality', muni)
-    q.then(({ data }) => setActiveOnMap(data ?? []))
+    const q = muni ? `/sos?municipality=${encodeURIComponent(muni)}` : '/sos'
+    api.get(q).then(setSosReports).catch(() => setSosReports([])).finally(() => setSosLoading(false))
+  }, [])
 
-    const channel = supabase.channel('rv-responder-locations')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'responders' },
+  // Realtime: update rescue status when responder submits a report
+  useEffect(() => {
+    const ch = supabase.channel('rv-sos-status')
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'sos_reports' },
         payload => {
           const r = payload.new
           if (muni && r.municipality !== muni) return
-          if (r.duty_status === 'on_duty' && r.lat && r.lng) {
-            setActiveOnMap(prev => {
-              const idx = prev.findIndex(x => x.id === r.id)
-              if (idx === -1) return [...prev, r]
-              const next = [...prev]
-              next[idx] = { ...next[idx], lat: r.lat, lng: r.lng, last_seen_at: r.last_seen_at }
-              return next
-            })
-          } else {
-            setActiveOnMap(prev => prev.filter(x => x.id !== r.id))
-          }
-        })
+          setSosReports(prev => prev.map(x =>
+            x.id === r.id ? { ...x, rescue_status: r.rescue_status, notes: r.notes } : x
+          ))
+        }
+      )
       .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
+    return () => { supabase.removeChannel(ch) }
   }, [])
 
+  const sortedReports = sosReports
+    .slice()
+    .sort((a, b) =>
+      (SORT_ORDER[a.rescue_status ?? 'pending'] ?? 4) -
+      (SORT_ORDER[b.rescue_status ?? 'pending'] ?? 4)
+    )
+
   return (
-    <AdminLayout title="Responders">
+    <AdminLayout title="Rescue Updates">
       <div className="flex flex-col lg:flex-row h-[calc(100vh-56px)]">
-        {/* Map — general area view; responders shown in sidebar */}
-        <div className="flex-1 min-h-[350px]">
-          <MapContainer center={[9.852, 126.073]} zoom={13}
-            style={{ height: '100%', background: '#0a1628' }} zoomControl>
-            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
-            {activeOnMap.map(r => (
-              <Marker key={`r-${r.id}`} position={[r.lat, r.lng]} icon={responderMarkerIcon()}>
-                <Popup>
-                  <div className="bg-[#0f172a] text-white text-xs p-2 rounded min-w-[140px]">
-                    <p className="font-bold text-[#00d4ff]">{r.name}</p>
-                    <p className="text-slate-400">{r.unit_name ?? '—'} · {r.assigned_zone ?? '—'}</p>
-                    {r.last_seen_at && (
-                      <p className="text-slate-500 text-[10px] mt-1">
-                        Last seen: {new Date(r.last_seen_at).toLocaleTimeString()}
-                      </p>
-                    )}
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
-          </MapContainer>
+
+        {/* LEFT — Rescue Status Feed */}
+        <div className="flex-1 overflow-y-auto p-4 border-b lg:border-b-0 lg:border-r border-[rgba(255,255,255,0.08)]">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Rescue Status Feed</p>
+
+          {sosLoading && <p className="text-sm text-slate-500 text-center py-8">Loading…</p>}
+
+          {!sosLoading && sortedReports.length === 0 && (
+            <p className="text-sm text-slate-500 text-center py-8">No SOS reports found</p>
+          )}
+
+          {sortedReports.map(r => {
+            const rs = RESCUE_STATUS[r.rescue_status ?? 'pending']
+            return (
+              <div key={r.id} className="glass rounded-xl p-3 mb-2 border border-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.12)] transition-colors">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-sm font-semibold text-white truncate pr-2">{r.name ?? 'Anonymous'}</p>
+                  <span
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0"
+                    style={{ color: rs.color, background: rs.bg }}
+                  >
+                    {rs.label}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500">{r.barangay}{r.municipality ? ` · ${r.municipality}` : ''}</p>
+                {r.notes && (
+                  <p className="text-[10px] text-slate-400 mt-1.5 italic border-t border-[rgba(255,255,255,0.05)] pt-1.5">
+                    "{r.notes}"
+                  </p>
+                )}
+              </div>
+            )
+          })}
         </div>
 
-        {/* Sidebar */}
+        {/* RIGHT — Rescue Teams */}
         <aside className="w-full lg:w-72 glass border-t lg:border-t-0 lg:border-l border-[rgba(255,255,255,0.08)] p-4 space-y-3 overflow-y-auto">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Rescue Teams</p>
 

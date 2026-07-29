@@ -9,7 +9,7 @@ const NAV_ITEMS = [
   { icon: BookUser,        label: 'Constituents',      path: '/admin/constituents' },
   { icon: ShieldCheck,     label: 'Safety Check',      path: '/admin/safety'       },
   { icon: BarChart2,       label: 'Analytics',         path: '/admin/analytics'    },
-  { icon: Radio,           label: 'Responders',        path: '/admin/responders'   },
+  { icon: Radio,           label: 'Rescue Updates',     path: '/admin/responders'   },
   { icon: UserCog,         label: 'Staff',             path: '/admin/staff'               },
   { icon: MapPin,          label: 'Evacuation Centers', path: '/admin/evacuation-centers'  },
 ]
