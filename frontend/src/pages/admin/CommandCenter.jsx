@@ -133,7 +133,8 @@ export function CommandCenter() {
     })
   }, [reports, weatherBonus])
 
-  const criticalCount = adjustedReports.filter(r => r.priority === 'CRITICAL').length
+  const criticalCount = adjustedReports.filter(r => r.priority === 'CRITICAL' && r.rescue_status !== 'rescued').length
+  const rescuedCount  = reports.filter(r => r.rescue_status === 'rescued').length
 
   const resourceForecast = useMemo(
     () => predictDepletion(adjustedReports, activeResponders),
@@ -226,7 +227,7 @@ export function CommandCenter() {
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
             {selectedSOS && <FlyTo pos={selectedSOS} />}
             {adjustedReports.filter(r => r.lat && r.lng).map(r => (
-              <Marker key={r.id} position={[r.lat, r.lng]} icon={pinIcon(COLORS[r.priority], r.is_verified ?? r.verified)}>
+              <Marker key={r.id} position={[r.lat, r.lng]} icon={pinIcon(r.rescue_status === 'rescued' ? '#22c55e' : COLORS[r.priority], r.is_verified ?? r.verified)}>
                 <Popup>
                   <div className="bg-[#0f172a] text-white text-xs p-3 rounded-xl min-w-[160px]">
                     <div className="flex items-center gap-2 mb-1">
@@ -243,7 +244,7 @@ export function CommandCenter() {
               </Marker>
             ))}
             {/* Heatmap approximation via circles */}
-            {adjustedReports.filter(r => r.lat && r.lng && ['CRITICAL', 'HIGH'].includes(r.priority)).map(r => (
+            {adjustedReports.filter(r => r.lat && r.lng && ['CRITICAL', 'HIGH'].includes(r.priority) && r.rescue_status !== 'rescued').map(r => (
               <Circle key={`circle-${r.id}`} center={[r.lat, r.lng]} radius={150}
                 pathOptions={{ color: `${COLORS[r.priority]}40`, fillColor: `${COLORS[r.priority]}15`, fillOpacity: 1, weight: 1 }} />
             ))}
@@ -297,7 +298,7 @@ export function CommandCenter() {
             <div className="grid grid-cols-2 gap-1.5">
               <StatCard label="Total SOS"  value={stats.total}   icon={Users}         color="#00d4ff" className="!p-2.5 !gap-0.5 !rounded-xl" />
               <StatCard label="Critical"   value={criticalCount} icon={AlertTriangle} color="#ef4444" className="!p-2.5 !gap-0.5 !rounded-xl" />
-              <StatCard label="Rescued"    value={stats.rescued} icon={CheckCircle}   color="#22c55e" className="!p-2.5 !gap-0.5 !rounded-xl" />
+              <StatCard label="Rescued"    value={rescuedCount}  icon={CheckCircle}   color="#22c55e" className="!p-2.5 !gap-0.5 !rounded-xl" />
               <StatCard label="Mesh Nodes" value={stats.nodes}   icon={Radio}         color="#8b5cf6" className="!p-2.5 !gap-0.5 !rounded-xl" />
             </div>
           </div>
@@ -393,6 +394,8 @@ export function CommandCenter() {
             <div className="space-y-1.5">
               {adjustedReports.map(r => {
                 const isSelected = selectedSOS && r.lat === selectedSOS[0] && r.lng === selectedSOS[1]
+                const isRescued  = r.rescue_status === 'rescued'
+                const dotColor   = isRescued ? '#22c55e' : COLORS[r.priority]
                 return (
                   <div
                     key={r.id}
@@ -404,12 +407,15 @@ export function CommandCenter() {
                       : 'glass'
                     }`}
                   >
-                    <div className="w-2 h-2 rounded-full shrink-0" style={{ background: COLORS[r.priority], boxShadow: `0 0 6px ${COLORS[r.priority]}` }} />
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ background: dotColor, boxShadow: `0 0 6px ${dotColor}` }} />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-white truncate">{r.name ?? 'Anonymous'}</p>
                       <p className="text-[10px] text-slate-500">{r.barangay}</p>
                     </div>
-                    <StatusBadge status={r.priority} className="shrink-0 text-[9px] !py-0.5 !px-1.5" />
+                    {isRescued
+                      ? <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(34,197,94,0.15)] border border-[rgba(34,197,94,0.3)] text-[#22c55e] font-semibold">Rescued</span>
+                      : <StatusBadge status={r.priority} className="shrink-0 text-[9px] !py-0.5 !px-1.5" />
+                    }
                   </div>
                 )
               })}
