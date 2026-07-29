@@ -12,6 +12,7 @@ export function SafetyVerification() {
   const [reported, setReported] = useState([])
   const [noReport, setNoReport] = useState([])
   const [loading, setLoading]   = useState(true)
+  const [saving, setSaving]     = useState(new Set())
 
   useEffect(() => {
     const q = muni ? `?municipality=${encodeURIComponent(muni)}` : ''
@@ -35,6 +36,7 @@ export function SafetyVerification() {
           barangay:      v.barangay ?? '—',
           contact:       v.contact_number ?? '—',
           vulnerability: (v.vulnerabilities ?? []).join(', '),
+          accounted:     v.status === 'safe',
         }))
       )
     })
@@ -45,11 +47,20 @@ export function SafetyVerification() {
   const total     = reported.length + noReport.length
   const accounted = reported.filter(r => r.accounted).length + noReport.filter(r => r.accounted).length
 
-  const markAccounted = (id, fromNoReport = false) => {
-    if (fromNoReport) {
-      setNoReport(d => d.map(r => r.id === id ? { ...r, accounted: true } : r))
-    } else {
-      setReported(d => d.map(r => r.id === id ? { ...r, accounted: true } : r))
+  const markAccounted = async (id, fromNoReport = false) => {
+    setSaving(s => { const n = new Set(s); n.add(id); return n })
+    try {
+      if (fromNoReport) {
+        await api.put(`/constituents/${id}`, { status: 'safe' })
+        setNoReport(d => d.map(r => r.id === id ? { ...r, accounted: true } : r))
+      } else {
+        await api.put(`/sos/${id}`, { rescue_status: 'rescued' })
+        setReported(d => d.map(r => r.id === id ? { ...r, accounted: true } : r))
+      }
+    } catch {
+      alert('Failed to save. Please try again.')
+    } finally {
+      setSaving(s => { const n = new Set(s); n.delete(id); return n })
     }
   }
 
@@ -114,9 +125,9 @@ export function SafetyVerification() {
                         {r.accounted ? (
                           <span className="text-xs text-[#22c55e] flex items-center gap-1"><CheckCircle size={12} />Accounted</span>
                         ) : (
-                          <NeonButton size="sm" variant="green" onClick={() => markAccounted(r.id)}>
+                          <NeonButton size="sm" variant="green" onClick={() => markAccounted(r.id)} disabled={saving.has(r.id)}>
                             <CheckCircle size={11} className="mr-1" />
-                            Confirm
+                            {saving.has(r.id) ? 'Saving…' : 'Confirm'}
                           </NeonButton>
                         )}
                       </div>
@@ -154,9 +165,9 @@ export function SafetyVerification() {
                         {r.accounted ? (
                           <span className="text-xs text-[#22c55e] flex items-center gap-1"><CheckCircle size={12} />Done</span>
                         ) : (
-                          <NeonButton size="sm" variant="green" onClick={() => markAccounted(r.id, true)}>
+                          <NeonButton size="sm" variant="green" onClick={() => markAccounted(r.id, true)} disabled={saving.has(r.id)}>
                             <CheckCircle size={11} className="mr-1" />
-                            Accounted
+                            {saving.has(r.id) ? 'Saving…' : 'Accounted'}
                           </NeonButton>
                         )}
                       </div>
