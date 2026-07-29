@@ -176,6 +176,22 @@ export function CommandCenter() {
     return () => { supabase.removeChannel(channel) }
   }, [])
 
+  useEffect(() => {
+    const sosSub = supabase.channel('cc-sos-status')
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'sos_reports' },
+        payload => {
+          const r = payload.new
+          if (muni && r.municipality !== muni) return
+          setReports(prev => prev.map(x =>
+            x.id === r.id ? { ...x, rescue_status: r.rescue_status, notes: r.notes } : x
+          ))
+        }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(sosSub) }
+  }, [])
+
   useEffect(() => { sync() }, [])
 
   const sync = async () => {

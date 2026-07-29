@@ -24,8 +24,9 @@ export function RescueDetail() {
   const [victim, setVictim] = useState(null)
   const [rescueStatus, setRescueStatus] = useState('pending')
   const [notes, setNotes] = useState('')
-  const [loading, setLoading] = useState(false)
   const [dataLoading, setDataLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
   const [notFound, setNotFound] = useState(false)
   const [timer, setTimer] = useState(null)
 
@@ -47,26 +48,31 @@ export function RescueDetail() {
           rescue_status: row.rescue_status,
         })
         setRescueStatus(row.rescue_status ?? 'pending')
+        setNotes(row.notes || '')
       })
       .catch(() => setNotFound(true))
       .finally(() => setDataLoading(false))
   }, [id])
 
-  const updateStatus = async (newStatus) => {
-    setLoading(true)
+  const updateStatus = (newStatus) => {
     if (newStatus === 'on_scene') setTimer(Date.now())
+    setRescueStatus(newStatus)
+  }
+
+  const submitReport = async () => {
+    setSubmitting(true)
     try {
-      await api.put(`/sos/${victim.id}`, { rescue_status: newStatus, field_notes: notes })
-      setRescueStatus(newStatus)
-    } catch { setRescueStatus(newStatus) }
-    setLoading(false)
+      await api.put(`/sos/${victim.id}`, { rescue_status: rescueStatus, notes })
+      setSubmitted(true)
+      setTimeout(() => setSubmitted(false), 3000)
+    } catch {
+      alert('Submit failed. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const elapsed = timer ? Math.floor((Date.now() - timer) / 1000) : null
-
-  const openMap = () => {
-    if (victim.lat) window.open(`https://www.openstreetmap.org/?mlat=${victim.lat}&mlon=${victim.lng}&zoom=17`, '_blank')
-  }
 
   if (dataLoading) return (
     <div className="min-h-screen bg-mesh flex flex-col pb-6">
@@ -142,7 +148,6 @@ export function RescueDetail() {
                 key={value}
                 variant={rescueStatus === value ? variant : 'ghost'}
                 onClick={() => updateStatus(value)}
-                disabled={loading}
                 className={`flex items-center justify-center gap-2 ${rescueStatus === value ? 'ring-1 ring-offset-0' : ''}`}
                 size="sm"
               >
@@ -171,13 +176,20 @@ export function RescueDetail() {
           />
         </GlassCard>
 
-        {/* Map link */}
-        {victim.lat && (
-          <NeonButton variant="violet" onClick={openMap} className="w-full">
-            <MapPin size={14} className="mr-2" />
-            Open Location in Map
-          </NeonButton>
-        )}
+        {/* Submit report */}
+        <NeonButton
+          variant={submitted ? 'green' : 'violet'}
+          onClick={submitReport}
+          disabled={submitting}
+          className="w-full"
+        >
+          {submitted
+            ? <><CheckCircle size={14} className="mr-2" />Submitted</>
+            : submitting
+            ? 'Submitting…'
+            : <><FileText size={14} className="mr-2" />Submit Report</>
+          }
+        </NeonButton>
       </main>
     </div>
   )
