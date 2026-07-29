@@ -7,6 +7,7 @@ import { NeonButton } from '../../components/ui/NeonButton'
 import { db } from '../../lib/db'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
+import { supabase } from '../../lib/supabase'
 
 const NAV = [
   { icon: Home,     label: 'Home',     path: '/responder'          },
@@ -24,6 +25,23 @@ export function VictimQueue() {
 
   const muni = scope?.municipality
   useEffect(() => { refresh() }, [])
+
+  useEffect(() => {
+    const ch = supabase.channel('vq-sos-status')
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'sos_reports' },
+        payload => {
+          const r = payload.new
+          if (muni && r.municipality !== muni) return
+          setQueue(prev => prev.map(x =>
+            x.id === r.id ? { ...x, rescue_status: r.rescue_status } : x
+          ))
+        }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
+
   const refresh = async () => {
     setLoading(true)
     try {
@@ -36,13 +54,16 @@ export function VictimQueue() {
     setLoading(false)
   }
 
-  const filtered = filter === 'all' ? queue : queue.filter(r => r.priority === filter.toUpperCase())
+  const activeQueue = queue.filter(r => r.rescue_status !== 'rescued')
+  const filtered = filter === 'all'
+    ? activeQueue
+    : activeQueue.filter(r => r.priority === filter.toUpperCase())
 
   return (
     <div className="min-h-screen bg-mesh flex flex-col pb-20">
       <TopBar
         title="Victim Queue"
-        subtitle={`${queue.filter(r => r.priority === 'CRITICAL').length} critical · ${queue.length} total`}
+        subtitle={`${activeQueue.filter(r => r.priority === 'CRITICAL').length} critical · ${activeQueue.length} total`}
         onBack
         rightSlot={
           <NeonButton size="sm" variant="ghost" onClick={refresh} loading={loading}>

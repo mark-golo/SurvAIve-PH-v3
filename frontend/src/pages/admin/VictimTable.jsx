@@ -6,6 +6,7 @@ import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassInput } from '../../components/ui/GlassInput'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
+import { supabase } from '../../lib/supabase'
 
 const RESCUE_LABEL = { pending: 'Pending', en_route: 'En Route', on_scene: 'On Scene', rescued: 'Rescued', cannot_reach: 'Cannot Reach' }
 
@@ -18,6 +19,20 @@ export function VictimTable() {
   const [loading, setLoading] = useState(true)
 
   const muni = scope?.municipality
+  useEffect(() => {
+    const ch = supabase.channel('vt-sos-status')
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'sos_reports' },
+        payload => {
+          const r = payload.new
+          if (muni && r.municipality !== muni) return
+          setData(d => d.map(x => x.id === r.id ? { ...x, rescue: r.rescue_status } : x))
+        }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
+
   useEffect(() => {
     api.get(muni ? `/sos?municipality=${encodeURIComponent(muni)}` : '/sos')
       .then(rows => setData(rows.map(r => ({

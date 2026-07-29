@@ -26,6 +26,7 @@ export function RespondersView() {
 
   const [sosReports, setSosReports] = useState([])
   const [sosLoading, setSosLoading] = useState(true)
+  const [statusFilter, setStatusFilter] = useState('all')
 
   // Fetch responders
   useEffect(() => {
@@ -65,21 +66,42 @@ export function RespondersView() {
       (SORT_ORDER[b.rescue_status ?? 'pending'] ?? 4)
     )
 
+  const filteredReports = statusFilter === 'all'
+    ? sortedReports
+    : sortedReports.filter(r => (r.rescue_status ?? 'pending') === statusFilter)
+
   return (
     <AdminLayout title="Rescue Updates">
       <div className="flex flex-col lg:flex-row h-[calc(100vh-56px)]">
 
         {/* LEFT — Rescue Status Feed */}
         <div className="flex-1 overflow-y-auto p-4 border-b lg:border-b-0 lg:border-r border-[rgba(255,255,255,0.08)]">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Rescue Status Feed</p>
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Rescue Status Feed</p>
+
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {[
+              { key: 'all',          label: 'All' },
+              { key: 'en_route',     label: 'En Route' },
+              { key: 'on_scene',     label: 'On Scene' },
+              { key: 'rescued',      label: 'Rescued' },
+              { key: 'cannot_reach', label: 'Cannot Reach' },
+            ].map(({ key, label }) => (
+              <button key={key} onClick={() => setStatusFilter(key)}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all ${
+                  statusFilter === key
+                    ? 'bg-[rgba(0,212,255,0.15)] border-[rgba(0,212,255,0.5)] text-[#00d4ff]'
+                    : 'glass border-[rgba(255,255,255,0.08)] text-slate-400'
+                }`}>{label}</button>
+            ))}
+          </div>
 
           {sosLoading && <p className="text-sm text-slate-500 text-center py-8">Loading…</p>}
 
-          {!sosLoading && sortedReports.length === 0 && (
+          {!sosLoading && filteredReports.length === 0 && (
             <p className="text-sm text-slate-500 text-center py-8">No SOS reports found</p>
           )}
 
-          {sortedReports.map(r => {
+          {filteredReports.map(r => {
             const rs = RESCUE_STATUS[r.rescue_status ?? 'pending']
             const teamName = r.assigned_responder_id
               ? (responders.find(t => t.id === r.assigned_responder_id)?.name ?? null)
