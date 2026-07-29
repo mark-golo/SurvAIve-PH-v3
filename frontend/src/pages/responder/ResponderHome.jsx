@@ -28,21 +28,27 @@ export function ResponderHome() {
   const [criticalCount, setCriticalCount] = useState(0)
   const [syncing, setSyncing] = useState(false)
   const [profile, setProfile] = useState(null)
+  const [responderId, setResponderId] = useState(null)
+  const responderIdRef = useRef(null)
   const stats = mesh.getStats()
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user: authUser } }) => {
       const contact = authUser?.user_metadata?.contact_number
       if (!contact) return
-      supabase.from('responders').select('name,unit_name,assigned_zone,duty_status').eq('contact_number', contact).single()
+      supabase.from('responders').select('id,name,unit_name,assigned_zone,duty_status').eq('contact_number', contact).single()
         .then(({ data }) => {
           if (data) {
             setProfile(data)
+            setResponderId(data.id)
+            responderIdRef.current = data.id
             setOnDuty(data.duty_status === 'on_duty')
           }
         })
     })
   }, [])
+
+  useEffect(() => { responderIdRef.current = responderId }, [responderId])
 
   useEffect(() => {
     if (!navigator.geolocation) return
@@ -52,17 +58,24 @@ export function ResponderHome() {
       if (!active) return
       const contact = authUser?.user_metadata?.contact_number
       if (!contact) return
-      watchId = navigator.geolocation.watchPosition(
-        pos => {
-          supabase.from('responders').update({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            last_seen_at: new Date().toISOString(),
-          }).eq('contact_number', contact).select()
-        },
-        () => {},
-        { enableHighAccuracy: true, timeout: 10000 }
-      )
+      supabase.from('responders').select('id').eq('contact_number', contact).single()
+        .then(({ data }) => {
+          if (!active || !data) return
+          responderIdRef.current = data.id
+          setResponderId(data.id)
+          watchId = navigator.geolocation.watchPosition(
+            pos => {
+              if (!responderIdRef.current) return
+              supabase.from('responders').update({
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+                last_seen_at: new Date().toISOString(),
+              }).eq('id', responderIdRef.current)
+            },
+            () => {},
+            { enableHighAccuracy: true, timeout: 10000 }
+          )
+        })
     })
     return () => {
       active = false
@@ -90,9 +103,13 @@ export function ResponderHome() {
   }
 
   const toggleDuty = async () => {
-    setOnDuty(v => !v)
-    try { await api.put('/responders', { duty_status: !onDuty ? 'on_duty' : 'standby' }) }
-    catch {}
+    const newStatus = onDuty ? 'standby' : 'on_duty'
+    setOnDuty(!onDuty)
+    try {
+      if (responderId) {
+        await supabase.from('responders').update({ duty_status: newStatus }).eq('id', responderId)
+      }
+    } catch {}
   }
 
   return (

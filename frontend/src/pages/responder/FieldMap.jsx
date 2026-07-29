@@ -91,34 +91,32 @@ export function FieldMap() {
     supabase.auth.getUser().then(({ data: { user: authUser } }) => {
       if (!active) return
       const contact = authUser?.user_metadata?.contact_number
-      watchId = navigator.geolocation.watchPosition(
-        pos => {
-          setMyPos([pos.coords.latitude, pos.coords.longitude])
-          if (contact) {
-            supabase.from('responders').update({
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude,
-              last_seen_at: new Date().toISOString(),
-            }).eq('contact_number', contact).select()
-          }
-        },
-        () => setGpsError(true),
-        { enableHighAccuracy: true, timeout: 10000 }
-      )
+      if (!contact) return
+      supabase.from('responders')
+        .select('id,unit_name,assigned_zone')
+        .eq('contact_number', contact)
+        .single()
+        .then(({ data }) => {
+          if (!active || !data) return
+          setProfile(data)
+          watchId = navigator.geolocation.watchPosition(
+            pos => {
+              setMyPos([pos.coords.latitude, pos.coords.longitude])
+              supabase.from('responders').update({
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+                last_seen_at: new Date().toISOString(),
+              }).eq('id', data.id)
+            },
+            () => setGpsError(true),
+            { enableHighAccuracy: true, timeout: 10000 }
+          )
+        })
     })
     return () => {
       active = false
       if (watchId !== null) navigator.geolocation.clearWatch(watchId)
     }
-  }, [])
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user: authUser } }) => {
-      const contact = authUser?.user_metadata?.contact_number
-      if (!contact) return
-      supabase.from('responders').select('unit_name,assigned_zone').eq('contact_number', contact).single()
-        .then(({ data }) => { if (data) setProfile(data) })
-    })
   }, [])
 
   return (

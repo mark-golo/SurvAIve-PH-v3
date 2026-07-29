@@ -151,7 +151,6 @@ export function CommandCenter() {
     let q = supabase.from('responders')
       .select('id,name,unit_name,assigned_zone,lat,lng,last_seen_at,duty_status,municipality')
       .eq('duty_status', 'on_duty')
-      .not('lat', 'is', null)
     if (muni) q = q.eq('municipality', muni)
     q.then(({ data }) => setActiveResponders(data ?? []))
 
@@ -266,7 +265,7 @@ export function CommandCenter() {
               </Marker>
             ))}
             {/* Active responders */}
-            {activeResponders.map(r => (
+            {activeResponders.filter(r => r.lat && r.lng).map(r => (
               <Marker key={`resp-${r.id}`} position={[r.lat, r.lng]} icon={responderMarkerIcon()}>
                 <Popup>
                   <div className="bg-[#0f172a] text-white text-xs p-2 rounded min-w-[140px]">
@@ -299,7 +298,7 @@ export function CommandCenter() {
               <StatCard label="Total SOS"  value={stats.total}   icon={Users}         color="#00d4ff" className="!p-2.5 !gap-0.5 !rounded-xl" />
               <StatCard label="Critical"   value={criticalCount} icon={AlertTriangle} color="#ef4444" className="!p-2.5 !gap-0.5 !rounded-xl" />
               <StatCard label="Rescued"    value={rescuedCount}  icon={CheckCircle}   color="#22c55e" className="!p-2.5 !gap-0.5 !rounded-xl" />
-              <StatCard label="Mesh Nodes" value={stats.nodes}   icon={Radio}         color="#8b5cf6" className="!p-2.5 !gap-0.5 !rounded-xl" />
+              <StatCard label="Responders" value={activeResponders.length} icon={Radio} color="#8b5cf6" className="!p-2.5 !gap-0.5 !rounded-xl" />
             </div>
           </div>
 
