@@ -11,6 +11,7 @@ import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 import { supabase } from '../../lib/supabase'
 import { fetchWeather, getWeatherLabel } from '../../lib/weatherService'
+import { predictDepletion } from '../../lib/resourcePredictor'
 
 const COLORS = { CRITICAL: '#ef4444', HIGH: '#f97316', MODERATE: '#f59e0b', SAFE: '#22c55e' }
 
@@ -218,6 +219,11 @@ export function CommandCenter() {
 
   const criticalCount = adjustedReports.filter(r => r.priority === 'CRITICAL').length
 
+  const resourceForecast = useMemo(
+    () => predictDepletion(adjustedReports, activeResponders),
+    [adjustedReports, activeResponders]
+  )
+
   useEffect(() => {
     api.get(muni ? `/evacuation_centers?municipality=${encodeURIComponent(muni)}` : '/evacuation_centers')
       .then(rows => setCenters(rows))
@@ -414,6 +420,54 @@ export function CommandCenter() {
               )}
             </div>
           )}
+
+          {/* Resource Forecast Widget */}
+          <div className="px-4 pb-3 border-b border-[rgba(255,255,255,0.08)]">
+            {(() => {
+              const f = resourceForecast
+              const color =
+                f.alertLevel === 'OVERWHELMED' ? '#ef4444' :
+                f.alertLevel === 'AT_RISK'     ? '#f97316' :
+                f.alertLevel === 'ELEVATED'    ? '#f59e0b' : '#22c55e'
+              const pct = Math.min(f.loadRatio * 100, 100)
+              return (
+                <div className="glass rounded-xl p-3 border" style={{ borderColor: `${color}40` }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">Resource Forecast</p>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: `${color}20`, color }}>
+                      {f.alertLevel}
+                    </span>
+                  </div>
+                  <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-2">
+                    <div className="h-full rounded-full transition-all"
+                      style={{ width: `${pct}%`, background: color, boxShadow: `0 0 6px ${color}60` }} />
+                  </div>
+                  <p className="text-[10px] text-slate-400 mb-1">
+                    {f.activeLoad} active / {f.capacity} capacity
+                    {' · '}{f.onDutyCount} responder{f.onDutyCount !== 1 ? 's' : ''} on duty
+                  </p>
+                  {f.alertLevel === 'OVERWHELMED' && (
+                    <p className="text-[10px] font-bold text-[#ef4444]">Responders at capacity — request reinforcements</p>
+                  )}
+                  {f.alertLevel === 'AT_RISK' && (
+                    <p className="text-[10px] font-bold text-[#f97316]">
+                      {f.minutesToOverwhelm != null
+                        ? `Teams may be overwhelmed in ~${f.minutesToOverwhelm} min`
+                        : 'Capacity threshold approaching'}
+                      {f.surging ? ' — surge detected' : ''}
+                    </p>
+                  )}
+                  {f.alertLevel === 'ELEVATED' && (
+                    <p className="text-[10px] text-[#f59e0b]">Load elevated — monitor incoming rate</p>
+                  )}
+                  {f.alertLevel === 'NORMAL' && (
+                    <p className="text-[10px] text-[#22c55e]">Capacity sufficient</p>
+                  )}
+                </div>
+              )
+            })()}
+          </div>
 
           {/* Recent activity */}
           <div className="flex-1 overflow-y-auto p-4">

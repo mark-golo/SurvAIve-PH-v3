@@ -3,12 +3,13 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, Legend
 } from 'recharts'
-import { Download, TrendingUp } from 'lucide-react'
+import { Download, TrendingUp, AlertTriangle } from 'lucide-react'
 import { SuperAdminLayout } from './SuperAdminLayout'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { NeonButton } from '../../components/ui/NeonButton'
 import api from '../../lib/api'
 import { clusterSOS } from '../../lib/kmeans'
+import { groupPredictionByMunicipality } from '../../lib/resourcePredictor'
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
@@ -23,11 +24,13 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export function ProvincialAnalytics() {
-  const [sos, setSos]         = useState([])
-  const [loading, setLoading] = useState(true)
+  const [sos, setSos]             = useState([])
+  const [responders, setResponders] = useState([])
+  const [loading, setLoading]     = useState(true)
 
   useEffect(() => {
     api.get('/sos').then(setSos).catch(() => setSos([])).finally(() => setLoading(false))
+    api.get('/responders').then(setResponders).catch(() => setResponders([]))
   }, [])
 
   // Group by municipality
@@ -52,6 +55,9 @@ export function ProvincialAnalytics() {
 
   const clusters = useMemo(() => clusterSOS(sos), [sos])
 
+  const muniForecasts  = useMemo(() => groupPredictionByMunicipality(sos, responders), [sos, responders])
+  const alertForecasts = muniForecasts.filter(f => f.alertLevel === 'AT_RISK' || f.alertLevel === 'OVERWHELMED')
+
   if (loading) return (
     <SuperAdminLayout title="Provincial Analytics">
       <div className="flex items-center justify-center h-64 text-slate-400 text-sm">Loading…</div>
@@ -61,6 +67,38 @@ export function ProvincialAnalytics() {
   return (
     <SuperAdminLayout title="Provincial Analytics">
       <div className="p-4 space-y-4">
+        {/* Resource Depletion Alert */}
+        {alertForecasts.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={14} className="text-[#ef4444] shrink-0" />
+              <p className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                Resource Depletion Alert · {alertForecasts.length} Municipality{alertForecasts.length > 1 ? 's' : ''} At Risk
+              </p>
+            </div>
+            {alertForecasts.map(f => {
+              const color = f.alertLevel === 'OVERWHELMED' ? '#ef4444' : '#f97316'
+              const pct = Math.min(f.loadRatio * 100, 100)
+              return (
+                <div key={f.municipality} className="glass rounded-xl p-3 border" style={{ borderColor: `${color}40` }}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-xs font-bold" style={{ color }}>{f.municipality}</p>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: `${color}20`, color }}>{f.alertLevel}</span>
+                  </div>
+                  <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-1.5">
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    {f.activeLoad} active SOS · {f.onDutyCount} responder{f.onDutyCount !== 1 ? 's' : ''} on duty
+                    {f.minutesToOverwhelm != null ? ` · overwhelmed in ~${f.minutesToOverwhelm} min` : ''}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
         {/* AI Cluster Analysis */}
         {clusters.length > 0 && (
           <div className="space-y-2">
