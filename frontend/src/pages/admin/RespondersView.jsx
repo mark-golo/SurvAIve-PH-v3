@@ -48,7 +48,9 @@ export function RespondersView() {
           const r = payload.new
           if (muni && r.municipality !== muni) return
           setSosReports(prev => prev.map(x =>
-            x.id === r.id ? { ...x, rescue_status: r.rescue_status, notes: r.notes } : x
+            x.id === r.id
+              ? { ...x, rescue_status: r.rescue_status, notes: r.notes, assigned_responder_id: r.assigned_responder_id }
+              : x
           ))
         }
       )
@@ -79,6 +81,9 @@ export function RespondersView() {
 
           {sortedReports.map(r => {
             const rs = RESCUE_STATUS[r.rescue_status ?? 'pending']
+            const teamName = r.assigned_responder_id
+              ? (responders.find(t => t.id === r.assigned_responder_id)?.name ?? null)
+              : null
             return (
               <div key={r.id} className="glass rounded-xl p-3 mb-2 border border-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.12)] transition-colors">
                 <div className="flex items-center justify-between mb-1">
@@ -91,6 +96,9 @@ export function RespondersView() {
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-500">{r.barangay}{r.municipality ? ` · ${r.municipality}` : ''}</p>
+                {teamName && (
+                  <p className="text-[10px] text-[#00d4ff] mt-0.5 font-medium">Submitted by: {teamName}</p>
+                )}
                 {r.notes && (
                   <p className="text-[10px] text-slate-400 mt-1.5 italic border-t border-[rgba(255,255,255,0.05)] pt-1.5">
                     "{r.notes}"

@@ -8,6 +8,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassTextarea } from '../../components/ui/GlassInput'
 import api from '../../lib/api'
+import { supabase } from '../../lib/supabase'
 
 
 const ACTIONS = [
@@ -29,6 +30,7 @@ export function RescueDetail() {
   const [submitted, setSubmitted] = useState(false)
   const [notFound, setNotFound] = useState(false)
   const [timer, setTimer] = useState(null)
+  const [responderProfile, setResponderProfile] = useState(null)
 
   useEffect(() => {
     api.get(`/sos/${id}`)
@@ -54,6 +56,18 @@ export function RescueDetail() {
       .finally(() => setDataLoading(false))
   }, [id])
 
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+      const contact = authUser?.user_metadata?.contact_number
+      if (!contact) return
+      supabase.from('responders')
+        .select('id,name,unit_name')
+        .eq('contact_number', contact)
+        .single()
+        .then(({ data }) => { if (data) setResponderProfile(data) })
+    })
+  }, [])
+
   const updateStatus = (newStatus) => {
     if (newStatus === 'on_scene') setTimer(Date.now())
     setRescueStatus(newStatus)
@@ -62,7 +76,11 @@ export function RescueDetail() {
   const submitReport = async () => {
     setSubmitting(true)
     try {
-      await api.put(`/sos/${victim.id}`, { rescue_status: rescueStatus, notes })
+      await api.put(`/sos/${victim.id}`, {
+        rescue_status: rescueStatus,
+        notes,
+        ...(responderProfile?.id && { assigned_responder_id: responderProfile.id }),
+      })
       setSubmitted(true)
       setTimeout(() => setSubmitted(false), 3000)
     } catch {
