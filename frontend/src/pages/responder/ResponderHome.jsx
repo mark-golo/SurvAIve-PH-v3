@@ -65,12 +65,11 @@ export function ResponderHome() {
           setResponderId(data.id)
           watchId = navigator.geolocation.watchPosition(
             pos => {
-              if (!responderIdRef.current) return
-              supabase.from('responders').update({
-                lat: pos.coords.latitude,
-                lng: pos.coords.longitude,
-                last_seen_at: new Date().toISOString(),
-              }).eq('id', responderIdRef.current)
+              supabase.rpc('update_responder_location', {
+                p_contact_number: contact,
+                p_lat: pos.coords.latitude,
+                p_lng: pos.coords.longitude,
+              }).then(() => {})
             },
             () => {},
             { enableHighAccuracy: true, timeout: 10000 }

@@ -116,15 +116,14 @@ export function FieldMap() {
         .then(({ data }) => {
           if (!active || !data) return
           setProfile(data)
-          supabase.from('responders').update({ duty_status: 'on_duty' }).eq('id', data.id)
           watchId = navigator.geolocation.watchPosition(
             pos => {
               setMyPos([pos.coords.latitude, pos.coords.longitude])
-              supabase.from('responders').update({
-                lat: pos.coords.latitude,
-                lng: pos.coords.longitude,
-                last_seen_at: new Date().toISOString(),
-              }).eq('id', data.id)
+              supabase.rpc('update_responder_location', {
+                p_contact_number: contact,
+                p_lat: pos.coords.latitude,
+                p_lng: pos.coords.longitude,
+              }).then(() => {})
             },
             () => setGpsError(true),
             { enableHighAccuracy: true, timeout: 10000 }
