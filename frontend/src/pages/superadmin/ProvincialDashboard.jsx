@@ -7,12 +7,33 @@ import { StatCard } from '../../components/ui/StatCard'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 
-// Geographic boundaries only — no fake counts
+// Approximate municipality boundaries — PSGC-coded, Surigao del Norte pilot
 const MUNICIPALITY_BOUNDS = [
-  { name: 'Del Carmen',   coords: [[9.83,126.04],[9.88,126.08],[9.87,126.11],[9.82,126.10],[9.80,126.06]] },
-  { name: 'Dapa',         coords: [[9.74,126.02],[9.78,126.06],[9.77,126.09],[9.73,126.08],[9.71,126.04]] },
-  { name: 'General Luna', coords: [[9.78,126.13],[9.83,126.17],[9.82,126.20],[9.77,126.18],[9.75,126.14]] },
-  { name: 'Santa Monica', coords: [[9.89,126.05],[9.93,126.09],[9.92,126.12],[9.88,126.11],[9.86,126.07]] },
+  // ── Mainland ──────────────────────────────────────────────────────────────
+  { name: 'City of Surigao', psgc10: '1606724000', coords: [[9.76,125.46],[9.82,125.46],[9.82,125.52],[9.76,125.52]] },
+  { name: 'Tagana-An',       psgc10: '1606725000', coords: [[9.79,125.45],[9.85,125.45],[9.85,125.51],[9.79,125.51]] },
+  { name: 'Tubod',           psgc10: '1606727000', coords: [[9.73,125.46],[9.79,125.46],[9.79,125.52],[9.73,125.52]] },
+  { name: 'Alegria',         psgc10: '1606701000', coords: [[9.69,125.45],[9.75,125.45],[9.75,125.51],[9.69,125.51]] },
+  { name: 'Placer',          psgc10: '1606717000', coords: [[9.61,125.57],[9.67,125.57],[9.67,125.63],[9.61,125.63]] },
+  { name: 'Bacuag',          psgc10: '1606702000', coords: [[9.62,125.61],[9.68,125.61],[9.68,125.67],[9.62,125.67]] },
+  { name: 'Gigaquit',        psgc10: '1606711000', coords: [[9.54,125.65],[9.60,125.65],[9.60,125.71],[9.54,125.71]] },
+  { name: 'Claver',          psgc10: '1606706000', coords: [[9.54,125.69],[9.60,125.69],[9.60,125.75],[9.54,125.75]] },
+  { name: 'Sison',           psgc10: '1606722000', coords: [[9.48,125.58],[9.54,125.58],[9.54,125.64],[9.48,125.64]] },
+  { name: 'Mainit',          psgc10: '1606714000', coords: [[9.50,125.52],[9.56,125.52],[9.56,125.58],[9.50,125.58]] },
+  { name: 'Burgos',          psgc10: '1606704000', coords: [[9.50,125.50],[9.56,125.50],[9.56,125.56],[9.50,125.56]] },
+  { name: 'Malimono',        psgc10: '1606715000', coords: [[9.40,125.44],[9.46,125.44],[9.46,125.50],[9.40,125.50]] },
+  { name: 'San Benito',      psgc10: '1606718000', coords: [[9.36,125.52],[9.42,125.52],[9.42,125.58],[9.36,125.58]] },
+  // ── Socorro + Pilar (Bucas Grande / north island area) ──────────────────
+  { name: 'Socorro',         psgc10: '1606723000', coords: [[9.89,125.92],[9.95,125.92],[9.95,125.98],[9.89,125.98]] },
+  { name: 'Pilar',           psgc10: '1606716000', coords: [[9.85,125.94],[9.91,125.94],[9.91,126.00],[9.85,126.00]] },
+  // ── San Francisco (Anao-aon island, south-east) ──────────────────────────
+  { name: 'San Francisco',   psgc10: '1606719000', coords: [[9.41,125.95],[9.47,125.95],[9.47,126.01],[9.41,126.01]] },
+  // ── Siargao Island group ─────────────────────────────────────────────────
+  { name: 'Santa Monica',    psgc10: '1606721000', coords: [[9.90,126.02],[9.96,126.02],[9.96,126.08],[9.90,126.08]] },
+  { name: 'Del Carmen',      psgc10: '1606708000', coords: [[9.82,126.07],[9.88,126.07],[9.88,126.13],[9.82,126.13]] },
+  { name: 'Dapa',            psgc10: '1606707000', coords: [[9.73,126.02],[9.79,126.02],[9.79,126.08],[9.73,126.08]] },
+  { name: 'General Luna',    psgc10: '1606710000', coords: [[9.77,126.14],[9.83,126.14],[9.83,126.20],[9.77,126.20]] },
+  { name: 'San Isidro',      psgc10: '1606720000', coords: [[10.02,126.14],[10.08,126.14],[10.08,126.20],[10.02,126.20]] },
 ]
 
 const COLORS = {
@@ -66,7 +87,7 @@ export function ProvincialDashboard() {
     <SuperAdminLayout title="Provincial Dashboard">
       <div className="flex flex-col lg:flex-row h-[calc(100vh-56px)]">
         <div className="flex-1 min-h-[400px]">
-          <MapContainer center={[9.820, 126.080]} zoom={11} style={{ height: '100%', background: '#0a1628' }} zoomControl>
+          <MapContainer center={[9.75, 125.85]} zoom={9} style={{ height: '100%', background: '#0a1628' }} zoomControl>
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
             {municipalities.filter(m => m.coords?.length).map(m => {
               const c = COLORS[m.severity]
