@@ -9,10 +9,9 @@ import { useAuthStore } from '../../store/auth'
 import { MUNICIPALITY_BOUNDS } from '../../lib/philippineLocations'
 
 const COLORS = {
-  RED:   { fill: 'rgba(239,68,68,0.2)',    stroke: 'rgba(239,68,68,0.7)'   },
-  AMBER: { fill: 'rgba(245,158,11,0.2)',   stroke: 'rgba(245,158,11,0.7)'  },
-  GREEN: { fill: 'rgba(34,197,94,0.2)',    stroke: 'rgba(34,197,94,0.7)'   },
-  GRAY:  { fill: 'rgba(107,114,128,0.15)', stroke: 'rgba(107,114,128,0.4)' },
+  RED:   { fill: 'rgba(239,68,68,0.2)',  stroke: 'rgba(239,68,68,0.7)'  },
+  AMBER: { fill: 'rgba(245,158,11,0.2)', stroke: 'rgba(245,158,11,0.7)' },
+  GREEN: { fill: 'rgba(34,197,94,0.2)',  stroke: 'rgba(34,197,94,0.7)'  },
 }
 
 export function ProvincialDashboard() {
@@ -61,7 +60,7 @@ export function ProvincialDashboard() {
         <div className="flex-1 min-h-[400px]">
           <MapContainer center={[9.75, 125.85]} zoom={9} style={{ height: '100%', background: '#0a1628' }} zoomControl>
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
-            {municipalities.filter(m => m.coords?.length).map(m => {
+            {municipalities.filter(m => m.coords?.length && m.severity !== 'GRAY').map(m => {
               const c = COLORS[m.severity]
               return (
                 <Polygon
@@ -109,7 +108,7 @@ export function ProvincialDashboard() {
               <div key={k} className="flex items-center gap-2 mb-2">
                 <div className="w-4 h-3 rounded" style={{ background: c.fill, border: `1px solid ${c.stroke}` }} />
                 <span className="text-xs text-slate-400 capitalize">
-                  {k === 'RED' ? 'Active Emergency' : k === 'AMBER' ? 'Moderate Incidents' : k === 'GREEN' ? 'Stable' : 'No Data'}
+                  {k === 'RED' ? 'Active Emergency' : k === 'AMBER' ? 'Moderate Incidents' : 'Stable'}
                 </span>
               </div>
             ))}
