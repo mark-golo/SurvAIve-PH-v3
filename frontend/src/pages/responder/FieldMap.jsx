@@ -4,7 +4,6 @@ import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-le
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { Home, List, Map, Radio, Settings } from 'lucide-react'
-import { MunicipalBoundaryLayer } from '../../components/map/MunicipalBoundaryLayer'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/api'
@@ -135,7 +134,6 @@ export function FieldMap() {
           zoomControl={false}
         >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
-          <MunicipalBoundaryLayer />
           {myPos && <FlyTo pos={myPos} />}
 
           {/* My position */}

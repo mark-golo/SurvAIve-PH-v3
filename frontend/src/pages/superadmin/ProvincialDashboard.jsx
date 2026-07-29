@@ -4,7 +4,6 @@ import 'leaflet/dist/leaflet.css'
 import { AlertTriangle, CheckCircle, Building2, Radio } from 'lucide-react'
 import { SuperAdminLayout } from './SuperAdminLayout'
 import { StatCard } from '../../components/ui/StatCard'
-import { MunicipalBoundaryLayer } from '../../components/map/MunicipalBoundaryLayer'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 import { MUNICIPALITY_BOUNDS } from '../../lib/philippineLocations'
@@ -78,7 +77,6 @@ export function ProvincialDashboard() {
                 </Polygon>
               )
             })}
-            <MunicipalBoundaryLayer />
           </MapContainer>
         </div>
 
