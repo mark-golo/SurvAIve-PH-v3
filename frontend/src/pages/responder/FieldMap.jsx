@@ -61,7 +61,8 @@ export function FieldMap() {
   const [gpsError, setGpsError] = useState(false)
   const [profile, setProfile]   = useState(null)
 
-  const clusters = useMemo(() => clusterSOS(assigned), [assigned])
+  const activeAssigned = assigned.filter(v => v.rescue_status !== 'rescued')
+  const clusters = useMemo(() => clusterSOS(activeAssigned), [activeAssigned])
 
   const muni = scope?.municipality
   useEffect(() => {
@@ -80,8 +81,24 @@ export function FieldMap() {
         name: r.name ?? 'Unknown',
         barangay: r.barangay ?? '',
         status: r.status ?? 'unknown',
+        rescue_status: r.rescue_status ?? null,
       }))))
       .catch(() => setAssigned([]))
+  }, [])
+
+  useEffect(() => {
+    const ch = supabase.channel('fm-sos-status')
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'sos_reports' },
+        payload => {
+          const r = payload.new
+          setAssigned(prev => prev.map(x =>
+            x.id === r.id ? { ...x, rescue_status: r.rescue_status } : x
+          ))
+        }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
   }, [])
 
   useEffect(() => {
@@ -99,6 +116,7 @@ export function FieldMap() {
         .then(({ data }) => {
           if (!active || !data) return
           setProfile(data)
+          supabase.from('responders').update({ duty_status: 'on_duty' }).eq('id', data.id)
           watchId = navigator.geolocation.watchPosition(
             pos => {
               setMyPos([pos.coords.latitude, pos.coords.longitude])
@@ -145,8 +163,8 @@ export function FieldMap() {
             </Marker>
           )}
 
-          {/* Assigned victims */}
-          {assigned.map((v) => (
+          {/* Assigned victims (rescued victims are excluded) */}
+          {activeAssigned.map((v) => (
             <Marker key={v.id} position={[v.lat, v.lng]} icon={numberedIcon(v.label, priorityColor[v.priority])}>
               <Popup>
                 <div className="bg-[#0f172a] text-white text-xs p-2 rounded min-w-[140px]">
@@ -235,6 +253,12 @@ export function FieldMap() {
             <div className="flex items-center gap-1.5">
               <div className="w-4 h-4 rounded-full border-2 border-[#ef4444] opacity-60" style={{ borderStyle: 'dashed' }} />
               <span className="text-[10px] text-slate-400">Hotspot</span>
+            </div>
+          )}
+          {assigned.length !== activeAssigned.length && (
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-4 rounded-full bg-[#22c55e]" style={{ boxShadow: '0 0 6px #22c55e' }} />
+              <span className="text-[10px] text-slate-400">{assigned.length - activeAssigned.length} Rescued</span>
             </div>
           )}
         </div>
