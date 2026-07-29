@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-le
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { Users, AlertTriangle, CheckCircle, Radio, RefreshCw, Shield } from 'lucide-react'
+import { MunicipalBoundaryLayer } from '../../components/map/MunicipalBoundaryLayer'
 import { AdminLayout } from './AdminLayout'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { StatCard } from '../../components/ui/StatCard'
@@ -208,6 +209,7 @@ export function CommandCenter() {
             zoomControl={true}
           >
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
+            <MunicipalBoundaryLayer />
             {selectedSOS && <FlyTo pos={selectedSOS} />}
             {adjustedReports.filter(r => r.lat && r.lng).map(r => (
               <Marker key={r.id} position={[r.lat, r.lng]} icon={pinIcon(COLORS[r.priority], r.is_verified ?? r.verified)}>

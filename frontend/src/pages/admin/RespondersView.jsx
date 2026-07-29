@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { Radio, MapPin } from 'lucide-react'
+import { MunicipalBoundaryLayer } from '../../components/map/MunicipalBoundaryLayer'
 import { AdminLayout } from './AdminLayout'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/api'
@@ -67,6 +68,7 @@ export function RespondersView() {
           <MapContainer center={[9.852, 126.073]} zoom={13}
             style={{ height: '100%', background: '#0a1628' }} zoomControl>
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
+            <MunicipalBoundaryLayer />
             {activeOnMap.map(r => (
               <Marker key={`r-${r.id}`} position={[r.lat, r.lng]} icon={responderMarkerIcon()}>
                 <Popup>

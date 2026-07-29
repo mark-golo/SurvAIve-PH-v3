@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { Plus, Pencil, Trash2, Search, Tent } from 'lucide-react'
+import { MunicipalBoundaryLayer } from '../../components/map/MunicipalBoundaryLayer'
 import { AdminLayout } from './AdminLayout'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { GlassInput, GlassSelect } from '../../components/ui/GlassInput'
@@ -129,6 +130,7 @@ export function EvacuationCenters() {
         <div className="h-[260px] shrink-0 border-b border-[rgba(255,255,255,0.08)]">
           <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', background: '#0a1628' }} zoomControl>
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
+            <MunicipalBoundaryLayer />
             {data.filter(c => c.lat && c.lng).map(c => (
               <Marker key={c.id} position={[Number(c.lat), Number(c.lng)]} icon={shelterIcon(c.status, c.id === selectedId)}
                 eventHandlers={{ click: () => setSelectedId(c.id) }}>
