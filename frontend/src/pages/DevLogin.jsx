@@ -27,9 +27,10 @@ export function DevLogin() {
       setLoading(r.label)
       setError('')
       try {
-        const res = await api.post('/auth/login', { contact_number: r.contact, password: 'password' })
+        const res = await api.post('/auth/login', { contact_number: r.contact, password: 'password', role: r.role })
         login(res.token, res.user)
-        navigate(r.path)
+        const dest = { responder: '/responder', admin: '/admin', superadmin: '/superadmin', victim: '/home' }
+        navigate(dest[res.user.role] ?? r.path)
         return
       } catch (e) {
         setError(e?.error ?? 'Login failed. Check Supabase credentials.')
