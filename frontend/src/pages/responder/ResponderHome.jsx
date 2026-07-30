@@ -55,34 +55,20 @@ export function ResponderHome() {
 
   useEffect(() => {
     if (!navigator.geolocation) return
-    let watchId = null
-    let active = true
-    supabase.auth.getUser().then(({ data: { user: authUser } }) => {
-      if (!active) return
-      const contact = authUser?.user_metadata?.contact_number
-      if (!contact) return
-      supabase.from('responders').select('id').eq('contact_number', contact).single()
-        .then(({ data }) => {
-          if (!active || !data) return
-          responderIdRef.current = data.id
-          setResponderId(data.id)
-          watchId = navigator.geolocation.watchPosition(
-            pos => {
-              supabase.rpc('update_responder_location', {
-                p_contact_number: contact,
-                p_lat: pos.coords.latitude,
-                p_lng: pos.coords.longitude,
-              }).then(() => {})
-            },
-            () => {},
-            { enableHighAccuracy: true, timeout: 10000 }
-          )
-        })
-    })
-    return () => {
-      active = false
-      if (watchId !== null) navigator.geolocation.clearWatch(watchId)
-    }
+    const watchId = navigator.geolocation.watchPosition(
+      pos => {
+        const id = responderIdRef.current
+        if (!id) return
+        supabase.from('responders').update({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          last_seen_at: new Date().toISOString(),
+        }).eq('id', id).then(() => {})
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+    return () => { navigator.geolocation.clearWatch(watchId) }
   }, [])
 
   useEffect(() => {

@@ -165,12 +165,12 @@ export function CommandCenter() {
         payload => {
           const r = payload.new
           if (muni && r.municipality !== muni) return
-          if (r.duty_status === 'on_duty' && r.lat && r.lng) {
+          if (r.duty_status === 'on_duty') {
             setActiveResponders(prev => {
               const idx = prev.findIndex(x => x.id === r.id)
               if (idx === -1) return [...prev, r]
               const next = [...prev]
-              next[idx] = { ...next[idx], lat: r.lat, lng: r.lng, last_seen_at: r.last_seen_at }
+              next[idx] = { ...next[idx], lat: r.lat, lng: r.lng, last_seen_at: r.last_seen_at, duty_status: r.duty_status }
               return next
             })
           } else {
