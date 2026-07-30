@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Phone, Lock, Eye, EyeOff, ChevronRight,
@@ -61,7 +61,8 @@ const slide = (dir) => ({
 
 export function StaffLogin() {
   const navigate = useNavigate()
-  const { login }  = useAuthStore()
+  const { login, logout } = useAuthStore()
+  useEffect(() => { logout() }, [])
   const [step, setStep]             = useState(0)
   const [direction, setDirection]   = useState(1)
   const [selectedRole, setSelected] = useState(null)
