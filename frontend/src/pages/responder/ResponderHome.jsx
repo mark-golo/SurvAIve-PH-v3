@@ -24,13 +24,16 @@ export function ResponderHome() {
   const { scope } = useAuthStore()
   const muni = scope?.municipality
   const [onDuty, setOnDuty] = useState(false)
-  const [assignedCount, setAssignedCount] = useState(0)
-  const [criticalCount, setCriticalCount] = useState(0)
+  const [sosList, setSosList] = useState([])
   const [syncing, setSyncing] = useState(false)
   const [profile, setProfile] = useState(null)
   const [responderId, setResponderId] = useState(null)
   const responderIdRef = useRef(null)
   const stats = mesh.getStats()
+
+  const activeList    = sosList.filter(r => r.rescue_status !== 'rescued')
+  const assignedCount = activeList.length
+  const criticalCount = activeList.filter(r => r.priority === 'CRITICAL').length
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user: authUser } }) => {
@@ -85,15 +88,25 @@ export function ResponderHome() {
   useEffect(() => {
     const url = muni ? `/sos?municipality=${encodeURIComponent(muni)}` : '/sos'
     api.get(url)
-      .then(rows => {
-        setAssignedCount(rows.length)
-        setCriticalCount(rows.filter(r => r.priority === 'CRITICAL').length)
-      })
-      .catch(() => {
-        setAssignedCount(0)
-        setCriticalCount(0)
-      })
+      .then(rows => setSosList(rows))
+      .catch(() => setSosList([]))
   }, [muni])
+
+  useEffect(() => {
+    const ch = supabase.channel('rh-sos-status')
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'sos_reports' },
+        payload => {
+          const r = payload.new
+          if (muni && r.municipality !== muni) return
+          setSosList(prev => prev.map(x =>
+            x.id === r.id ? { ...x, rescue_status: r.rescue_status, priority: r.priority } : x
+          ))
+        }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
 
   const syncNow = async () => {
     setSyncing(true)
