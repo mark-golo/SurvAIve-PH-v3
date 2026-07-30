@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Globe, BarChart2, AlertOctagon, Building2, UserCog, LogOut, Menu } from 'lucide-react'
+import { Globe, BarChart2, AlertOctagon, Building2, UserCog, FileText, LogOut, Menu } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '../../store/auth'
 
@@ -9,6 +9,7 @@ const NAV = [
   { icon: BarChart2,    label: 'Analytics',         path: '/superadmin/analytics'          },
   { icon: AlertOctagon, label: 'Escalations',       path: '/superadmin/escalations'        },
   { icon: UserCog,      label: 'Staff Management',  path: '/superadmin/staff'              },
+  { icon: FileText,     label: 'Emergency Reports', path: '/superadmin/reports'            },
 ]
 
 export function SuperAdminLayout({ children, title }) {

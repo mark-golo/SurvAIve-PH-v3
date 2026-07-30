@@ -31,6 +31,7 @@ import { AdminAnalytics }      from './pages/admin/AdminAnalytics'
 import { RespondersView }      from './pages/admin/RespondersView'
 import { StaffManagement as AdminStaffManagement } from './pages/admin/StaffManagement'
 import { EvacuationCenters } from './pages/admin/EvacuationCenters'
+import { EmergencyOpsReports } from './pages/admin/EmergencyOpsReports'
 
 // Super admin pages
 import { ProvincialDashboard }  from './pages/superadmin/ProvincialDashboard'
@@ -91,6 +92,7 @@ export const router = createBrowserRouter([
       { path: '/admin/responders',    element: <RespondersView /> },
       { path: '/admin/staff',                 element: <AdminStaffManagement /> },
       { path: '/admin/evacuation-centers',   element: <EvacuationCenters /> },
+      { path: '/admin/reports',              element: <EmergencyOpsReports /> },
     ],
   },
 
@@ -103,6 +105,7 @@ export const router = createBrowserRouter([
       { path: '/superadmin/analytics',          element: <ProvincialAnalytics /> },
       { path: '/superadmin/escalations',        element: <EscalationFeed /> },
       { path: '/superadmin/staff',              element: <SuperAdminStaffManagement /> },
+      { path: '/superadmin/reports',            element: <EmergencyOpsReports /> },
     ],
   },
 

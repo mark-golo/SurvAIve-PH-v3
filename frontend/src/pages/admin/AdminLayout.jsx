@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Users, BookUser, ShieldCheck, BarChart2, Radio, UserCog, MapPin, LogOut, Menu, X } from 'lucide-react'
+import { LayoutDashboard, Users, BookUser, ShieldCheck, BarChart2, Radio, UserCog, MapPin, FileText, LogOut, Menu, X } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '../../store/auth'
 
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { icon: Radio,           label: 'Rescue Updates',     path: '/admin/responders'   },
   { icon: UserCog,         label: 'Staff',             path: '/admin/staff'               },
   { icon: MapPin,          label: 'Evacuation Centers', path: '/admin/evacuation-centers'  },
+  { icon: FileText,        label: 'Emergency Reports',  path: '/admin/reports'             },
 ]
 
 export function AdminLayout({ children, title }) {
