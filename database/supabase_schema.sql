@@ -230,6 +230,12 @@ CREATE POLICY "own profile read"
 CREATE POLICY "own profile update"
   ON profiles FOR UPDATE USING (id = auth.uid());
 
+CREATE POLICY "admin update profiles"
+  ON profiles FOR UPDATE
+  USING (
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'superadmin')
+  );
+
 CREATE POLICY "service profile insert"
   ON profiles FOR INSERT WITH CHECK (true);
 
