@@ -114,7 +114,8 @@ CREATE TABLE IF NOT EXISTS sos_reports (
                           CHECK (rescue_status IN ('pending','en_route','on_scene','rescued','cannot_reach')),
   field_notes           TEXT,
   created_at            TIMESTAMPTZ DEFAULT NOW(),
-  synced_at             TIMESTAMPTZ
+  synced_at             TIMESTAMPTZ,
+  dismissed             BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- ── welfare_checks ────────────────────────────────────────────
@@ -436,7 +437,8 @@ RETURNS TABLE (
   vulnerabilities       JSONB,
   household_count       SMALLINT,
   priority              TEXT,
-  minutes_ago           NUMERIC
+  minutes_ago           NUMERIC,
+  dismissed             BOOLEAN
 )
 LANGUAGE sql SECURITY DEFINER AS $$
   SELECT
@@ -448,6 +450,7 @@ LANGUAGE sql SECURITY DEFINER AS $$
     v.contact_number,
     v.vulnerabilities,
     v.household_count,
+    r.dismissed,
     CASE
       WHEN r.ai_priority_score >= 80 THEN 'CRITICAL'
       WHEN r.ai_priority_score >= 60 THEN 'HIGH'

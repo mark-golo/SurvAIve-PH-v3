@@ -138,8 +138,8 @@ export function CommandCenter() {
 
   const dismissReport = (e, id) => {
     e.stopPropagation()
-    setReports(prev => prev.filter(x => x.id !== id))
-    api.delete(`/sos/${id}`).catch(() => {})
+    setReports(prev => prev.map(x => x.id === id ? { ...x, dismissed: true } : x))
+    api.put(`/sos/${id}`, { dismissed: true }).catch(() => {})
   }
 
   const resourceForecast = useMemo(
@@ -396,7 +396,7 @@ export function CommandCenter() {
           <div className="flex-1 overflow-y-auto p-3 min-h-0">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Recent Reports</p>
             <div className="space-y-1.5">
-              {adjustedReports.map(r => {
+              {adjustedReports.filter(r => !r.dismissed).map(r => {
                 const isSelected = selectedSOS && r.lat === selectedSOS[0] && r.lng === selectedSOS[1]
                 const isRescued  = r.rescue_status === 'rescued'
                 const dotColor   = isRescued ? '#22c55e' : COLORS[r.priority]
