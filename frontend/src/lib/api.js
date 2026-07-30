@@ -203,6 +203,11 @@ async function post(path, body = {}) {
         }
       }
 
+      if (body.role && body.role !== 'victim' && userInfo.role !== body.role) {
+        await supabase.auth.signOut().catch(() => {})
+        throwErr('Invalid credentials. Please try again.', 401)
+      }
+
       return { token: data.session.access_token, user: userInfo }
     }
 
