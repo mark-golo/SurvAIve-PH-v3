@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { Users, AlertTriangle, CheckCircle, Radio, RefreshCw, Shield } from 'lucide-react'
+import { Users, AlertTriangle, CheckCircle, Radio, RefreshCw, Shield, X } from 'lucide-react'
 import { AdminLayout } from './AdminLayout'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { StatCard } from '../../components/ui/StatCard'
@@ -97,7 +97,7 @@ function FlyTo({ pos }) {
 
 export function CommandCenter() {
   const { scope } = useAuthStore()
-  const [stats, setStats] = useState({ total: 0, critical: 0, rescued: 0, nodes: 0, unverified: 0 })
+  const [stats, setStats] = useState({ total: 0, critical: 0, rescued: 0, nodes: 0 })
   const [syncing, setSyncing] = useState(false)
   const [reports, setReports] = useState([])
   const [centers, setCenters] = useState([])
@@ -135,6 +135,12 @@ export function CommandCenter() {
 
   const criticalCount = adjustedReports.filter(r => r.priority === 'CRITICAL' && r.rescue_status !== 'rescued').length
   const rescuedCount  = reports.filter(r => r.rescue_status === 'rescued').length
+
+  const dismissReport = (e, id) => {
+    e.stopPropagation()
+    setReports(prev => prev.filter(x => x.id !== id))
+    api.delete(`/sos/${id}`).catch(() => {})
+  }
 
   const resourceForecast = useMemo(
     () => predictDepletion(adjustedReports, activeResponders),
@@ -204,7 +210,6 @@ export function CommandCenter() {
         critical: res.filter(r => r.priority === 'CRITICAL').length,
         rescued: res.filter(r => r.rescue_status === 'rescued').length,
         nodes: prev.nodes,
-        unverified: res.filter(r => !r.is_verified).length,
       }))
     } catch (err) {
       console.error('[CommandCenter] SOS fetch failed:', err)
@@ -412,7 +417,18 @@ export function CommandCenter() {
                       <p className="text-[10px] text-slate-500">{r.barangay}</p>
                     </div>
                     {isRescued
-                      ? <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(34,197,94,0.15)] border border-[rgba(34,197,94,0.3)] text-[#22c55e] font-semibold">Rescued</span>
+                      ? (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(34,197,94,0.15)] border border-[rgba(34,197,94,0.3)] text-[#22c55e] font-semibold">Rescued</span>
+                          <button
+                            onClick={(e) => dismissReport(e, r.id)}
+                            className="w-4 h-4 rounded flex items-center justify-center text-slate-500 hover:text-[#ef4444] hover:bg-[rgba(239,68,68,0.1)] transition-colors"
+                            title="Remove"
+                          >
+                            <X size={10} />
+                          </button>
+                        </div>
+                      )
                       : <StatusBadge status={r.priority} className="shrink-0 text-[9px] !py-0.5 !px-1.5" />
                     }
                   </div>
@@ -421,21 +437,7 @@ export function CommandCenter() {
             </div>
           </div>
 
-          {/* 5 — Unverified Reports */}
-          <div className="p-3 border-t border-[rgba(255,255,255,0.08)]">
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Unverified Reports</p>
-              <span className="text-xs font-black text-[#f59e0b]">{stats.unverified}</span>
-            </div>
-            <div className="mt-1.5 flex items-center gap-1.5">
-              <div className="h-1.5 rounded-full flex-1 bg-slate-700">
-                <div className="h-full rounded-full bg-[#f59e0b]" style={{ width: stats.total ? `${(stats.unverified / stats.total) * 100}%` : '0%' }} />
-              </div>
-              <span className="text-[10px] text-slate-500">{stats.total ? Math.round((stats.unverified / stats.total) * 100) : 0}% guest</span>
-            </div>
-          </div>
-
-          {/* 6 — Map Legend */}
+          {/* 5 — Map Legend */}
           <div className="p-3 border-t border-[rgba(255,255,255,0.08)]">
             <div className="flex flex-wrap gap-2.5">
               <div className="flex items-center gap-1.5">
