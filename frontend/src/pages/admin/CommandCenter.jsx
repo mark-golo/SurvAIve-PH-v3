@@ -230,8 +230,8 @@ export function CommandCenter() {
           >
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
             {selectedSOS && <FlyTo pos={selectedSOS} />}
-            {adjustedReports.filter(r => r.lat && r.lng).map(r => (
-              <Marker key={r.id} position={[r.lat, r.lng]} icon={pinIcon(r.rescue_status === 'rescued' ? '#22c55e' : COLORS[r.priority], r.is_verified ?? r.verified)}>
+            {adjustedReports.filter(r => r.lat && r.lng && r.rescue_status !== 'rescued').map(r => (
+              <Marker key={r.id} position={[r.lat, r.lng]} icon={pinIcon(COLORS[r.priority], r.is_verified ?? r.verified)}>
                 <Popup>
                   <div className="bg-[#0f172a] text-white text-xs p-3 rounded-xl min-w-[160px]">
                     <div className="flex items-center gap-2 mb-1">
