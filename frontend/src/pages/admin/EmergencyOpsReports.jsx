@@ -101,7 +101,7 @@ function AARReport({ muni, prov, fromDate, toDate }) {
         .select('id, barangay, rescue_status, ai_priority_score, people_count')
         .gte('created_at', fromDate + 'T00:00:00')
         .lte('created_at', toDate + 'T23:59:59')
-      if (muni) q = q.eq('municipality', muni)
+      if (muni) q = q.or(`municipality.eq.${muni},municipality.is.null`)
       else if (prov) q = q.eq('province', prov)
       const { data: rows } = await q
 
@@ -237,7 +237,7 @@ function DailyReport({ muni, prov, fromDate }) {
 
       let sosQ = supabase.from('sos_reports').select('id, rescue_status')
         .gte('created_at', dayStart).lte('created_at', dayEnd)
-      if (muni) sosQ = sosQ.eq('municipality', muni)
+      if (muni) sosQ = sosQ.or(`municipality.eq.${muni},municipality.is.null`)
       else if (prov) sosQ = sosQ.eq('province', prov)
 
       let wcQ = supabase.from('welfare_checks').select('id', { count: 'exact', head: true })
@@ -416,7 +416,7 @@ function RespondersReport({ muni, prov, fromDate, toDate }) {
         .not('assigned_responder_id', 'is', null)
         .gte('created_at', fromDate + 'T00:00:00')
         .lte('created_at', toDate + 'T23:59:59')
-      if (muni) sosQ = sosQ.eq('municipality', muni)
+      if (muni) sosQ = sosQ.or(`municipality.eq.${muni},municipality.is.null`)
       else if (prov) sosQ = sosQ.eq('province', prov)
 
       const [rRes, sosRes] = await Promise.all([rQ, sosQ])
@@ -603,7 +603,7 @@ function AIReport({ muni, prov, fromDate, toDate }) {
         .gte('created_at', fromDate + 'T00:00:00')
         .lte('created_at', toDate + 'T23:59:59')
         .not('ai_priority_score', 'is', null)
-      if (muni) q = q.eq('municipality', muni)
+      if (muni) q = q.or(`municipality.eq.${muni},municipality.is.null`)
       else if (prov) q = q.eq('province', prov)
       const { data: rows } = await q
 
