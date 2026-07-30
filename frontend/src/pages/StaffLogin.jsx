@@ -105,6 +105,7 @@ export function StaffLogin() {
       const res = await api.post('/auth/login', {
         contact_number: contact.replace(/\D/g, ''),
         password,
+        role: selectedRole.key,
       })
       const scope = {
         province,

@@ -11,14 +11,20 @@ if ($method !== 'POST') errorResponse('Method not allowed', 405);
 
 $db = getDB();
 
-$candidates = [
-  ['superadmin', "SELECT id, name, password_hash, status, province, NULL AS municipality
-                  FROM superadmins WHERE (contact_number=? OR gmail=?) AND status='active' LIMIT 1"],
-  ['admin',      "SELECT id, name, password_hash, status, province, municipality
-                  FROM admins WHERE (contact_number=? OR gmail=?) AND status='active' LIMIT 1"],
-  ['responder',  "SELECT id, name, password_hash, status, province, municipality
-                  FROM responders WHERE (contact_number=? OR gmail=?) AND status='active' LIMIT 1"],
+$reqRole = $body['role'] ?? '';
+
+$allCandidates = [
+  'superadmin' => ['superadmin', "SELECT id, name, password_hash, status, province, NULL AS municipality
+                                  FROM superadmins WHERE (contact_number=? OR gmail=?) AND status='active' LIMIT 1"],
+  'admin'      => ['admin',      "SELECT id, name, password_hash, status, province, municipality
+                                  FROM admins WHERE (contact_number=? OR gmail=?) AND status='active' LIMIT 1"],
+  'responder'  => ['responder',  "SELECT id, name, password_hash, status, province, municipality
+                                  FROM responders WHERE (contact_number=? OR gmail=?) AND status='active' LIMIT 1"],
 ];
+
+$candidates = isset($allCandidates[$reqRole])
+  ? [$allCandidates[$reqRole]]
+  : array_values($allCandidates);
 
 $user = null;
 $role = null;
