@@ -468,6 +468,30 @@ LANGUAGE sql SECURITY DEFINER AS $$
 $$;
 
 -- ============================================================
+-- TRIGGER: sync sos rescue_status → victims.status
+-- When a responder marks an SOS as rescued, victims.status is kept in sync
+-- so that Constituents and Victim Management report show the correct status.
+-- Guest SOS reports (user_id IS NULL) are skipped — no victims row to update.
+-- ============================================================
+CREATE OR REPLACE FUNCTION sync_rescue_to_victim_status()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  IF NEW.rescue_status = 'rescued'
+     AND (OLD.rescue_status IS DISTINCT FROM 'rescued')
+     AND NEW.user_id IS NOT NULL
+  THEN
+    UPDATE victims SET status = 'rescued' WHERE id = NEW.user_id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS tr_sync_rescue_to_victim ON sos_reports;
+CREATE TRIGGER tr_sync_rescue_to_victim
+  AFTER UPDATE ON sos_reports
+  FOR EACH ROW EXECUTE FUNCTION sync_rescue_to_victim_status();
+
+-- ============================================================
 -- TRIGGER: sync role → app_metadata on user creation
 -- app_metadata is server-only (unlike user_metadata which users can self-edit).
 -- This trigger ensures all new auth users get their role in the tamper-proof field.
