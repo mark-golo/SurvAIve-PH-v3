@@ -4,6 +4,7 @@ import { AdminLayout } from './AdminLayout'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassCard } from '../../components/ui/GlassCard'
 import api from '../../lib/api'
+import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 
 const todayKey = (muni) => `welfare_${muni ?? 'all'}_${new Date().toISOString().slice(0, 10)}`
@@ -27,14 +28,24 @@ export function SafetyVerification() {
   const [noReport, setNoReport] = useState([])
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(new Set())
-  const [checkedIds, setCheckedIds] = useState(() => loadChecked(scope?.municipality))
+  const [checkedIds, setCheckedIds] = useState(new Set())
 
   useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10)
     const q = muni ? `?municipality=${encodeURIComponent(muni)}` : ''
+
     Promise.all([
       api.get(`/sos${q}`),
       api.get(`/constituents${q}`),
-    ]).then(([sos, victims]) => {
+      supabase
+        .from('welfare_checks')
+        .select('victim_id')
+        .eq('check_date', today)
+        .then(({ data }) => data ?? []),
+    ]).then(([sos, victims, wc]) => {
+      const fresh = new Set(wc.map(r => r.victim_id))
+      setCheckedIds(fresh)
+
       const sosContactSet = new Set(sos.map(s => s.contact_number).filter(Boolean))
       setReported(sos.map(s => ({
         id:        s.id,
@@ -51,21 +62,26 @@ export function SafetyVerification() {
           barangay:      v.barangay ?? '—',
           contact:       v.contact_number ?? '—',
           vulnerability: (v.vulnerabilities ?? []).join(', '),
-          accounted:     checkedIds.has(v.id),
+          accounted:     fresh.has(v.id),
         }))
       )
     })
     .catch(() => { setReported([]); setNoReport([]) })
     .finally(() => setLoading(false))
-  }, [])
+  }, [muni])
 
   const total     = reported.length + noReport.length
   const accounted = reported.filter(r => r.accounted).length + noReport.filter(r => r.accounted).length
 
   const markAccounted = async (id, fromNoReport = false) => {
     if (fromNoReport) {
+      const today = new Date().toISOString().slice(0, 10)
       setCheckedIds(prev => saveChecked(muni, id, prev))
       setNoReport(d => d.map(r => r.id === id ? { ...r, accounted: true } : r))
+      supabase
+        .from('welfare_checks')
+        .upsert({ victim_id: id, municipality: muni ?? null, check_date: today }, { onConflict: 'victim_id,check_date' })
+        .then(() => {})
     } else {
       setSaving(s => { const n = new Set(s); n.add(id); return n })
       try {

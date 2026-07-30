@@ -117,6 +117,15 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   synced_at             TIMESTAMPTZ
 );
 
+-- ── welfare_checks ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS welfare_checks (
+  id           BIGSERIAL PRIMARY KEY,
+  victim_id    BIGINT NOT NULL REFERENCES victims(id) ON DELETE CASCADE,
+  municipality TEXT,
+  check_date   DATE NOT NULL DEFAULT CURRENT_DATE,
+  UNIQUE(victim_id, check_date)
+);
+
 -- ── evacuation_centers ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS evacuation_centers (
   id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -301,6 +310,15 @@ CREATE POLICY "staff delete victims"
   USING (
     (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin')
   );
+
+-- ── welfare_checks policies ──────────────────────────────────
+ALTER TABLE welfare_checks ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "authenticated can manage welfare checks"
+  ON welfare_checks FOR ALL
+  TO authenticated
+  USING (true)
+  WITH CHECK (true);
 
 -- ── responders policies ───────────────────────────────────────
 CREATE POLICY "staff read responders"
