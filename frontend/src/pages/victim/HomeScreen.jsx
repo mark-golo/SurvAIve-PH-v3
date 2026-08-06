@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Map, Radio, Settings, MessageSquare, Battery, Satellite, Home, Wifi, WifiOff } from 'lucide-react'
+import { Map, Radio, Settings, MessageSquare, Battery, Satellite, Home, Wifi, WifiOff, HeartPulse, AlertOctagon, ShieldCheck } from 'lucide-react'
 import { SOSButton } from '../../components/ui/SOSButton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { MobileNavBar } from '../../components/ui/NavBar'
@@ -10,9 +10,9 @@ import { autoSOS } from '../../lib/autoSOS'
 import { useState, useEffect } from 'react'
 
 const STATUS_OPTIONS = [
-  { label: 'Injured',  color: '#ef4444', icon: '🤕', value: 'injured' },
-  { label: 'Trapped',  color: '#f97316', icon: '🆘', value: 'trapped' },
-  { label: 'Safe',     color: '#22c55e', icon: '✅', value: 'safe'    },
+  { label: 'Injured', colorFrom: 'rgb(239,68,68)',  colorTo: 'rgb(185,28,28)',  Icon: HeartPulse,   value: 'injured' },
+  { label: 'Trapped', colorFrom: 'rgb(249,115,22)', colorTo: 'rgb(194,65,12)',  Icon: AlertOctagon, value: 'trapped' },
+  { label: 'Safe',    colorFrom: 'rgb(34,197,94)',  colorTo: 'rgb(21,128,61)',  Icon: ShieldCheck,  value: 'safe'    },
 ]
 
 const NAV = [
@@ -135,12 +135,18 @@ export function HomeScreen() {
                 onClick={() => setQuickStatus(s.value)}
                 className={`glass rounded-xl py-3 flex flex-col items-center gap-1.5 transition-all border ${
                   quickStatus === s.value
-                    ? `border-[${s.color}] bg-[${s.color}15] shadow-[0_0_12px_${s.color}30]`
+                    ? 'border-white/20'
                     : 'border-[rgba(255,255,255,0.08)] hover:border-[rgba(255,255,255,0.2)]'
                 }`}
+                style={quickStatus === s.value ? { boxShadow: `0 0 14px ${s.colorFrom}50` } : {}}
               >
-                <span className="text-xl">{s.icon}</span>
-                <span className="text-xs font-medium" style={{ color: quickStatus === s.value ? s.color : '#94a3b8' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center"
+                  style={{ background: `linear-gradient(135deg, ${s.colorFrom}, ${s.colorTo})` }}
+                >
+                  <s.Icon size={20} color="white" strokeWidth={2.5} />
+                </div>
+                <span className="text-xs font-medium" style={{ color: quickStatus === s.value ? s.colorFrom : '#94a3b8' }}>
                   {s.label}
                 </span>
               </button>
