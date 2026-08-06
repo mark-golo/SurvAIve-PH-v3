@@ -155,7 +155,7 @@ function AARReport({ muni, prov, fromDate, toDate }) {
   }
 
   if (!data && !loading) return (
-    <button onClick={load} className="flex items-center gap-2 text-xs text-[#00d4ff] hover:underline mt-2">
+    <button onClick={load} className="flex items-center gap-2 text-xs font-semibold bg-gradient-to-r from-[#00d4ff] to-[#0ea5e9] text-white rounded-lg px-4 py-2 hover:opacity-90 active:scale-95 transition-all shadow-[0_0_12px_rgba(0,212,255,0.35)] mt-2">
       <RefreshCw size={12} /> Generate Report
     </button>
   )
@@ -286,7 +286,7 @@ function DailyReport({ muni, prov, fromDate }) {
   }
 
   if (!data && !loading) return (
-    <button onClick={load} className="flex items-center gap-2 text-xs text-[#00d4ff] hover:underline mt-2">
+    <button onClick={load} className="flex items-center gap-2 text-xs font-semibold bg-gradient-to-r from-[#00d4ff] to-[#0ea5e9] text-white rounded-lg px-4 py-2 hover:opacity-90 active:scale-95 transition-all shadow-[0_0_12px_rgba(0,212,255,0.35)] mt-2">
       <RefreshCw size={12} /> Generate Report
     </button>
   )
@@ -358,7 +358,7 @@ function VictimsReport({ muni, prov, fromDate, toDate }) {
   }
 
   if (!data && !loading) return (
-    <button onClick={load} className="flex items-center gap-2 text-xs text-[#00d4ff] hover:underline mt-2">
+    <button onClick={load} className="flex items-center gap-2 text-xs font-semibold bg-gradient-to-r from-[#00d4ff] to-[#0ea5e9] text-white rounded-lg px-4 py-2 hover:opacity-90 active:scale-95 transition-all shadow-[0_0_12px_rgba(0,212,255,0.35)] mt-2">
       <RefreshCw size={12} /> Generate Report
     </button>
   )
@@ -451,7 +451,7 @@ function RespondersReport({ muni, prov, fromDate, toDate }) {
   }
 
   if (!data && !loading) return (
-    <button onClick={load} className="flex items-center gap-2 text-xs text-[#00d4ff] hover:underline mt-2">
+    <button onClick={load} className="flex items-center gap-2 text-xs font-semibold bg-gradient-to-r from-[#00d4ff] to-[#0ea5e9] text-white rounded-lg px-4 py-2 hover:opacity-90 active:scale-95 transition-all shadow-[0_0_12px_rgba(0,212,255,0.35)] mt-2">
       <RefreshCw size={12} /> Generate Report
     </button>
   )
@@ -545,7 +545,7 @@ function WelfareReport({ muni, prov, fromDate, toDate }) {
   }
 
   if (!data && !loading) return (
-    <button onClick={load} className="flex items-center gap-2 text-xs text-[#00d4ff] hover:underline mt-2">
+    <button onClick={load} className="flex items-center gap-2 text-xs font-semibold bg-gradient-to-r from-[#00d4ff] to-[#0ea5e9] text-white rounded-lg px-4 py-2 hover:opacity-90 active:scale-95 transition-all shadow-[0_0_12px_rgba(0,212,255,0.35)] mt-2">
       <RefreshCw size={12} /> Generate Report
     </button>
   )
@@ -634,7 +634,7 @@ function AIReport({ muni, prov, fromDate, toDate }) {
   }
 
   if (!data && !loading) return (
-    <button onClick={load} className="flex items-center gap-2 text-xs text-[#00d4ff] hover:underline mt-2">
+    <button onClick={load} className="flex items-center gap-2 text-xs font-semibold bg-gradient-to-r from-[#00d4ff] to-[#0ea5e9] text-white rounded-lg px-4 py-2 hover:opacity-90 active:scale-95 transition-all shadow-[0_0_12px_rgba(0,212,255,0.35)] mt-2">
       <RefreshCw size={12} /> Generate Report
     </button>
   )
