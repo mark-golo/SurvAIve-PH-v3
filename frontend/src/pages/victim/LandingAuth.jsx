@@ -36,7 +36,9 @@ export function LandingAuth() {
           <h1 className="text-3xl font-black text-white tracking-tight mb-1">
             Surv<span className="text-[#00d4ff]">AI</span>ve PH
           </h1>
-          <p className="text-sm text-slate-400">AI-Powered Emergency Response</p>
+          <p className="text-xs text-slate-400 leading-relaxed text-center px-2">
+            AI-Powered Mesh-Based Disaster Response and Victim Rescue System for Typhoon-Prone Areas
+          </p>
           <div className="flex justify-center mt-3">
             <FeatureIcons />
           </div>
@@ -133,11 +135,6 @@ export function LandingAuth() {
             <span className="text-slate-400 font-medium">Guest SOS</span> works offline but has lower trust score.
           </p>
         </motion.div>
-
-        <p className="text-center text-[10px] text-slate-600 mt-6">
-          SurvAIve PH · AI-Powered Mesh Emergency Response<br />
-          Works offline via Bluetooth &amp; Wi-Fi Direct mesh
-        </p>
 
         <div className="mt-4 text-center">
           <button
