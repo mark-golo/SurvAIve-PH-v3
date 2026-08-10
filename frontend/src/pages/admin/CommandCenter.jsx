@@ -7,7 +7,7 @@ import { AdminLayout } from './AdminLayout'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { StatCard } from '../../components/ui/StatCard'
 import { NeonButton } from '../../components/ui/NeonButton'
-import api from '../../lib/api'
+import api, { localFetch } from '../../lib/api'
 import { db } from '../../lib/db'
 import { useAuthStore } from '../../store/auth'
 import { supabase } from '../../lib/supabase'
@@ -229,6 +229,12 @@ export function CommandCenter() {
       // Cache to IndexedDB for offline use; persist timestamp
       await db.cacheReports(res)
       localStorage.setItem('cc-snapshot-ts', String(Date.now()))
+      // Silently mirror SOS records into local MySQL so the offline dashboard
+      // shows real Supabase data when there is no internet connection.
+      localFetch('sync?action=sos', {
+        method: 'POST',
+        body: JSON.stringify({ records: res }),
+      }).catch(() => {}) // fire-and-forget — XAMPP may not be running
       setOfflineMode(false)
       setSnapshotAge(null)
     } catch (err) {

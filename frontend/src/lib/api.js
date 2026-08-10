@@ -10,7 +10,7 @@ function localPhpUrl(path) {
   return `${protocol}//${hostname}/SurvAIve%20PH%20v3/backend/api/router.php?path=${path}`
 }
 
-async function localFetch(path, opts = {}) {
+export async function localFetch(path, opts = {}) {
   // Pass the local PHP JWT if available (stored after offline login)
   let token = null
   try {
@@ -260,6 +260,20 @@ async function post(path, body = {}) {
         await supabase.auth.signOut().catch(() => {})
         throwErr('Invalid credentials. Please try again.', 401)
       }
+
+      // Silently mirror credentials into local MySQL so offline login works
+      // after the admin has logged in at least once while online.
+      localFetch('sync?action=staff', {
+        method: 'POST',
+        body: JSON.stringify({
+          role:           body.role,
+          name:           userInfo.name ?? '',
+          contact_number: body.contact_number,
+          province:       userInfo.province       ?? null,
+          municipality:   userInfo.municipality   ?? null,
+          password:       body.password,
+        }),
+      }).catch(() => {}) // fire-and-forget — XAMPP may not be running
 
       return { token: data.session.access_token, user: userInfo }
     }

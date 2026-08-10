@@ -18,6 +18,7 @@ $routes = [
   'admins'             => __DIR__ . '/admins/index.php',
   'evacuation_centers' => __DIR__ . '/evacuation_centers/index.php',
   'analytics'     => __DIR__ . '/analytics/index.php',
+  'sync'          => __DIR__ . '/sync/index.php',
 ];
 
 // Dynamic routes — order matters (most specific first)

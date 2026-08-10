@@ -123,28 +123,8 @@ CREATE TABLE IF NOT EXISTS evacuation_centers (
 ) ENGINE=InnoDB;
 
 -- ============================================================
---  SEED: Insert admin account for offline login
---  Password: Admin@123  (bcrypt hash — change before deployment)
--- ============================================================
-INSERT IGNORE INTO admins (name, contact_number, password_hash, province, municipality, status)
-VALUES (
-  'DRRM Admin',
-  '09170000000',
-  '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',  -- password: password
-  'Surigao del Norte',
-  'General Luna',
-  'active'
-);
-
--- ============================================================
---  IMPORTANT NEXT STEPS
---
---  1. Replace the seed password hash above with the real admin's
---     bcrypt hash. Generate it in PHP:
---       echo password_hash('YourPassword', PASSWORD_DEFAULT);
---
---  2. When internet returns, sync local sos_reports to Supabase:
---       SELECT * FROM sos_reports WHERE synced_to_cloud = 0;
---     Then INSERT those rows into Supabase and mark synced:
---       UPDATE sos_reports SET synced_to_cloud = 1 WHERE id IN (...);
+--  Staff credentials and SOS records are synced automatically
+--  into these tables by the frontend on every successful online
+--  login and every Command Center data fetch.
+--  No manual seed data is needed.
 -- ============================================================
