@@ -1,6 +1,39 @@
 // Supabase compatibility wrapper — maps old PHP URL patterns to Supabase calls
 import { supabase, signupClient } from './supabase'
 
+// ── Local PHP backend (XAMPP) ── used in offline / Wi-Fi hotspot mode ─────────
+// Resolves to http://<host>/SurvAIve%20PH%20v3/backend/api/router.php?path=
+// Works from localhost (dev), from XAMPP-served build, and from hotspot clients
+// because the host matches wherever the page was served from.
+function localPhpUrl(path) {
+  const { protocol, hostname } = window.location
+  return `${protocol}//${hostname}/SurvAIve%20PH%20v3/backend/api/router.php?path=${path}`
+}
+
+async function localFetch(path, opts = {}) {
+  // Pass the local PHP JWT if available (stored after offline login)
+  let token = null
+  try {
+    const stored = JSON.parse(localStorage.getItem('survAIve-auth') ?? '{}')
+    token = stored?.state?.token ?? null
+  } catch { /* ignore */ }
+
+  const res = await fetch(localPhpUrl(path), {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(opts.headers ?? {}),
+    },
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const msg = json.error ?? `Local request failed (${res.status})`
+    throw Object.assign(new Error(msg), { error: msg, status: res.status })
+  }
+  return json
+}
+
 const TABLE = {
   evacuation_centers: 'evacuation_centers',
   sos:                'sos_reports',
@@ -108,6 +141,13 @@ function sbThrow(error) {
 async function get(path) {
   const { resource, id, table, params } = parsePath(path)
 
+  // ── Offline: route SOS reads to local XAMPP PHP backend ──
+  if (!navigator.onLine && resource === 'sos') {
+    const qs = params.toString()
+    const rows = await localFetch(`sos${qs ? '?' + qs : ''}`)
+    return (Array.isArray(rows) ? rows : [rows]).map(normalizeSos)
+  }
+
   // ── SOS ──
   if (resource === 'sos') {
     const muni = params.get('municipality') || null
@@ -178,6 +218,19 @@ async function post(path, body = {}) {
     const action = path.replace(/\?.*/, '').split('/')[2]
 
     if (action === 'login') {
+      // ── Offline login: authenticate against local XAMPP MySQL ──
+      if (!navigator.onLine) {
+        const data = await localFetch('auth/login', {
+          method: 'POST',
+          body: JSON.stringify({
+            contact_number: body.contact_number,
+            password:       body.password,
+            role:           body.role,
+          }),
+        })
+        return { token: data.token, user: { ...data.user, role: data.user.role } }
+      }
+
       const email = body.role === 'victim'
         ? `${body.contact_number}@internal.survaive.ph`
         : `${body.contact_number}@survAIve.ph`
@@ -334,6 +387,11 @@ async function post(path, body = {}) {
 
   // ── SOS submit ──
   if (resource === 'sos') {
+    // Offline: POST directly to local XAMPP (victim on admin's Wi-Fi hotspot)
+    if (!navigator.onLine) {
+      return localFetch('sos', { method: 'POST', body: JSON.stringify(body) })
+    }
+
     const score = calcPriorityScore(body)
     const { error } = await supabase
       .from('sos_reports')

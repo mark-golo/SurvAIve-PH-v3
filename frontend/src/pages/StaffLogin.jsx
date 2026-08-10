@@ -61,8 +61,17 @@ const slide = (dir) => ({
 
 export function StaffLogin() {
   const navigate = useNavigate()
-  const { login, logout } = useAuthStore()
-  useEffect(() => { logout() }, [])
+  const { login, logout, isAuthenticated, role } = useAuthStore()
+
+  // If offline and already logged in, skip the login form — go straight to the dashboard
+  // (prevents auto-logout from wiping a valid cached session during disasters)
+  useEffect(() => {
+    if (!navigator.onLine && isAuthenticated()) {
+      navigate(ROLE_PATHS[role] ?? '/')
+      return
+    }
+    logout()
+  }, [])
   const [step, setStep]             = useState(0)
   const [direction, setDirection]   = useState(1)
   const [selectedRole, setSelected] = useState(null)

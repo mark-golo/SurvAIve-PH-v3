@@ -2,12 +2,13 @@ import { useState, useEffect, useMemo } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { Users, AlertTriangle, CheckCircle, Radio, RefreshCw, Shield, X } from 'lucide-react'
+import { Users, AlertTriangle, CheckCircle, Radio, RefreshCw, Shield, X, WifiOff } from 'lucide-react'
 import { AdminLayout } from './AdminLayout'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { StatCard } from '../../components/ui/StatCard'
 import { NeonButton } from '../../components/ui/NeonButton'
 import api from '../../lib/api'
+import { db } from '../../lib/db'
 import { useAuthStore } from '../../store/auth'
 import { supabase } from '../../lib/supabase'
 import { fetchWeather, getWeatherLabel } from '../../lib/weatherService'
@@ -105,6 +106,8 @@ export function CommandCenter() {
   const [selectedSOS, setSelectedSOS] = useState(null)
   const [weather, setWeather] = useState(null)
   const [weatherError, setWeatherError] = useState(false)
+  const [offlineMode, setOfflineMode] = useState(!navigator.onLine)
+  const [snapshotAge, setSnapshotAge] = useState(null)
 
   const muni = scope?.municipality
   const muniGeo   = muni ? (MUNICIPALITY_CENTERS[muni] ?? null) : null
@@ -200,6 +203,18 @@ export function CommandCenter() {
 
   useEffect(() => { sync() }, [])
 
+  // Track online/offline transitions and auto-sync when connectivity returns
+  useEffect(() => {
+    const goOnline  = () => { setOfflineMode(false); sync() }
+    const goOffline = () => setOfflineMode(true)
+    window.addEventListener('online',  goOnline)
+    window.addEventListener('offline', goOffline)
+    return () => {
+      window.removeEventListener('online',  goOnline)
+      window.removeEventListener('offline', goOffline)
+    }
+  }, [])
+
   const sync = async () => {
     setSyncing(true)
     try {
@@ -211,14 +226,58 @@ export function CommandCenter() {
         rescued: res.filter(r => r.rescue_status === 'rescued').length,
         nodes: prev.nodes,
       }))
+      // Cache to IndexedDB for offline use; persist timestamp
+      await db.cacheReports(res)
+      localStorage.setItem('cc-snapshot-ts', String(Date.now()))
+      setOfflineMode(false)
+      setSnapshotAge(null)
     } catch (err) {
-      console.error('[CommandCenter] SOS fetch failed:', err)
+      console.error('[CommandCenter] SOS fetch failed — loading offline cache:', err)
+      // Fall back to IndexedDB snapshot
+      try {
+        const cached = await db.getCachedReports()
+        if (cached.length) {
+          setReports(cached)
+          setStats(prev => ({
+            total: cached.length,
+            critical: cached.filter(r => r.priority === 'CRITICAL').length,
+            rescued: cached.filter(r => r.rescue_status === 'rescued').length,
+            nodes: prev.nodes,
+          }))
+          const ts = Number(localStorage.getItem('cc-snapshot-ts') ?? 0)
+          setSnapshotAge(ts || null)
+          setOfflineMode(true)
+        }
+      } catch { /* no cache available */ }
     }
     setSyncing(false)
   }
 
+  const snapshotLabel = snapshotAge
+    ? (() => {
+        const mins = Math.round((Date.now() - snapshotAge) / 60000)
+        return mins < 1 ? 'just now' : mins < 60 ? `${mins}m ago` : `${Math.round(mins / 60)}h ago`
+      })()
+    : null
+
   return (
     <AdminLayout title="Command Center">
+      {/* Offline / local-server banner */}
+      {offlineMode && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-xs text-amber-400">
+          <WifiOff size={13} className="shrink-0" />
+          <span>
+            Offline mode — receiving data via local mesh network.
+            {snapshotLabel && <> Snapshot from <strong>{snapshotLabel}</strong>.</>}
+          </span>
+          <button
+            onClick={sync}
+            className="ml-auto flex items-center gap-1 text-amber-300 hover:text-white transition-colors"
+          >
+            <RefreshCw size={11} /> Retry
+          </button>
+        </div>
+      )}
       <div className="flex flex-col lg:flex-row h-[calc(100vh-56px)]">
         {/* Map — main content */}
         <div className="flex-1 min-h-[400px]">

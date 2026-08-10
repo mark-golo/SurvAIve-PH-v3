@@ -56,7 +56,26 @@ export function SOSReport() {
     window.addEventListener('online', handler)
     window.addEventListener('offline', handler)
     setVoiceSupported(!!(window.SpeechRecognition || window.webkitSpeechRecognition))
-    return () => { window.removeEventListener('online', handler); window.removeEventListener('offline', handler) }
+
+    // Sync drain — flush queued offline SOS reports when internet returns
+    const drainQueue = async () => {
+      try {
+        const pending = await db.getPendingSOS()
+        for (const item of pending) {
+          try {
+            const res = await api.post('/sos', item)
+            await db.markSOSSynced(item.localId, res?.id ?? null)
+          } catch { /* keep in queue if upload fails */ }
+        }
+      } catch { /* ignore drain errors */ }
+    }
+    window.addEventListener('online', drainQueue)
+
+    return () => {
+      window.removeEventListener('online', handler)
+      window.removeEventListener('offline', handler)
+      window.removeEventListener('online', drainQueue)
+    }
   }, [])
 
   const f = (k) => (v) => setForm(p => ({ ...p, [k]: typeof v === 'function' ? v(p[k]) : v }))
