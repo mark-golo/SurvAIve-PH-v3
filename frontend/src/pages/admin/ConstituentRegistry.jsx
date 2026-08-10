@@ -4,7 +4,7 @@ import { AdminLayout } from './AdminLayout'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassInput, GlassSelect } from '../../components/ui/GlassInput'
 import { GlassCard } from '../../components/ui/GlassCard'
-import api from '../../lib/api'
+import api, { localFetch } from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 import { getBarangays } from '../../lib/philippineLocations'
 
@@ -30,17 +30,24 @@ export function ConstituentRegistry() {
   const muni = scope?.municipality
   useEffect(() => {
     api.get(muni ? `/constituents?municipality=${encodeURIComponent(muni)}` : '/constituents')
-      .then(rows => setData(rows.map(r => ({
-        id: r.id,
-        name: r.name,
-        contact: r.contact_number,
-        barangay: r.barangay,
-        household: r.household_count,
-        status: r.status,
-        verified: !!r.is_verified,
-        vulnerabilities: r.vulnerabilities ?? [],
-        account_status: r.account_status,   // null | 'active' | 'inactive'
-      }))))
+      .then(rows => {
+        setData(rows.map(r => ({
+          id: r.id,
+          name: r.name,
+          contact: r.contact_number,
+          barangay: r.barangay,
+          household: r.household_count,
+          status: r.status,
+          verified: !!r.is_verified,
+          vulnerabilities: r.vulnerabilities ?? [],
+          account_status: r.account_status,   // null | 'active' | 'inactive'
+        })))
+        // Mirror victims to MySQL so the Constituent Registry works offline
+        localFetch('sync?action=victims', {
+          method: 'POST',
+          body: JSON.stringify({ records: rows }),
+        }).catch(() => {})
+      })
       .catch(() => setData([]))
       .finally(() => setLoading(false))
   }, [])

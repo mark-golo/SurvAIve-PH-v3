@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { FileText, Printer, RefreshCw } from 'lucide-react'
+import { FileText, Printer, RefreshCw, WifiOff } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie, Legend,
@@ -699,6 +699,23 @@ export function EmergencyOpsReports() {
   const [toDate, setToDate]     = useState(todayStr())
 
   const Layout = role === 'superadmin' ? SuperAdminLayout : AdminLayout
+
+  // Reports require a live Supabase connection — show a clear notice offline
+  // rather than letting all 6 tabs crash with a network error.
+  if (!navigator.onLine) {
+    return (
+      <Layout title="Emergency Operations Reports">
+        <div className="flex flex-col items-center justify-center h-64 gap-4 text-center px-6">
+          <WifiOff size={32} className="text-amber-400" />
+          <p className="text-white font-semibold text-lg">Reports unavailable offline</p>
+          <p className="text-slate-400 text-sm max-w-xs leading-relaxed">
+            Emergency reports require a live connection to generate.
+            Reconnect to the internet to access all report tabs.
+          </p>
+        </div>
+      </Layout>
+    )
+  }
 
   return (
     <Layout title="Emergency Operations Reports">

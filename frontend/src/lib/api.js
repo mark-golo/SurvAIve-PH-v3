@@ -141,11 +141,32 @@ function sbThrow(error) {
 async function get(path) {
   const { resource, id, table, params } = parsePath(path)
 
-  // ── Offline: route SOS reads to local XAMPP PHP backend ──
+  // ── Offline: route all reads to local XAMPP PHP backend ─────────────────────
   if (!navigator.onLine && resource === 'sos') {
     const qs = params.toString()
     const rows = await localFetch(`sos${qs ? '?' + qs : ''}`)
     return (Array.isArray(rows) ? rows : [rows]).map(normalizeSos)
+  }
+
+  if (!navigator.onLine && resource === 'evacuation_centers') {
+    const qs = params.toString()
+    const rows = await localFetch(`evacuation_centers${qs ? '?' + qs : ''}`)
+    return Array.isArray(rows) ? rows : (rows ? [rows] : [])
+  }
+
+  if (!navigator.onLine && resource === 'constituents') {
+    const qs = params.toString()
+    const rows = await localFetch(`constituents${qs ? '?' + qs : ''}`)
+    return (Array.isArray(rows) ? rows : (rows ? [rows] : [])).map(r => ({
+      ...r,
+      account_status: null, // profiles join not available offline
+    }))
+  }
+
+  if (!navigator.onLine && (resource === 'responders' || resource === 'admins' || resource === 'superadmins')) {
+    const qs = params.toString()
+    const rows = await localFetch(`${resource}${qs ? '?' + qs : ''}`)
+    return Array.isArray(rows) ? rows : (rows ? [rows] : [])
   }
 
   // ── SOS ──

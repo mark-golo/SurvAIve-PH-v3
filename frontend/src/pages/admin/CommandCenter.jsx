@@ -152,16 +152,40 @@ export function CommandCenter() {
 
   useEffect(() => {
     api.get(muni ? `/evacuation_centers?municipality=${encodeURIComponent(muni)}` : '/evacuation_centers')
-      .then(rows => setCenters(rows))
+      .then(rows => {
+        setCenters(rows)
+        // Mirror evacuation centers to MySQL so shelter pins show on the offline map
+        localFetch('sync?action=evacuation_centers', {
+          method: 'POST',
+          body: JSON.stringify({ records: rows }),
+        }).catch(() => {})
+      })
       .catch(() => setCenters([]))
   }, [])
 
   useEffect(() => {
+    // Offline: read on-duty responders from local MySQL (bypasses Supabase)
+    if (!navigator.onLine) {
+      localFetch(muni
+        ? `responders?duty_status=on_duty&municipality=${encodeURIComponent(muni)}`
+        : 'responders?duty_status=on_duty'
+      ).then(rows => setActiveResponders(Array.isArray(rows) ? rows : []))
+        .catch(() => {})
+      return // no realtime channel needed offline
+    }
+
     let q = supabase.from('responders')
       .select('id,name,unit_name,assigned_zone,lat,lng,last_seen_at,duty_status,municipality')
       .eq('duty_status', 'on_duty')
     if (muni) q = q.eq('municipality', muni)
-    q.then(({ data }) => setActiveResponders(data ?? []))
+    q.then(({ data }) => {
+      setActiveResponders(data ?? [])
+      // Mirror on-duty responder data to MySQL (incl. duty_status, unit_name, assigned_zone)
+      localFetch('sync?action=responders', {
+        method: 'POST',
+        body: JSON.stringify({ records: data ?? [] }),
+      }).catch(() => {})
+    })
 
     const channel = supabase.channel('cc-responder-locations')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'responders' },
