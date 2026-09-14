@@ -8,9 +8,10 @@ $path   = trim($_GET['path'] ?? '', '/');
 $method = $_SERVER['REQUEST_METHOD'];
 
 $routes = [
-  'auth/login'    => __DIR__ . '/auth/login.php',
-  'auth/register' => __DIR__ . '/auth/register.php',
-  'auth/otp'      => __DIR__ . '/auth/otp.php',
+  'auth/login'         => __DIR__ . '/auth/login.php',
+  'auth/register'      => __DIR__ . '/auth/register.php',
+  'auth/victim-login'  => __DIR__ . '/auth/victim-login.php',
+  'auth/otp'           => __DIR__ . '/auth/otp.php',
   'sos'           => __DIR__ . '/sos/index.php',
   'constituents'  => __DIR__ . '/constituents/index.php',
   'responders'    => __DIR__ . '/responders/index.php',
@@ -18,7 +19,8 @@ $routes = [
   'admins'             => __DIR__ . '/admins/index.php',
   'evacuation_centers' => __DIR__ . '/evacuation_centers/index.php',
   'analytics'     => __DIR__ . '/analytics/index.php',
-  'sync'          => __DIR__ . '/sync/index.php',
+  'sync'               => __DIR__ . '/sync/index.php',
+  'province_reports'   => __DIR__ . '/province_reports/index.php',
 ];
 
 // Dynamic routes — order matters (most specific first)

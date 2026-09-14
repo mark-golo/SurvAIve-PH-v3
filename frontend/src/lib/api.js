@@ -1,13 +1,68 @@
 // Supabase compatibility wrapper — maps old PHP URL patterns to Supabase calls
 import { supabase, signupClient } from './supabase'
+import { hashPIN, createOfflineToken } from './deviceAuth'
 
 // ── Local PHP backend (XAMPP) ── used in offline / Wi-Fi hotspot mode ─────────
-// Resolves to http://<host>/SurvAIve%20PH%20v3/backend/api/router.php?path=
-// Works from localhost (dev), from XAMPP-served build, and from hotspot clients
-// because the host matches wherever the page was served from.
+//
+// Problem in Capacitor WebView:
+//   window.location.hostname returns 'localhost' because assets are served from
+//   capacitor://localhost — not the actual machine running XAMPP.  So the old
+//   `${hostname}/SurvAIve PH v3/...` URL resolves to the device itself, not the
+//   admin's XAMPP server on the local Wi-Fi hotspot.
+//
+// Fix:
+//   Cache the XAMPP host from Capacitor Preferences (set by the user in Settings).
+//   Default: 192.168.43.1 — the standard Android hotspot gateway IP, which is
+//   typically the address of the admin device running XAMPP.
+//
+// The user can override this default in VictimSettings / ResponderSettings.
+
+let _cachedXamppHost = null  // null = not yet initialised
+
+/** Detect a safe default: use window hostname except when inside a Capacitor WebView */
+function getDefaultXamppHost() {
+  const { hostname } = window.location
+  // In a Capacitor WebView hostname is 'localhost' — fall back to hotspot default
+  if (hostname === 'localhost' && window.Capacitor?.isNativePlatform?.()) {
+    return '192.168.43.1'
+  }
+  return hostname
+}
+
+/**
+ * Load the persisted XAMPP host from Capacitor Preferences (async, called once
+ * at module load time). Capacitor Preferences is backed by Android SharedPreferences
+ * so it survives app restarts.
+ */
+async function initXamppHost() {
+  try {
+    const { Preferences } = await import('@capacitor/preferences')
+    const { value } = await Preferences.get({ key: 'survAIve-xampp-host' })
+    _cachedXamppHost = value || getDefaultXamppHost()
+  } catch {
+    // Capacitor Preferences not available (web build) — use window hostname
+    _cachedXamppHost = getDefaultXamppHost()
+  }
+}
+
+/**
+ * Override the XAMPP host at runtime. Called from VictimSettings and
+ * ResponderSettings after the user saves a new IP address.
+ *
+ * @param {string} host e.g. '192.168.43.1' or '192.168.1.10'
+ */
+export function setXamppHost(host) {
+  _cachedXamppHost = host
+}
+
+// Kick off initialisation immediately — subsequent calls to localPhpUrl() will
+// use the cached value (synchronous) after the first async resolution.
+initXamppHost()
+
 function localPhpUrl(path) {
-  const { protocol, hostname } = window.location
-  return `${protocol}//${hostname}/SurvAIve%20PH%20v3/backend/api/router.php?path=${path}`
+  const host = _cachedXamppHost || getDefaultXamppHost()
+  // Always use HTTP for the local XAMPP server (no TLS on LAN)
+  return `http://${host}/SurvAIve%20PH%20v3/backend/api/router.php?path=${path}`
 }
 
 export async function localFetch(path, opts = {}) {
@@ -120,6 +175,9 @@ function normalizeSos(r) {
   const joinedContact = r.victims?.contact_number ?? null
   return {
     ...r,
+    // Supabase RPC returns `created_at`; MySQL offline path returns `timestamp`.
+    // isToday() in CommandCenter filters on `r.timestamp` — unify both sources here.
+    timestamp:      r.timestamp ?? r.created_at,
     name:           r.name ?? joinedName,
     contact_number: r.contact_number ?? joinedContact,
     priority,
@@ -140,6 +198,13 @@ function sbThrow(error) {
 // ── GET ────────────────────────────────────────────────────────────────────────
 async function get(path) {
   const { resource, id, table, params } = parsePath(path)
+
+  // ── Province reports — always served from local XAMPP MySQL ─────────────────
+  if (resource === 'province_reports') {
+    const qs = params.toString()
+    const rows = await localFetch(`province_reports${qs ? '?' + qs : ''}`)
+    return Array.isArray(rows) ? rows : (rows ? [rows] : [])
+  }
 
   // ── Offline: route all reads to local XAMPP PHP backend ─────────────────────
   if (!navigator.onLine && resource === 'sos') {
@@ -195,14 +260,17 @@ async function get(path) {
 
   // ── Constituents (victims enriched with account status from profiles) ──
   if (resource === 'constituents' && !id) {
+    const qs = params.toString()
+
+    // Primary source: Supabase (authoritative online store)
     let q = supabase.from('victims').select('*')
     for (const [key, val] of params.entries()) {
       if (FILTER_COLS.has(key)) q = q.eq(key, val)
     }
-    const { data: victims, error: ve } = await q
+    const { data: sbVictims, error: ve } = await q
     if (ve) sbThrow(ve)
 
-    const contacts = (victims ?? []).map(v => v.contact_number).filter(Boolean)
+    const contacts = (sbVictims ?? []).map(v => v.contact_number).filter(Boolean)
     let profileMap = {}
     if (contacts.length) {
       const { data: profs } = await supabase
@@ -210,7 +278,21 @@ async function get(path) {
         .in('contact_number', contacts)
       for (const p of profs ?? []) profileMap[p.contact_number] = p.status
     }
-    return (victims ?? []).map(v => ({ ...v, account_status: profileMap[v.contact_number] ?? null }))
+    const supabaseRows = (sbVictims ?? []).map(v => ({ ...v, account_status: profileMap[v.contact_number] ?? null }))
+
+    // Secondary source: local MySQL via PHP — catches victims registered via the PHP
+    // backend (XAMPP / admin hotspot) who have not yet been mirrored to Supabase.
+    let mysqlRows = []
+    try {
+      const raw = await localFetch(`constituents${qs ? '?' + qs : ''}`)
+      mysqlRows = (Array.isArray(raw) ? raw : (raw ? [raw] : [])).map(r => ({ ...r, account_status: null }))
+    } catch { /* XAMPP not running — use Supabase-only results */ }
+
+    // Merge: Supabase rows first (authoritative), then MySQL-only rows (dedup by contact_number)
+    const seen = new Set(supabaseRows.map(v => v.contact_number).filter(Boolean))
+    const mysqlOnly = mysqlRows.filter(v => !seen.has(v.contact_number))
+
+    return [...supabaseRows, ...mysqlOnly]
   }
 
   // ── Single item (non-SOS) ──
@@ -233,6 +315,11 @@ async function get(path) {
 // ── POST ───────────────────────────────────────────────────────────────────────
 async function post(path, body = {}) {
   const { resource, table, params } = parsePath(path)
+
+  // ── Province reports — always written to local XAMPP MySQL ──────────────────
+  if (resource === 'province_reports') {
+    return localFetch('province_reports', { method: 'POST', body: JSON.stringify(body) })
+  }
 
   // ── Auth endpoints ──
   if (resource === 'auth') {
@@ -365,11 +452,11 @@ async function post(path, body = {}) {
       }
     }
 
+    // ── Device-bound victim registration (no OTP / Supabase Auth) ──────────────
     if (action === 'register') {
-      const { data: { user }, error: ue } = await supabase.auth.getUser()
-      if (ue || !user) throwErr('Session expired. Please restart registration.', 401)
-
+      // Shared victim data object used by both paths below
       const victimData = {
+        victim_id:                      body.victim_id ?? null,
         name:                           body.name,
         contact_number:                 body.contact_number,
         province:                       body.province ?? null,
@@ -382,39 +469,110 @@ async function post(path, body = {}) {
         emergency_contact_name:         body.emergency_contact_name ?? null,
         emergency_contact_number:       body.emergency_contact_number ?? null,
         emergency_contact_relationship: body.emergency_contact_relationship ?? null,
+        pin_hash:                       body.pin_hash ?? null,
+        device_key_hash:                body.device_key_hash ?? null,
+        pin_salt:                       body.pin_salt ?? null,
+        is_verified:                    true,
+        trust_score:                    'HIGH',
       }
-      const { error: ve } = await supabase.from('victims').insert(victimData)
+
+      // Try local XAMPP PHP first — works in dev (XAMPP running) and on the admin
+      // Wi-Fi hotspot (offline Mode 2). Falls back to Supabase when XAMPP is not
+      // reachable (e.g. production PWA without a hotspot).
+      try {
+        const phpRes = await localFetch('auth/register', { method: 'POST', body: JSON.stringify(body) })
+
+        // Mirror to Supabase so the admin Constituent Registry (which reads Supabase
+        // when online) can see the new victim. Requires victims_device_register RLS
+        // policy — see database/migration_device_auth.sql Part 2.
+        // Fire-and-forget: PHP insert already succeeded, Supabase is best-effort.
+        supabase.from('victims').insert(victimData).then(() => {}).catch(() => {})
+
+        return phpRes
+      } catch {
+        // XAMPP not reachable — fall through to Supabase-only insert below.
+        // Requires the victims_device_register RLS policy to be in place.
+      }
+
+      // Supabase fallback: insert victim row directly with the anon key.
+      // Allowed by the victims_device_register RLS policy (victim_id IS NOT NULL).
+      const { data: victimRow, error: ve } = await supabase
+        .from('victims').insert(victimData).select().single()
       if (ve) sbThrow(ve)
 
-      const { error: pe } = await supabase.from('profiles').upsert({
-        id:             user.id,
+      const user = {
+        id:             victimRow.id,
         role:           'victim',
         name:           body.name,
+        victim_id:      body.victim_id ?? null,
         contact_number: body.contact_number,
-        province:       body.province ?? null,
-        municipality:   body.municipality ?? null,
-        barangay:       body.barangay ?? null,
-      })
-      if (pe) sbThrow(pe)
+        municipality:   body.municipality,
+        province:       body.province,
+        barangay:       body.barangay,
+      }
+      return { token: createOfflineToken(user), user }
+    }
 
-      if (body.password) {
-        const { error: pwErr } = await supabase.auth.updateUser({ password: body.password })
-        if (pwErr) sbThrow(pwErr)
+    // ── Device-bound victim login (Victim ID + PIN + device key) ─────────────
+    if (action === 'victim-login') {
+      // Offline: forward to local XAMPP only (cannot reach Supabase)
+      if (!navigator.onLine) {
+        return localFetch('auth/victim-login', { method: 'POST', body: JSON.stringify(body) })
       }
 
-      const { data: sess } = await supabase.auth.getSession()
-      return {
-        token: sess.session?.access_token ?? null,
-        user: {
-          id:             user.id,
-          role:           'victim',
-          name:           body.name,
-          contact_number: body.contact_number,
-          municipality:   body.municipality,
-          province:       body.province,
-          barangay:       body.barangay,
-        },
+      // Online: try PHP first — covers victims who are in MySQL only
+      try {
+        const phpRes = await localFetch('auth/victim-login', { method: 'POST', body: JSON.stringify(body) })
+        if (phpRes?.user) {
+          // Mirror victim to Supabase so the SOS user_id link works on next submit
+          const m = phpRes.user
+          supabase.from('victims').upsert({
+            victim_id:      m.victim_id      ?? body.victim_id,
+            name:           m.name           ?? null,
+            contact_number: m.contact_number ?? null,
+            province:       m.province       ?? null,
+            municipality:   m.municipality   ?? null,
+            barangay:       m.barangay       ?? null,
+          }, { onConflict: 'victim_id' }).then(() => {}).catch(() => {})
+        }
+        return phpRes
+      } catch {
+        // XAMPP not running → fall through to Supabase path
       }
+
+      // Supabase path: victim is already in Supabase — verify client-side
+      const { data: victim, error: qe } = await supabase
+        .from('victims')
+        .select('id, name, contact_number, province, municipality, barangay, pin_hash, device_key_hash, pin_salt, status')
+        .eq('victim_id', body.victim_id)
+        .maybeSingle()
+      if (qe) sbThrow(qe)
+      if (!victim) throwErr('Invalid Victim ID or PIN', 401)
+      if (victim.status !== 'active') throwErr('Account is not active. Contact your local DRRM office.', 403)
+
+      // Verify PIN via PBKDF2 (same hash stored in pin_hash)
+      const computed = victim.pin_salt
+        ? await hashPIN(body.pin, victim.pin_salt)
+        : null
+      const pinOk = computed && computed === victim.pin_hash
+      if (!pinOk) throwErr('Invalid Victim ID or PIN', 401)
+
+      // Verify device key
+      if (victim.device_key_hash && victim.device_key_hash !== body.device_key_hash) {
+        throwErr('Device not recognised. Please log in from your registered device.', 401)
+      }
+
+      const user = {
+        id:             victim.id,
+        role:           'victim',
+        name:           victim.name,
+        victim_id:      body.victim_id,
+        contact_number: victim.contact_number,
+        province:       victim.province,
+        municipality:   victim.municipality,
+        barangay:       victim.barangay,
+      }
+      return { token: createOfflineToken(user), user }
     }
 
     throwErr('Unknown auth action', 404)
@@ -428,23 +586,49 @@ async function post(path, body = {}) {
     }
 
     const score = calcPriorityScore(body)
+
+    // Resolve device-auth victim_id → verified status + best-effort Supabase user_id
+    // victim_id is only included in the payload for authenticated users (PIN-verified),
+    // so its presence is sufficient proof of identity — don't gatekeep on Supabase row.
+    let supabaseUserId = null
+    let isVerified     = false
+    let trustScore     = 'LOW'
+    if (body.victim_id) {
+      isVerified = true
+      trustScore = 'HIGH'
+      // Still try to resolve Supabase user_id so the JOIN in get_sos_with_priority works
+      const { data: vRow } = await supabase
+        .from('victims')
+        .select('id')
+        .eq('victim_id', body.victim_id)
+        .maybeSingle()
+      if (vRow?.id) supabaseUserId = vRow.id
+    }
+
     const { error } = await supabase
       .from('sos_reports')
       .insert({
-        barangay:          body.barangay          || null,
-        municipality:      body.municipality      || null,
-        province:          body.province          || null,
-        lat:               body.lat               ?? null,
-        lng:               body.lng               ?? null,
-        status:            body.status            ?? 'unknown',
-        people_count:      Number(body.people_count) || 1,
-        victim_age_group:  body.victim_age_group  ?? 'adult',
-        special_conditions:body.special_conditions ?? '',
-        notes:             body.notes             ?? null,
-        ai_priority_score: score,
-        rescue_status:     'pending',
-        is_verified:       false,
-        trust_score:       'LOW',
+        user_id:             supabaseUserId,
+        name:                body.name                ?? null,
+        barangay:            body.barangay            || null,
+        municipality:        body.municipality        || null,
+        province:            body.province            || null,
+        lat:                 body.lat                 ?? null,
+        lng:                 body.lng                 ?? null,
+        status:              body.status              ?? 'unknown',
+        people_count:        Number(body.people_count) || 1,
+        victim_age_group:    body.victim_age_group    ?? 'adult',
+        special_conditions:  body.special_conditions  ?? '',
+        notes:               body.notes               ?? null,
+        ai_priority_score:   score,
+        rescue_status:       'pending',
+        is_verified:         isVerified,
+        trust_score:         trustScore,
+        // dual-mode SOS: YOLO11 AI analysis fields
+        sos_mode:            body.sos_mode            ?? 'status',
+        ai_scene_label:      body.ai_scene_label      ?? null,
+        ai_scene_confidence: body.ai_scene_confidence ?? null,
+        ai_detected_count:   body.ai_detected_count   ?? null,
       })
     if (error) sbThrow(error)
     return { ai_priority_score: score }

@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom'
+import { createHashRouter, Navigate, Outlet } from 'react-router-dom'
 import { useAuthStore } from './store/auth'
 import { DevLogin }   from './pages/DevLogin'
 import { StaffLogin } from './pages/StaffLogin'
@@ -23,22 +23,26 @@ import { MeshRelay }         from './pages/responder/MeshRelay'
 import { ResponderSettings } from './pages/responder/ResponderSettings'
 
 // Admin pages
+import { AdminLayout }         from './pages/admin/AdminLayout'
 import { CommandCenter }       from './pages/admin/CommandCenter'
 import { VictimTable }         from './pages/admin/VictimTable'
 import { ConstituentRegistry } from './pages/admin/ConstituentRegistry'
-import { SafetyVerification }  from './pages/admin/SafetyVerification'
 import { AdminAnalytics }      from './pages/admin/AdminAnalytics'
 import { RespondersView }      from './pages/admin/RespondersView'
 import { StaffManagement as AdminStaffManagement } from './pages/admin/StaffManagement'
 import { EvacuationCenters } from './pages/admin/EvacuationCenters'
-import { EmergencyOpsReports } from './pages/admin/EmergencyOpsReports'
+
+import { SITREP }                 from './pages/admin/SITREP'
+import { EmergencyReport }        from './pages/admin/EmergencyReport'
+import { AdminSettings }          from './pages/admin/AdminSettings'
+import { BarangaysComparison }    from './pages/admin/BarangaysComparison'
 
 // Super admin pages
 import { ProvincialDashboard }  from './pages/superadmin/ProvincialDashboard'
-import { MunicipalityList }     from './pages/superadmin/MunicipalityList'
-import { ProvincialAnalytics }  from './pages/superadmin/ProvincialAnalytics'
-import { EscalationFeed }       from './pages/superadmin/EscalationFeed'
 import { StaffManagement as SuperAdminStaffManagement } from './pages/superadmin/StaffManagement'
+import { ProvincialSITREP } from './pages/superadmin/ProvincialSITREP'
+import { MunicipalityComparison } from './pages/superadmin/MunicipalityComparison'
+import { SuperAdminSettings }     from './pages/superadmin/SuperAdminSettings'
 
 function RoleGuard({ allowed }) {
   const { role, isAuthenticated } = useAuthStore()
@@ -47,7 +51,7 @@ function RoleGuard({ allowed }) {
   return <Outlet />
 }
 
-export const router = createBrowserRouter([
+export const router = createHashRouter([
   { path: '/',          element: <LandingAuth /> },
   { path: '/dev',          element: <DevLogin /> },
   { path: '/staff-login',  element: <StaffLogin /> },
@@ -80,19 +84,27 @@ export const router = createBrowserRouter([
     ],
   },
 
-  // Admin routes
+  // Admin routes — single AdminLayout instance wraps all children so alert
+  // state persists across navigation (never remounts between pages)
   {
     element: <RoleGuard allowed={['admin']} />,
     children: [
-      { path: '/admin',               element: <CommandCenter /> },
-      { path: '/admin/victims',       element: <VictimTable /> },
-      { path: '/admin/constituents',  element: <ConstituentRegistry /> },
-      { path: '/admin/safety',        element: <SafetyVerification /> },
-      { path: '/admin/analytics',     element: <AdminAnalytics /> },
-      { path: '/admin/responders',    element: <RespondersView /> },
-      { path: '/admin/staff',                 element: <AdminStaffManagement /> },
-      { path: '/admin/evacuation-centers',   element: <EvacuationCenters /> },
-      { path: '/admin/reports',              element: <EmergencyOpsReports /> },
+      {
+        element: <AdminLayout />,
+        children: [
+          { path: '/admin',                     element: <CommandCenter /> },
+          { path: '/admin/victims',             element: <VictimTable /> },
+          { path: '/admin/constituents',        element: <ConstituentRegistry /> },
+          { path: '/admin/analytics',           element: <AdminAnalytics /> },
+          { path: '/admin/responders',          element: <RespondersView /> },
+          { path: '/admin/staff',               element: <AdminStaffManagement /> },
+          { path: '/admin/evacuation-centers',  element: <EvacuationCenters /> },
+          { path: '/admin/sitrep',              element: <SITREP /> },
+          { path: '/admin/emergency-report',        element: <EmergencyReport /> },
+          { path: '/admin/barangays-comparison', element: <BarangaysComparison /> },
+          { path: '/admin/settings',             element: <AdminSettings /> },
+        ],
+      },
     ],
   },
 
@@ -100,12 +112,11 @@ export const router = createBrowserRouter([
   {
     element: <RoleGuard allowed={['superadmin']} />,
     children: [
-      { path: '/superadmin',                    element: <ProvincialDashboard /> },
-      { path: '/superadmin/municipalities',     element: <MunicipalityList /> },
-      { path: '/superadmin/analytics',          element: <ProvincialAnalytics /> },
-      { path: '/superadmin/escalations',        element: <EscalationFeed /> },
-      { path: '/superadmin/staff',              element: <SuperAdminStaffManagement /> },
-      { path: '/superadmin/reports',            element: <EmergencyOpsReports /> },
+      { path: '/superadmin',                          element: <ProvincialDashboard />       },
+      { path: '/superadmin/staff',                    element: <SuperAdminStaffManagement /> },
+      { path: '/superadmin/sitrep',                   element: <ProvincialSITREP />          },
+      { path: '/superadmin/municipality-comparison',  element: <MunicipalityComparison />    },
+      { path: '/superadmin/settings',                element: <SuperAdminSettings />        },
     ],
   },
 

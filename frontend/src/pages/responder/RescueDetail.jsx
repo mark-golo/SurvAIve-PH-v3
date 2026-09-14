@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
+import { getResponderTheme } from '../../lib/victimTheme'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MapPin, Users, Phone, Clock, Navigation, CheckCircle, XCircle, AlertTriangle, FileText } from 'lucide-react'
+import { MapPin, Users, Phone, Navigation, CheckCircle, XCircle, AlertTriangle, FileText, Scan } from 'lucide-react'
 import { TopBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -21,6 +22,7 @@ const ACTIONS = [
 export function RescueDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const [isLight] = useState(() => getResponderTheme() === 'light')
 
   const [victim, setVictim] = useState(null)
   const [rescueStatus, setRescueStatus] = useState('pending')
@@ -48,6 +50,11 @@ export function RescueDetail() {
           vulnerabilities: Array.isArray(row.vulnerabilities) ? row.vulnerabilities : [],
           is_verified: !!row.is_verified,
           rescue_status: row.rescue_status,
+          // dual-mode SOS: YOLO11 AI analysis fields
+          sos_mode:            row.sos_mode            ?? 'status',
+          ai_scene_label:      row.ai_scene_label      ?? null,
+          ai_scene_confidence: row.ai_scene_confidence ?? null,
+          ai_detected_count:   row.ai_detected_count   ?? null,
         })
         setRescueStatus(row.rescue_status ?? 'pending')
         setNotes(row.notes || '')
@@ -93,21 +100,21 @@ export function RescueDetail() {
   const elapsed = timer ? Math.floor((Date.now() - timer) / 1000) : null
 
   if (dataLoading) return (
-    <div className="min-h-screen bg-mesh flex flex-col pb-6">
+    <div className={`min-h-screen bg-mesh flex flex-col pb-6${isLight ? ' light-theme' : ''}`}>
       <TopBar title="Rescue Detail" subtitle="Loading…" onBack />
       <div className="flex items-center justify-center flex-1 text-slate-400 text-sm">Loading…</div>
     </div>
   )
 
   if (notFound || !victim) return (
-    <div className="min-h-screen bg-mesh flex flex-col pb-6">
+    <div className={`min-h-screen bg-mesh flex flex-col pb-6${isLight ? ' light-theme' : ''}`}>
       <TopBar title="Rescue Detail" subtitle="Not found" onBack />
       <div className="flex items-center justify-center flex-1 text-slate-400 text-sm">Victim not found</div>
     </div>
   )
 
   return (
-    <div className="min-h-screen bg-mesh flex flex-col pb-6">
+    <div className={`min-h-screen bg-mesh flex flex-col pb-6${isLight ? ' light-theme' : ''}`}>
       <TopBar title="Rescue Detail" subtitle={`Victim #${victim.id}`} onBack />
 
       <main className="flex-1 p-4 space-y-4">
@@ -156,6 +163,37 @@ export function RescueDetail() {
             </p>
           )}
         </GlassCard>
+
+        {/* YOLO11 AI Scene Analysis — shown only for Photo Mode reports */}
+        {victim.sos_mode === 'photo' && victim.ai_scene_label && (
+          <GlassCard>
+            <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">
+              🤖 YOLO11 AI Scene Analysis
+            </p>
+            <div className="space-y-2.5">
+              <Detail
+                icon={Scan}
+                label="Scene Classification"
+                value={`${victim.ai_scene_label} · ${victim.ai_scene_confidence ?? '—'}% confidence`}
+              />
+              {victim.ai_detected_count > 0 && (
+                <Detail
+                  icon={Users}
+                  label="Detected Victims / Objects"
+                  value={`${victim.ai_detected_count} detected by YOLO11`}
+                />
+              )}
+            </div>
+            {victim.ai_scene_confidence != null && (
+              <div className="mt-3 w-full bg-[rgba(255,255,255,0.05)] rounded-full h-1.5 overflow-hidden">
+                <div
+                  style={{ width: `${victim.ai_scene_confidence}%` }}
+                  className="h-full bg-gradient-to-r from-violet-500 to-cyan-500 rounded-full"
+                />
+              </div>
+            )}
+          </GlassCard>
+        )}
 
         {/* Rescue status */}
         <GlassCard>

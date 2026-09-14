@@ -8,6 +8,7 @@ import { AdminLayout } from './AdminLayout'
 import { SuperAdminLayout } from '../superadmin/SuperAdminLayout'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
+import api from '../../lib/api'
 
 const TABS = [
   { id: 'aar',        label: 'After-Action Report' },
@@ -688,6 +689,71 @@ function AIReport({ muni, prov, fromDate, toDate }) {
   )
 }
 
+// ─── PROVINCE SNAPSHOTS (superadmin only) ────────────────────────────────────
+function ProvinceSnapshotsReport({ prov }) {
+  const [data, setData]     = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  const load = useCallback(async () => {
+    if (!prov) return
+    setLoading(true)
+    try {
+      const rows = await api.get(`/province_reports?province=${encodeURIComponent(prov)}`)
+      setData(Array.isArray(rows) ? rows : [])
+    } finally { setLoading(false) }
+  }, [prov])
+
+  const doPrint = () => {
+    if (!data?.length) return
+    const body = `
+      <h2>Daily Province Snapshots — ${prov}</h2>
+      <table>
+        <tr><th>Date</th><th>SOS Today</th><th>Critical</th><th>Rescued</th><th>Reporting Munis</th><th>Saved At</th></tr>
+        ${data.map(h => `<tr>
+          <td>${h.label || h.date}</td><td>${h.total}</td><td>${h.critical}</td>
+          <td>${h.rescued}</td><td>${h.reporting}</td>
+          <td>${new Date(h.saved_at).toLocaleString()}</td>
+        </tr>`).join('')}
+      </table>`
+    printReport(`Province Snapshots — ${prov}`, null, prov, body)
+  }
+
+  if (!data && !loading) return (
+    <button onClick={load} className="flex items-center gap-2 text-xs font-semibold bg-gradient-to-r from-[#00d4ff] to-[#0ea5e9] text-white rounded-lg px-4 py-2 hover:opacity-90 active:scale-95 transition-all shadow-[0_0_12px_rgba(0,212,255,0.35)] mt-2">
+      <RefreshCw size={12} /> Load Snapshots
+    </button>
+  )
+  if (loading) return <p className="text-xs text-slate-400 py-6 text-center">Loading…</p>
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <button onClick={load} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors">
+          <RefreshCw size={12} /> Refresh
+        </button>
+        <button onClick={doPrint} disabled={!data?.length} className="flex items-center gap-1.5 text-xs bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.25)] text-[#00d4ff] rounded-lg px-3 py-1.5 hover:bg-[rgba(0,212,255,0.2)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          <Printer size={12} /> Print All
+        </button>
+      </div>
+      <div className="glass-bright rounded-2xl p-4">
+        <SectionTitle>Daily Province Report History (last 90 days)</SectionTitle>
+        <Tbl
+          heads={['Date', 'SOS Today', 'Critical', 'Rescued', 'Reporting Munis', 'Saved At']}
+          rows={(data ?? []).map(h => [
+            h.label || h.date,
+            h.total,
+            h.critical,
+            h.rescued,
+            h.reporting,
+            new Date(h.saved_at).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+          ])}
+          empty="No saved snapshots yet — they save automatically every time the Provincial Dashboard syncs."
+        />
+      </div>
+    </div>
+  )
+}
+
 // ─── MAIN COMPONENT ─────────────────────────────────────────────────────────
 export function EmergencyOpsReports() {
   const { scope, role } = useAuthStore()
@@ -699,6 +765,11 @@ export function EmergencyOpsReports() {
   const [toDate, setToDate]     = useState(todayStr())
 
   const Layout = role === 'superadmin' ? SuperAdminLayout : AdminLayout
+
+  // Superadmin gets an extra Province Snapshots tab
+  const visibleTabs = role === 'superadmin'
+    ? [...TABS, { id: 'province', label: 'Province Snapshots' }]
+    : TABS
 
   // Reports require a live Supabase connection — show a clear notice offline
   // rather than letting all 6 tabs crash with a network error.
@@ -731,8 +802,8 @@ export function EmergencyOpsReports() {
           </div>
         </div>
 
-        {/* Date range filter */}
-        <div className="glass-bright rounded-2xl p-4">
+        {/* Date range filter — hidden for Province Snapshots (has its own load button) */}
+        {tab !== 'province' && <div className="glass-bright rounded-2xl p-4">
           <p className="text-[11px] text-slate-400 mb-3 font-semibold uppercase tracking-wider">
             {tab === 'daily' ? 'Select Date' : 'Date Range'}
           </p>
@@ -759,11 +830,11 @@ export function EmergencyOpsReports() {
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
         {/* Tabs */}
         <div className="flex gap-1.5 flex-wrap">
-          {TABS.map(t => (
+          {visibleTabs.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
@@ -780,12 +851,13 @@ export function EmergencyOpsReports() {
 
         {/* Report content */}
         <div className="glass-bright rounded-2xl p-4">
-          {tab === 'aar'        && <AARReport       muni={muni} prov={prov} fromDate={fromDate} toDate={toDate} />}
-          {tab === 'daily'      && <DailyReport     muni={muni} prov={prov} fromDate={fromDate} />}
-          {tab === 'victims'    && <VictimsReport   muni={muni} prov={prov} fromDate={fromDate} toDate={toDate} />}
-          {tab === 'responders' && <RespondersReport muni={muni} prov={prov} fromDate={fromDate} toDate={toDate} />}
-          {tab === 'welfare'    && <WelfareReport   muni={muni} prov={prov} fromDate={fromDate} toDate={toDate} />}
-          {tab === 'ai'         && <AIReport        muni={muni} prov={prov} fromDate={fromDate} toDate={toDate} />}
+          {tab === 'aar'        && <AARReport              muni={muni} prov={prov} fromDate={fromDate} toDate={toDate} />}
+          {tab === 'daily'      && <DailyReport            muni={muni} prov={prov} fromDate={fromDate} />}
+          {tab === 'victims'    && <VictimsReport          muni={muni} prov={prov} fromDate={fromDate} toDate={toDate} />}
+          {tab === 'responders' && <RespondersReport       muni={muni} prov={prov} fromDate={fromDate} toDate={toDate} />}
+          {tab === 'welfare'    && <WelfareReport          muni={muni} prov={prov} fromDate={fromDate} toDate={toDate} />}
+          {tab === 'ai'         && <AIReport               muni={muni} prov={prov} fromDate={fromDate} toDate={toDate} />}
+          {tab === 'province'   && <ProvinceSnapshotsReport prov={prov} />}
         </div>
       </div>
     </Layout>

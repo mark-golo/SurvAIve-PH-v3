@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { getResponderTheme } from '../../lib/victimTheme'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Home, List, Map, Radio, Settings, RefreshCw, SortAsc } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
@@ -19,6 +20,7 @@ const NAV = [
 
 export function VictimQueue() {
   const { scope } = useAuthStore()
+  const [isLight] = useState(() => getResponderTheme() === 'light')
   const [queue, setQueue] = useState([])
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState('all')
@@ -60,7 +62,7 @@ export function VictimQueue() {
     : activeQueue.filter(r => r.priority === filter.toUpperCase())
 
   return (
-    <div className="min-h-screen bg-mesh flex flex-col pb-20">
+    <div className={`min-h-screen bg-mesh flex flex-col pb-20${isLight ? ' light-theme' : ''}`}>
       <TopBar
         title="Victim Queue"
         subtitle={`${activeQueue.filter(r => r.priority === 'CRITICAL').length} critical · ${activeQueue.length} total`}

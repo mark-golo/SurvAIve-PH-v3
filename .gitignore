@@ -1,0 +1,7 @@
+# Netlify
+.netlify
+
+# Frontend build output and local env
+frontend/dist/
+frontend/.env.local
+frontend/node_modules/

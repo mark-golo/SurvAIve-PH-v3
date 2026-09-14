@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Radio, MapPin } from 'lucide-react'
-import { AdminLayout } from './AdminLayout'
+
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
@@ -14,8 +14,6 @@ const RESCUE_STATUS = {
   pending:      { label: 'Pending',      color: '#6b7280', bg: 'rgba(107,114,128,0.12)' },
 }
 
-const SORT_ORDER = { on_scene: 0, en_route: 1, cannot_reach: 2, rescued: 3, pending: 4 }
-
 export function RespondersView() {
   const { scope } = useAuthStore()
   const muni = scope?.municipality
@@ -27,6 +25,23 @@ export function RespondersView() {
   const [sosReports, setSosReports] = useState([])
   const [sosLoading, setSosLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('all')
+
+  // Date helpers
+  const todayStr = () => new Date().toISOString().slice(0, 10)
+  const daysAgo  = n => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10) }
+
+  // Period preset state
+  const [preset,   setPreset]   = useState('today')
+  const [fromDate, setFromDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [toDate,   setToDate]   = useState(() => new Date().toISOString().slice(0, 10))
+
+  const applyPreset = (p) => {
+    setPreset(p)
+    if (p === 'today') { setFromDate(todayStr()); setToDate(todayStr()) }
+    if (p === '7d')    { setFromDate(daysAgo(6)); setToDate(todayStr()) }
+    if (p === '30d')   { setFromDate(daysAgo(29)); setToDate(todayStr()) }
+    // 'custom' — user sets dates via inputs
+  }
 
   // Fetch responders
   useEffect(() => {
@@ -61,23 +76,51 @@ export function RespondersView() {
 
   const sortedReports = sosReports
     .slice()
-    .sort((a, b) =>
-      (SORT_ORDER[a.rescue_status ?? 'pending'] ?? 4) -
-      (SORT_ORDER[b.rescue_status ?? 'pending'] ?? 4)
-    )
+    .sort((a, b) => (a.minutes_ago ?? 0) - (b.minutes_ago ?? 0))
 
-  const filteredReports = statusFilter === 'all'
-    ? sortedReports
-    : sortedReports.filter(r => (r.rescue_status ?? 'pending') === statusFilter)
+  const filteredReports = sortedReports.filter(r => {
+    const dateStr = (r.created_at ?? '').slice(0, 10)
+    if (dateStr < fromDate || dateStr > toDate) return false
+    if (statusFilter !== 'all' && (r.rescue_status ?? 'pending') !== statusFilter) return false
+    return true
+  })
 
   return (
-    <AdminLayout title="Rescue Updates">
-      <div className="flex flex-col lg:flex-row h-[calc(100vh-56px)]">
+    <div className="flex flex-col lg:flex-row h-[calc(100vh-56px)]">
 
         {/* LEFT — Rescue Status Feed */}
         <div className="flex-1 overflow-y-auto p-4 border-b lg:border-b-0 lg:border-r border-[rgba(255,255,255,0.08)]">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Rescue Status Feed</p>
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Rescue Status Feed</p>
 
+          {/* Period preset buttons */}
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <div className="flex gap-1">
+              {[
+                ['today', 'Today'],
+                ['7d',    'Last 7 Days'],
+                ['30d',   'Last 30 Days'],
+                ['custom','Custom'],
+              ].map(([p, lbl]) => (
+                <button key={p} onClick={() => applyPreset(p)}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                    preset === p
+                      ? 'bg-[rgba(239,68,68,0.2)] text-[#ef4444] border border-[rgba(239,68,68,0.3)]'
+                      : 'text-slate-400 border border-[rgba(255,255,255,0.08)] hover:text-white'
+                  }`}>{lbl}</button>
+              ))}
+            </div>
+            {preset === 'custom' && (
+              <div className="flex items-center gap-2 mt-1">
+                <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+                  className="bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-[rgba(239,68,68,0.4)]" />
+                <span className="text-slate-500 text-xs">to</span>
+                <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
+                  className="bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-[rgba(239,68,68,0.4)]" />
+              </div>
+            )}
+          </div>
+
+          {/* Status filter pills */}
           <div className="flex flex-wrap gap-1.5 mb-3">
             {[
               { key: 'all',          label: 'All' },
@@ -193,6 +236,5 @@ export function RespondersView() {
           )}
         </aside>
       </div>
-    </AdminLayout>
   )
 }

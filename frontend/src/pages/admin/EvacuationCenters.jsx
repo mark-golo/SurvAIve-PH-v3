@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { Plus, Pencil, Trash2, Search, Tent } from 'lucide-react'
-import { AdminLayout } from './AdminLayout'
+
 import { GlassCard } from '../../components/ui/GlassCard'
 import { GlassInput, GlassSelect } from '../../components/ui/GlassInput'
 import { NeonButton } from '../../components/ui/NeonButton'
@@ -38,6 +38,7 @@ export function EvacuationCenters() {
   const [data, setData]         = useState([])
   const [loading, setLoading]   = useState(true)
   const [search, setSearch]     = useState('')
+  const [barangayFilter, setBarangayFilter] = useState('all')
   const [showAdd, setShowAdd]   = useState(false)
   const [editId, setEditId]     = useState(null)
   const [form, setForm]         = useState(BLANK)
@@ -52,11 +53,14 @@ export function EvacuationCenters() {
       .finally(() => setLoading(false))
   }, [])
 
-  const filtered = data.filter(r =>
-    !search ||
-    r.name.toLowerCase().includes(search.toLowerCase()) ||
-    (r.barangay ?? '').toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = data.filter(r => {
+    if (barangayFilter !== 'all' && r.barangay !== barangayFilter) return false
+    if (!search) return true
+    return (
+      r.name.toLowerCase().includes(search.toLowerCase()) ||
+      (r.barangay ?? '').toLowerCase().includes(search.toLowerCase())
+    )
+  })
 
   const summary = {
     total:  data.length,
@@ -122,8 +126,7 @@ export function EvacuationCenters() {
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   return (
-    <AdminLayout title="Evacuation Centers">
-      <div className="flex flex-col h-[calc(100vh-56px)] overflow-hidden">
+    <div className="flex flex-col h-[calc(100vh-56px)] overflow-hidden">
 
         {/* Map strip */}
         <div className="h-[260px] shrink-0 border-b border-[rgba(255,255,255,0.08)]">
@@ -160,6 +163,10 @@ export function EvacuationCenters() {
             <div className="flex-1 min-w-[200px]">
               <GlassInput placeholder="Search name or barangay…" icon={Search} value={search} onChange={e => setSearch(e.target.value)} />
             </div>
+            <GlassSelect value={barangayFilter} onChange={e => setBarangayFilter(e.target.value)} className="w-44">
+              <option value="all">All Barangays</option>
+              {getBarangays(muni).map(b => <option key={b} value={b}>{b}</option>)}
+            </GlassSelect>
             <NeonButton size="sm" onClick={openAdd}>
               <Plus size={13} className="mr-1.5" />
               Add Center
@@ -231,7 +238,6 @@ export function EvacuationCenters() {
           <p className="text-xs text-slate-600 text-right">{filtered.length} of {data.length} centers</p>
         </div>
       </div>
-    </AdminLayout>
   )
 }
 

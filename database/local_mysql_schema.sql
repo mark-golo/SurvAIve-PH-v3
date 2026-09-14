@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS responders (
 -- ── Victims (registered community members) ────────────────────────────────────
 CREATE TABLE IF NOT EXISTS victims (
   id                              INT              AUTO_INCREMENT PRIMARY KEY,
+  victim_id                       VARCHAR(20)      UNIQUE DEFAULT NULL,
   name                            VARCHAR(200)     NOT NULL,
   contact_number                  VARCHAR(20)      DEFAULT NULL,
   gmail                           VARCHAR(200)     DEFAULT NULL,
@@ -105,11 +106,14 @@ CREATE TABLE IF NOT EXISTS victims (
   emergency_contact_number        VARCHAR(20)      DEFAULT NULL,
   emergency_contact_relationship  VARCHAR(50)      DEFAULT NULL,
   pin_hash                        VARCHAR(255)     DEFAULT NULL,
+  device_key_hash                 VARCHAR(64)      DEFAULT NULL,
+  pin_salt                        VARCHAR(64)      DEFAULT NULL,
   status                          ENUM('active','sos_sent','rescued','unknown') NOT NULL DEFAULT 'active',
   is_verified                     TINYINT(1)       NOT NULL DEFAULT 0,
   trust_score                     VARCHAR(20)      DEFAULT 'LOW',
   created_at                      TIMESTAMP        DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_contact (contact_number),
+  INDEX idx_victim_id (victim_id),
   INDEX idx_municipality (municipality),
   INDEX idx_barangay (barangay),
   INDEX idx_status (status)
@@ -128,6 +132,7 @@ CREATE TABLE IF NOT EXISTS otp_requests (
 CREATE TABLE IF NOT EXISTS sos_reports (
   id                     INT              AUTO_INCREMENT PRIMARY KEY,
   user_id                INT              DEFAULT NULL,
+  name                   VARCHAR(200)     DEFAULT NULL,
   barangay               VARCHAR(100)     DEFAULT NULL,
   municipality           VARCHAR(100)     DEFAULT NULL,
   province               VARCHAR(100)     DEFAULT NULL,
@@ -144,6 +149,11 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   assigned_responder_id  INT              DEFAULT NULL,
   rescue_status          ENUM('pending','en_route','on_scene','rescued','cannot_reach') NOT NULL DEFAULT 'pending',
   field_notes            TEXT             DEFAULT NULL,
+  -- dual-mode SOS: YOLO11 AI analysis fields
+  sos_mode               VARCHAR(20)      NOT NULL DEFAULT 'status',
+  ai_scene_label         VARCHAR(100)     DEFAULT NULL,
+  ai_scene_confidence    TINYINT UNSIGNED DEFAULT NULL,
+  ai_detected_count      TINYINT UNSIGNED DEFAULT NULL,
   -- offline-tracking columns (not in Supabase)
   dismissed              TINYINT(1)       NOT NULL DEFAULT 0,
   synced_to_cloud        TINYINT(1)       NOT NULL DEFAULT 0,
@@ -252,3 +262,17 @@ ALTER TABLE sos_reports
 ALTER TABLE evacuation_centers
   ADD COLUMN IF NOT EXISTS address        TEXT        DEFAULT NULL AFTER barangay,
   ADD COLUMN IF NOT EXISTS contact_number VARCHAR(20) DEFAULT NULL AFTER capacity;
+
+-- ── Province Reports (daily snapshots saved by the Superadmin Provincial Dashboard) ──
+CREATE TABLE IF NOT EXISTS province_reports (
+  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  province    VARCHAR(120)  NOT NULL,
+  date        DATE          NOT NULL,
+  label       VARCHAR(80)   NOT NULL DEFAULT '',
+  total       INT UNSIGNED  NOT NULL DEFAULT 0,
+  critical    INT UNSIGNED  NOT NULL DEFAULT 0,
+  rescued     INT UNSIGNED  NOT NULL DEFAULT 0,
+  reporting   INT UNSIGNED  NOT NULL DEFAULT 0,
+  saved_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_province_date (province, date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

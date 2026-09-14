@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { getResponderTheme } from '../../lib/victimTheme'
 import { motion } from 'framer-motion'
 import { Radio, Wifi, ArrowUpDown, Battery, AlertTriangle, Home, List, Map, Settings } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
@@ -15,6 +16,7 @@ const NAV = [
 ]
 
 export function MeshRelay() {
+  const [isLight] = useState(() => getResponderTheme() === 'light')
   const [relayOn, setRelayOn] = useState(true)
   const [peers, setPeers] = useState(mesh.getPeers())
   const [stats, setStats] = useState(mesh.getStats())
@@ -25,7 +27,7 @@ export function MeshRelay() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-mesh flex flex-col pb-20">
+    <div className={`min-h-screen bg-mesh flex flex-col pb-20${isLight ? ' light-theme' : ''}`}>
       <TopBar title="Mesh Relay Node" subtitle="Responder relay status" onBack />
 
       <main className="flex-1 p-4 space-y-4">

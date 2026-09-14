@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { autoSOS } from '../../lib/autoSOS'
 import { deviceSettings } from '../../lib/deviceSettings'
-import { Bell, Shield, Battery, LogOut, Phone, User, Radio, ChevronRight, Home, Map, Settings, MessageSquare } from 'lucide-react'
+import { setXamppHost } from '../../lib/api'
+import { Bell, Shield, Battery, LogOut, Phone, User, Radio, ChevronRight, Home, Map, Settings, MessageSquare, Server, Check, Sun } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useAuthStore } from '../../store/auth'
+import { getVictimTheme, saveVictimTheme } from '../../lib/victimTheme'
 
 const NAV = [
   { icon: Home, label: 'Home', path: '/home' },
@@ -46,12 +48,50 @@ export function VictimSettings() {
   const [batterySaver, setBatterySaver] = useState(initBattery)
   const [meshRelay, setMeshRelay]       = useState(initRelay)
 
+  // XAMPP / local server IP — saved via Capacitor Preferences for native builds
+  const [xamppHost,     setXamppHostState] = useState('192.168.43.1')
+  const [xamppSaved,    setXamppSaved]     = useState(false)
+
   useEffect(() => { autoSOS.init(); deviceSettings.init() }, [])
+
+  // Load persisted XAMPP host on mount
+  useEffect(() => {
+    async function loadXamppHost() {
+      try {
+        const { Preferences } = await import('@capacitor/preferences')
+        const { value } = await Preferences.get({ key: 'survAIve-xampp-host' })
+        if (value) setXamppHostState(value)
+      } catch { /* web build — Preferences not available */ }
+    }
+    loadXamppHost()
+  }, [])
+
+  async function handleSaveXamppHost() {
+    const trimmed = xamppHost.trim()
+    if (!trimmed) return
+    // Update the runtime cache in api.js immediately
+    setXamppHost(trimmed)
+    // Persist for next launch (native only)
+    try {
+      const { Preferences } = await import('@capacitor/preferences')
+      await Preferences.set({ key: 'survAIve-xampp-host', value: trimmed })
+    } catch { /* web build */ }
+    setXamppSaved(true)
+    setTimeout(() => setXamppSaved(false), 2000)
+  }
+
+  // Theme preference — persisted in localStorage, applied to the wrapper div
+  const [theme, setThemeState] = useState(() => getVictimTheme())
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark'
+    setThemeState(next)
+    saveVictimTheme(next)
+  }
 
   const handleLogout = () => { logout(); navigate('/') }
 
   return (
-    <div className="min-h-screen bg-mesh flex flex-col pb-20">
+    <div className={`min-h-screen bg-mesh flex flex-col pb-20${theme === 'light' ? ' light-theme' : ''}`}>
       <TopBar title="Settings" onBack />
 
       <main className="flex-1 p-4 space-y-4">
@@ -143,6 +183,53 @@ export function VictimSettings() {
               sub="Reduces background scanning, prolongs battery life"
             />
           </div>
+        </GlassCard>
+
+        {/* XAMPP / Local server config */}
+        <GlassCard>
+          <div className="flex items-center gap-3 mb-3">
+            <Server size={16} className="text-[#00d4ff]" />
+            <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider">Local Server (XAMPP)</p>
+          </div>
+          <p className="text-xs text-slate-400 leading-relaxed mb-3">
+            When offline, SOS messages are sent to the admin's local XAMPP server over Wi-Fi.
+            Enter the IP address of the admin device's hotspot (default: 192.168.43.1).
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={xamppHost}
+              onChange={(e) => setXamppHostState(e.target.value)}
+              placeholder="192.168.43.1"
+              className="flex-1 bg-[rgba(255,255,255,0.05)] border border-[rgba(0,212,255,0.2)] rounded-lg
+                         px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none
+                         focus:border-[rgba(0,212,255,0.5)] transition-colors"
+            />
+            <button
+              onClick={handleSaveXamppHost}
+              className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5
+                ${xamppSaved
+                  ? 'bg-[rgba(34,197,94,0.2)] text-[#22c55e] border border-[rgba(34,197,94,0.3)]'
+                  : 'bg-[rgba(0,212,255,0.15)] text-[#00d4ff] border border-[rgba(0,212,255,0.3)] hover:bg-[rgba(0,212,255,0.25)]'
+                }`}
+            >
+              {xamppSaved ? <><Check size={12} /> Saved</> : 'Save'}
+            </button>
+          </div>
+        </GlassCard>
+
+        {/* Appearance */}
+        <GlassCard>
+          <div className="flex items-center gap-3 mb-3">
+            <Sun size={16} className="text-[#f59e0b]" />
+            <p className="text-xs font-semibold text-[#f59e0b] uppercase tracking-wider">Appearance</p>
+          </div>
+          <Toggle
+            on={theme === 'light'}
+            onToggle={toggleTheme}
+            label="Light Mode"
+            sub="Switch to a brighter, easier-to-read interface"
+          />
         </GlassCard>
 
         {/* Data privacy */}

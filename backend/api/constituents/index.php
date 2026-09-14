@@ -17,7 +17,7 @@ if ($method === 'GET') {
         $params[] = json_encode($_GET['vulnerability']);
     }
 
-    $sql  = "SELECT id,name,contact_number,gmail,province,municipality,barangay,sitio,
+    $sql  = "SELECT id,victim_id,trust_score,name,contact_number,gmail,province,municipality,barangay,sitio,
                     household_count,vulnerabilities,medical_conditions,
                     emergency_contact_name,emergency_contact_number,emergency_contact_relationship,
                     status,is_verified,created_at
@@ -32,12 +32,13 @@ if ($method === 'GET') {
 if ($method === 'POST') {
     $body = json_decode(file_get_contents('php://input'), true) ?? [];
     $stmt = $db->prepare("
-        INSERT INTO victims (name,contact_number,gmail,province,municipality,barangay,sitio,
+        INSERT INTO victims (victim_id,name,contact_number,gmail,province,municipality,barangay,sitio,
                              household_count,vulnerabilities,medical_conditions,
                              emergency_contact_name,emergency_contact_number,status,is_verified,trust_score)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'active',0,'ADMIN_ENTRY')
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, 'unknown',0,'ADMIN_ENTRY')
     ");
     $stmt->execute([
+        $body['victim_id'] ?? null,
         $body['name'], $body['contact_number'] ?? null, $body['gmail'] ?? null,
         $body['province'], $body['municipality'], $body['barangay'], $body['sitio'] ?? null,
         (int)($body['household_count'] ?? 1), json_encode($body['vulnerabilities'] ?? []),

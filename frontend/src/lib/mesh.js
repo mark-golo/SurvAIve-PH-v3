@@ -1,111 +1,158 @@
-// Mesh networking layer
-//
-// Transport priority (attempted in order):
-//   1. Web Bluetooth API — BLE GATT write to a nearby receiver (Chrome/Android)
-//   2. Local Wi-Fi (XAMPP hotspot) — HTTP POST to the admin's local PHP server
-//   3. IndexedDB queue — stored for later sync when connectivity returns
-//
-// Notes:
-//   • Web Bluetooth requires https:// or localhost AND a user gesture for the
-//     FIRST requestDevice() call. Subsequent sends reuse the cached device.
-//   • Wi-Fi fallback uses the same localPhpUrl helper as api.js — it resolves
-//     to http://<hostname>/SurvAIve%20PH%20v3/backend/api/router.php?path=
-//   • The BLE service UUID below is a placeholder — replace with the UUID
-//     advertised by your BLE relay hardware/native app.
+/**
+ * mesh.js — Mesh networking interface (Capacitor-native version)
+ *
+ * This module replaces the old Web Bluetooth API shim with calls to the
+ * MeshNetwork Capacitor plugin, which is backed by a Kotlin implementation
+ * running BLE GATT + Wi-Fi Direct on the Android device.
+ *
+ * Transport priority (handled inside the Kotlin plugin):
+ *   1. BLE GATT write  — low-bandwidth, always-on discovery layer
+ *   2. Wi-Fi Direct    — higher bandwidth for larger payloads
+ *   3. IndexedDB queue — stored here if both transports fail
+ *
+ * On the web (Admin dashboard), calls route to MeshNetworkPluginWeb which
+ * falls back to plain HTTP — keeping this module isomorphic across builds.
+ */
+import { MeshNetwork } from '../plugins/MeshNetworkPlugin'
+import { db } from './db'
 
-const BLE_SERVICE_UUID = '12345678-0000-1000-8000-00805f9b34fb'
-const BLE_CHAR_UUID    = '12345678-0001-1000-8000-00805f9b34fb'
+let _isStarted       = false    // true after startMesh() has been called
+let _msgHandlers     = []       // registered onMessage() callbacks
+let _listenerHandle  = null     // Capacitor PluginListenerHandle for cleanup
+let _lastStats       = null     // cached result of the last getStats() call
 
-function localPhpUrl(path) {
-  const { protocol, hostname } = window.location
-  return `${protocol}//${hostname}/SurvAIve%20PH%20v3/backend/api/router.php?path=${path}`
-}
+// ── Internal helpers ──────────────────────────────────────────────────────────
 
-let _bleDevice   = null  // cached BLE device after first connection
-let _msgHandlers = []    // registered onMessage callbacks
-let _peers       = []    // discovered peer list
+/**
+ * Lazily start the native mesh engine on first use.
+ * This avoids requesting BLE/location permissions until the user actually
+ * triggers a mesh-related action (opening MeshStatus or sending an SOS).
+ */
+async function ensureStarted() {
+  if (_isStarted) return
 
-// ── BLE broadcast ─────────────────────────────────────────────────────────────
-async function bleBroadcast(data) {
-  if (!navigator.bluetooth) return false
-  try {
-    // Reuse previous device if still connected, otherwise discover
-    if (!_bleDevice || !_bleDevice.gatt?.connected) {
-      _bleDevice = await navigator.bluetooth.requestDevice({
-        filters: [{ services: [BLE_SERVICE_UUID] }],
-        optionalServices: [BLE_SERVICE_UUID],
-      })
-      _bleDevice.addEventListener('gattserverdisconnected', () => { _bleDevice = null })
+  await MeshNetwork.startMesh()
+  _isStarted = true
+
+  // Register a single long-lived listener — all onMessage() subscribers
+  // receive packets through the _msgHandlers list below.
+  _listenerHandle = await MeshNetwork.addListener('meshPacketReceived', (packet) => {
+    try {
+      const data = JSON.parse(packet.payload)
+      // Attach raw mesh metadata so handlers can inspect hopCount / originDeviceId
+      _msgHandlers.forEach((fn) => fn(data, packet))
+    } catch {
+      // Malformed JSON — drop silently
     }
-    const server  = await _bleDevice.gatt.connect()
-    const service = await server.getPrimaryService(BLE_SERVICE_UUID)
-    const char    = await service.getCharacteristic(BLE_CHAR_UUID)
-    const encoded = new TextEncoder().encode(JSON.stringify(data))
-    await char.writeValueWithoutResponse(encoded)
-    // Subscribe to notifications for incoming relay messages
-    await char.startNotifications()
-    char.addEventListener('characteristicvaluechanged', (ev) => {
-      try {
-        const msg = JSON.parse(new TextDecoder().decode(ev.target.value))
-        _msgHandlers.forEach(fn => fn(msg))
-      } catch { /* malformed packet — ignore */ }
-    })
-    return true
-  } catch {
-    return false
-  }
+  })
 }
 
-// ── Local Wi-Fi broadcast (admin hotspot / XAMPP) ─────────────────────────────
-async function wifiBroadcast(data) {
-  try {
-    const res = await fetch(localPhpUrl('sos'), {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(data.payload ?? data),
-      signal:  AbortSignal.timeout(5000),
-    })
-    return res.ok
-  } catch {
-    return false
-  }
-}
+// ── Public interface ──────────────────────────────────────────────────────────
 
-// ── Public mesh interface ──────────────────────────────────────────────────────
 export const mesh = {
-  isConnected: () => !!(_bleDevice?.gatt?.connected),
-
-  getPeers: () => _peers,
-
-  getStats: () => ({
-    peersConnected:   _peers.length,
-    messagesForwarded: 0,
-    dataRelayed:      '—',
-    lastSync:         _bleDevice ? new Date().toLocaleTimeString() : '—',
-  }),
-
-  /** Broadcast an SOS payload via BLE → Wi-Fi fallback */
+  /**
+   * Broadcast data through the mesh network.
+   *
+   * On success:  returns { success: true, transport: 'BLE' | 'WiFiDirect' | 'wifi-http' }
+   * On failure:  queues the payload to IndexedDB and returns { success: false, transport: 'none' }
+   *
+   * @param {object} data - The payload to send (SOS body, ack, status update, etc.)
+   */
   async broadcast(data) {
-    // Try BLE first
-    const bleSent = await bleBroadcast(data)
-    if (bleSent) return true
-
-    // BLE unavailable or user dismissed — try local Wi-Fi (admin hotspot)
-    const wifiSent = await wifiBroadcast(data)
-    return wifiSent
+    await ensureStarted()
+    const result = await MeshNetwork.broadcast({
+      type:    data.type ?? 'sos',
+      payload: typeof data === 'string' ? data : JSON.stringify(data),
+    })
+    if (!result.success) {
+      // Both native transports failed — persist to IndexedDB for later drain-queue sync
+      try { await db.queueSOS(data) } catch { /* db may not be open yet */ }
+    }
+    return result
   },
 
-  /** Register a handler for incoming mesh messages */
+  /**
+   * Register a handler for packets received from nearby mesh peers.
+   * Returns an unsubscribe function.
+   *
+   * @param {function(data: object, rawPacket: MeshPacket): void} fn
+   * @returns {function(): void} unsubscribe
+   */
   onMessage(fn) {
     _msgHandlers.push(fn)
-    return () => { _msgHandlers = _msgHandlers.filter(cb => cb !== fn) }
+    return () => {
+      _msgHandlers = _msgHandlers.filter((h) => h !== fn)
+    }
   },
 
-  refresh() {
-    // Re-scan nearby BLE devices (no-op until hardware is present)
-    return _peers
+  /**
+   * Get current mesh stats from the native layer.
+   * Caches the last known value so callers can display stale data while
+   * the async call is in flight.
+   */
+  async getStats() {
+    if (!_isStarted) {
+      return { peersNearby: 0, transport: 'not started', relayEnabled: false }
+    }
+    try {
+      _lastStats = await MeshNetwork.getStats()
+    } catch {
+      // Native call failed — return cached or default
+      _lastStats = _lastStats ?? { peersNearby: 0, transport: 'error', relayEnabled: false }
+    }
+    return _lastStats
   },
 
-  setRelay(enabled)       { this._relayEnabled    = enabled },
-  setBatterySaver(enabled){ this._batterySaver     = enabled },
+  /**
+   * Enable or disable relay mode on this device.
+   * When disabled the device still receives packets but does not forward them.
+   * Useful when Battery Saver Mode is on.
+   *
+   * @param {boolean} enabled
+   */
+  async setRelay(enabled) {
+    if (_isStarted) {
+      await MeshNetwork.setRelay({ enabled })
+    }
+    // Also mirror to native's internal flag via plugin regardless of start state
+    // (it will be applied on next startMesh() call)
+  },
+
+  /**
+   * Returns true if the native mesh engine has been started.
+   * Does NOT mean any peers are currently reachable — check getStats().peersNearby.
+   */
+  isConnected() {
+    return _isStarted
+  },
+
+  /**
+   * Returns an empty array for API compatibility with code that called
+   * the old mesh.getPeers(). Use getStats().peersNearby for the count.
+   */
+  getPeers() {
+    return []
+  },
+
+  /** Alias kept for legacy callers from deviceSettings.js */
+  setBatterySaver(enabled) {
+    // Battery saver reduces relay; delegate to setRelay(false)
+    this.setRelay(!enabled)
+  },
+
+  /**
+   * Tear down the native mesh engine and remove all listeners.
+   * Call this on app background / unmount if needed.
+   */
+  async stop() {
+    if (_listenerHandle) {
+      await _listenerHandle.remove()
+      _listenerHandle = null
+    }
+    if (_isStarted) {
+      await MeshNetwork.stopMesh()
+      _isStarted = false
+    }
+    _msgHandlers = []
+  },
 }

@@ -49,6 +49,19 @@ if ($method === 'POST') {
         if ($payload) { $userId = $payload['id']; $isVerified = true; $trustScore = 'HIGH'; }
     }
 
+    // Fallback: device-auth victims carry an offline token that fails JWT verify.
+    // Accept victim_id from the request body and look up the MySQL row instead.
+    if (!$userId && !empty($body['victim_id'])) {
+        $vs = $db->prepare("SELECT id FROM victims WHERE victim_id = ? LIMIT 1");
+        $vs->execute([$body['victim_id']]);
+        $vrow = $vs->fetch(PDO::FETCH_ASSOC);
+        if ($vrow) {
+            $userId     = $vrow['id'];
+            $isVerified = true;
+            $trustScore = 'HIGH';
+        }
+    }
+
     // AI priority scoring — unified heuristic
     $score    = 50;
     $status   = strtolower($body['status'] ?? '');
@@ -76,15 +89,26 @@ if ($method === 'POST') {
     if (!$isVerified) $score -= 10;
     $score = min(99, $score);
 
+    // Dual-mode SOS: YOLO11 AI analysis fields (null-safe)
+    $sosMode  = in_array($body['sos_mode'] ?? '', ['status', 'photo']) ? $body['sos_mode'] : 'status';
+    $aiLabel  = isset($body['ai_scene_label'])      ? substr(trim($body['ai_scene_label']), 0, 100) : null;
+    $aiConf   = isset($body['ai_scene_confidence']) ? max(0, min(100, (int)$body['ai_scene_confidence'])) : null;
+    $aiCount  = isset($body['ai_detected_count'])   ? max(0, min(255, (int)$body['ai_detected_count']))   : null;
+
+    $reporterName = isset($body['name']) ? substr(trim($body['name']), 0, 200) : null;
+
     $stmt = $db->prepare("
         INSERT INTO sos_reports
-          (user_id, barangay, municipality, province, lat, lng, status, people_count,
+          (user_id, name, barangay, municipality, province, lat, lng, status, people_count,
            victim_age_group, special_conditions, notes,
-           is_verified, trust_score, ai_priority_score, rescue_status, timestamp)
-        VALUES (?,?,?,?,?,?,?,?, ?,?,?, ?,?,?,'pending', NOW())
+           is_verified, trust_score, ai_priority_score, rescue_status,
+           sos_mode, ai_scene_label, ai_scene_confidence, ai_detected_count,
+           timestamp)
+        VALUES (?,?,?,?,?,?,?,?,?, ?,?,?, ?,?,?,'pending', ?,?,?,?, NOW())
     ");
     $stmt->execute([
         $userId,
+        $reporterName,
         $body['barangay']     ?? null,
         $body['municipality'] ?? null,
         $body['province']     ?? null,
@@ -98,6 +122,10 @@ if ($method === 'POST') {
         $isVerified ? 1 : 0,
         $trustScore,
         $score,
+        $sosMode,
+        $aiLabel,
+        $aiConf,
+        $aiCount,
     ]);
 
     if ($userId) {

@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ── Internet ──────────────────────────────────────────────────────────── -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- ── Bluetooth Low Energy (Android 12+ / API 31+) ─────────────────────── -->
+    <!-- BLUETOOTH_ADVERTISE: start BLE advertising so nearby devices can discover us -->
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE"
+        android:usesPermissionFlags="neverForLocation" />
+    <!-- BLUETOOTH_CONNECT: connect to GATT servers on discovered peers -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- BLUETOOTH_SCAN: discover nearby SurvAIve devices advertising our SERVICE_UUID -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+
+    <!-- ── Bluetooth (Android 11 / API 30 and below) ─────────────────────────── -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+
+    <!-- ── Location — required for BLE scan on ALL Android versions ──────────── -->
+    <!-- (On Android 12+ BLUETOOTH_SCAN + neverForLocation reduces this requirement
+         but including both ensures compatibility with devices running ≤API 31) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- ── Wi-Fi Direct ───────────────────────────────────────────────────────── -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <!-- Android 13+ replaces location for Wi-Fi Direct discovery -->
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES"
+        android:usesPermissionFlags="neverForLocation" />
+
+    <!-- ── Notifications ─────────────────────────────────────────────────────── -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Vibrate for incoming SOS alerts -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Wake lock to keep mesh relay alive while screen is off -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- ── Hardware feature declarations ─────────────────────────────────────── -->
+    <!-- required=true: app is meaningless without BLE -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
+    <!-- required=false: Wi-Fi Direct enhances but is not strictly required -->
+    <uses-feature android:name="android.hardware.wifi.direct" android:required="false" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme"
+        android:usesCleartextTraffic="true">
+        <!--
+            android:usesCleartextTraffic="true" allows HTTP connections to the local
+            XAMPP server (no TLS on the admin hotspot LAN).  This only affects
+            connections to private IPs, not to the public internet.
+        -->
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+    </application>
+
+</manifest>

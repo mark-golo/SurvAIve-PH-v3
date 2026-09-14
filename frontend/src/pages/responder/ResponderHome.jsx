@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { getResponderTheme } from '../../lib/victimTheme'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { AlertTriangle, Home, Map, Radio, Settings, List, RefreshCw, Power, Users, ArrowUpDown } from 'lucide-react'
@@ -22,6 +23,7 @@ const NAV = [
 export function ResponderHome() {
   const navigate = useNavigate()
   const { scope } = useAuthStore()
+  const [isLight] = useState(() => getResponderTheme() === 'light')
   const muni = scope?.municipality
   const [onDuty, setOnDuty] = useState(false)
   const [sosList, setSosList] = useState([])
@@ -111,7 +113,7 @@ export function ResponderHome() {
   }
 
   return (
-    <div className="min-h-screen bg-mesh flex flex-col pb-20">
+    <div className={`min-h-screen bg-mesh flex flex-col pb-20${isLight ? ' light-theme' : ''}`}>
       {/* Header */}
       <header className="glass border-b border-[rgba(255,255,255,0.08)] px-4 py-3">
         <div className="flex items-center justify-between">

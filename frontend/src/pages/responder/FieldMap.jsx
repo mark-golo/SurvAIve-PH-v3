@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { getResponderTheme } from '../../lib/victimTheme'
 import { useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
@@ -55,6 +56,7 @@ function FlyTo({ pos }) {
 export function FieldMap() {
   const navigate = useNavigate()
   const { scope } = useAuthStore()
+  const [isLight] = useState(() => getResponderTheme() === 'light')
   const [centers, setCenters]   = useState([])
   const [assigned, setAssigned] = useState([])
   const [myPos, setMyPos]       = useState(null)
@@ -137,7 +139,7 @@ export function FieldMap() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-mesh flex flex-col pb-20">
+    <div className={`min-h-screen bg-mesh flex flex-col pb-20${isLight ? ' light-theme' : ''}`}>
       <TopBar title="Field Map" subtitle={profile?.assigned_zone ?? 'Field Map'} onBack />
 
       {/* Map */}

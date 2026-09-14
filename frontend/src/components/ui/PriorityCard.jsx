@@ -21,12 +21,15 @@ export function PriorityCard({ report, navigateTo, showAssignee = false }) {
         hover:border-[rgba(0,212,255,0.2)] transition-all duration-200 ${borderCls}`}
     >
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
           <StatusBadge status={priority} />
           {report.is_verified ? (
             <span className="text-[10px] text-[#00d4ff] font-medium">✓ Verified</span>
           ) : (
             <span className="text-[10px] text-[#f59e0b] font-medium">Guest</span>
+          )}
+          {report.sos_mode === 'photo' && (
+            <span className="text-[10px] text-violet-400 font-medium">📷 AI</span>
           )}
         </div>
         <p className="font-semibold text-sm text-slate-200 truncate">{report.name ?? 'Anonymous'}</p>

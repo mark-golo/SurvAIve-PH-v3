@@ -6,6 +6,7 @@ import { Home, Map, Radio, Settings, MessageSquare, Navigation, AlertTriangle, T
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
+import { getVictimTheme } from '../../lib/victimTheme'
 
 const DEFAULT_POS = [9.852, 126.073]
 
@@ -57,6 +58,7 @@ function FlyTo({ pos }) {
 
 export function LocalMap() {
   const { scope } = useAuthStore()
+  const [isLight] = useState(() => getVictimTheme() === 'light')
   const [userPos, setUserPos]     = useState(null)
   const [gpsError, setGpsError]   = useState(false)
   const [centers, setCenters]     = useState([])
@@ -93,7 +95,7 @@ export function LocalMap() {
     : null
 
   return (
-    <div className="min-h-screen bg-mesh flex flex-col pb-20">
+    <div className={`min-h-screen bg-mesh flex flex-col pb-20${isLight ? ' light-theme' : ''}`}>
       <TopBar title="My Location & Evacuation Centers" subtitle="Tap a shelter for details" onBack />
 
       {/* GPS warning */}

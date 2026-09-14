@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Plus, Pencil, Trash2, Search, UserCog, Shield, Radio, Eye, EyeOff } from 'lucide-react'
-import { AdminLayout } from './AdminLayout'
+
 import { GlassCard } from '../../components/ui/GlassCard'
 import { GlassInput, GlassSelect } from '../../components/ui/GlassInput'
 import { NeonButton } from '../../components/ui/NeonButton'
@@ -108,8 +108,7 @@ export function StaffManagement() {
   }
 
   return (
-    <AdminLayout title="Staff Management">
-      <div className="p-4 space-y-4">
+    <div className="p-4 space-y-4">
         {/* Tabs */}
         <div className="flex gap-2">
           <TabBtn active={isAdminTab}   icon={Shield} label="Admins"     onClick={() => switchTab('admins')} />
@@ -157,7 +156,6 @@ export function StaffManagement() {
         </div>
         <p className="text-xs text-slate-600 text-right">{filtered.length} of {data.length} {isAdminTab ? 'admins' : 'responders'}</p>
       </div>
-    </AdminLayout>
   )
 }
 

@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { Users, AlertTriangle, CheckCircle, Radio, RefreshCw, Shield, X, WifiOff } from 'lucide-react'
-import { AdminLayout } from './AdminLayout'
+import { Users, AlertTriangle, CheckCircle, Radio, RefreshCw, Shield, X, WifiOff, CalendarDays, ChevronDown } from 'lucide-react'
+
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { StatCard } from '../../components/ui/StatCard'
 import { NeonButton } from '../../components/ui/NeonButton'
@@ -15,6 +15,20 @@ import { fetchWeather, getWeatherLabel } from '../../lib/weatherService'
 import { predictDepletion } from '../../lib/resourcePredictor'
 
 const COLORS = { CRITICAL: '#ef4444', HIGH: '#f97316', MODERATE: '#f59e0b', SAFE: '#22c55e' }
+
+// ── Daily stats history — persisted in localStorage, survives refreshes ────────
+const DAILY_HISTORY_KEY = 'cc-daily-stats-history'
+const todayStr = () => new Date().toISOString().slice(0, 10)           // YYYY-MM-DD
+const isToday  = (ts) => {
+  try { return Boolean(ts) && new Date(ts).toISOString().slice(0, 10) === todayStr() }
+  catch { return false }
+}
+const loadDailyHistory = () => {
+  try { return JSON.parse(localStorage.getItem(DAILY_HISTORY_KEY) ?? '[]') } catch { return [] }
+}
+const saveDailyHistory = (arr) => {
+  try { localStorage.setItem(DAILY_HISTORY_KEY, JSON.stringify(arr.slice(0, 90))) } catch {}
+}
 
 const MUNICIPALITY_CENTERS = {
   // ── Surigao del Norte — Siargao Island (PSGC-coded) ─────────────────────
@@ -108,6 +122,8 @@ export function CommandCenter() {
   const [weatherError, setWeatherError] = useState(false)
   const [offlineMode, setOfflineMode] = useState(!navigator.onLine)
   const [snapshotAge, setSnapshotAge] = useState(null)
+  const [showHistory,  setShowHistory]  = useState(false)
+  const [dailyHistory, setDailyHistory] = useState(() => loadDailyHistory())
 
   const muni = scope?.municipality
   const muniGeo   = muni ? (MUNICIPALITY_CENTERS[muni] ?? null) : null
@@ -138,6 +154,9 @@ export function CommandCenter() {
 
   const criticalCount = adjustedReports.filter(r => r.priority === 'CRITICAL' && r.rescue_status !== 'rescued').length
   const rescuedCount  = reports.filter(r => r.rescue_status === 'rescued').length
+
+  // Today-only reports for the stat cards (resets at midnight)
+  const todayReports = useMemo(() => reports.filter(r => isToday(r.timestamp)), [reports])
 
   const dismissReport = (e, id) => {
     e.stopPropagation()
@@ -221,11 +240,31 @@ export function CommandCenter() {
           ))
         }
       )
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'sos_reports' },
+        payload => {
+          // New SOS submitted — re-sync to get RPC-computed fields (priority, name, minutes_ago)
+          const r = payload.new
+          if (muni && r.municipality !== muni) return
+          sync()
+        }
+      )
       .subscribe()
     return () => { supabase.removeChannel(sosSub) }
   }, [])
 
   useEffect(() => { sync() }, [])
+
+  // If navigated here from Victim Table "View on Map", fly to that victim's pin
+  useEffect(() => {
+    const pending = sessionStorage.getItem('cc-focus-sos')
+    if (!pending) return
+    try {
+      const { lat, lng } = JSON.parse(pending)
+      if (lat && lng) setSelectedSOS([lat, lng])
+    } catch { /* ignore malformed value */ }
+    sessionStorage.removeItem('cc-focus-sos')
+  }, [])
 
   // Track online/offline transitions and auto-sync when connectivity returns
   useEffect(() => {
@@ -253,6 +292,20 @@ export function CommandCenter() {
       // Cache to IndexedDB for offline use; persist timestamp
       await db.cacheReports(res)
       localStorage.setItem('cc-snapshot-ts', String(Date.now()))
+      // ── Snapshot today's stats for daily history ──────────────────────────
+      const todayOnly = res.filter(r => isToday(r.timestamp))
+      const snap = {
+        date:      todayStr(),
+        label:     new Date().toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' }),
+        total:     todayOnly.length,
+        critical:  todayOnly.filter(r => r.priority === 'CRITICAL').length,
+        rescued:   todayOnly.filter(r => r.rescue_status === 'rescued').length,
+        savedAt:   Date.now(),
+      }
+      const hist = loadDailyHistory()
+      const next = [snap, ...hist.filter(h => h.date !== snap.date)]
+      saveDailyHistory(next)
+      setDailyHistory(next)
       // Silently mirror SOS records into local MySQL so the offline dashboard
       // shows real Supabase data when there is no internet connection.
       localFetch('sync?action=sos', {
@@ -291,7 +344,7 @@ export function CommandCenter() {
     : null
 
   return (
-    <AdminLayout title="Command Center">
+    <>
       {/* Offline / local-server banner */}
       {offlineMode && (
         <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-xs text-amber-400">
@@ -380,20 +433,96 @@ export function CommandCenter() {
         {/* Sidebar stats */}
         <aside className="w-full lg:w-72 xl:w-80 glass border-t lg:border-t-0 lg:border-l border-[rgba(255,255,255,0.08)] flex flex-col overflow-hidden">
 
-          {/* 1 — Live Stats */}
+          {/* 1 — Live Stats (today only — resets at midnight, history saved) */}
           <div className="p-3 border-b border-[rgba(255,255,255,0.08)]">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Live Stats</p>
-              <NeonButton size="sm" variant="ghost" onClick={sync} loading={syncing}>
-                <RefreshCw size={11} className={syncing ? 'animate-spin' : ''} />
-              </NeonButton>
+            {/* Header row */}
+            <div className="flex items-center justify-between mb-1">
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Live Stats</p>
+                <p className="text-[10px] text-slate-600">
+                  Today · {new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setShowHistory(v => !v)}
+                  title="Daily report history"
+                  className={`p-1.5 rounded-lg transition-all ${
+                    showHistory
+                      ? 'bg-[rgba(0,212,255,0.15)] text-[#00d4ff]'
+                      : 'text-slate-500 hover:text-[#00d4ff] hover:bg-[rgba(0,212,255,0.08)]'
+                  }`}
+                >
+                  <CalendarDays size={12} />
+                </button>
+                <NeonButton size="sm" variant="ghost" onClick={sync} loading={syncing}>
+                  <RefreshCw size={11} className={syncing ? 'animate-spin' : ''} />
+                </NeonButton>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              <StatCard label="Total SOS"  value={stats.total}   icon={Users}         color="#00d4ff" className="!p-2.5 !gap-0.5 !rounded-xl" />
-              <StatCard label="Critical"   value={criticalCount} icon={AlertTriangle} color="#ef4444" className="!p-2.5 !gap-0.5 !rounded-xl" />
-              <StatCard label="Rescued"    value={rescuedCount}  icon={CheckCircle}   color="#22c55e" className="!p-2.5 !gap-0.5 !rounded-xl" />
-              <StatCard label="Responders" value={activeResponders.length} icon={Radio} color="#8b5cf6" className="!p-2.5 !gap-0.5 !rounded-xl" />
+
+            {/* Today's stat cards */}
+            <div className="grid grid-cols-2 gap-1.5 mb-2">
+              <StatCard label="SOS Today"  value={todayReports.length}
+                icon={Users}         color="#00d4ff" className="!p-2.5 !gap-0.5 !rounded-xl" />
+              <StatCard label="Critical"   value={todayReports.filter(r => r.priority === 'CRITICAL').length}
+                icon={AlertTriangle} color="#ef4444" className="!p-2.5 !gap-0.5 !rounded-xl" />
+              <StatCard label="Rescued"    value={todayReports.filter(r => r.rescue_status === 'rescued').length}
+                icon={CheckCircle}   color="#22c55e" className="!p-2.5 !gap-0.5 !rounded-xl" />
+              <StatCard label="Responders" value={activeResponders.length}
+                icon={Radio}         color="#8b5cf6" className="!p-2.5 !gap-0.5 !rounded-xl" />
             </div>
+
+            {/* Daily history panel — collapsible */}
+            {showHistory && (
+              <div className="border-t border-[rgba(255,255,255,0.06)] pt-2">
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                  📅 Daily Report History
+                </p>
+                {dailyHistory.length === 0 ? (
+                  <p className="text-[10px] text-slate-600 py-1">
+                    No history yet — data saves automatically on each sync.
+                  </p>
+                ) : (
+                  <div className="space-y-1 max-h-48 overflow-y-auto pr-0.5">
+                    {dailyHistory.map(h => {
+                      const isCurrentDay = h.date === todayStr()
+                      return (
+                        <div key={h.date}
+                          className={`rounded-lg px-2.5 py-2 flex items-center justify-between border ${
+                            isCurrentDay
+                              ? 'bg-[rgba(0,212,255,0.06)] border-[rgba(0,212,255,0.2)]'
+                              : 'glass border-[rgba(255,255,255,0.05)]'
+                          }`}>
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-semibold text-slate-200 truncate">
+                              {h.label ?? h.date}
+                            </p>
+                            <p className="text-[9px] text-slate-500">
+                              {isCurrentDay ? 'Today — live' : h.date}
+                            </p>
+                          </div>
+                          <div className="flex gap-3 shrink-0 ml-2">
+                            <div className="text-center">
+                              <p className="text-xs font-black text-[#00d4ff]">{h.total}</p>
+                              <p className="text-[9px] text-slate-600">SOS</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs font-black text-[#ef4444]">{h.critical}</p>
+                              <p className="text-[9px] text-slate-600">Crit</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs font-black text-[#22c55e]">{h.rescued}</p>
+                              <p className="text-[9px] text-slate-600">Res.</p>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 2 — Weather Risk Widget */}
@@ -549,6 +678,6 @@ export function CommandCenter() {
           </div>
         </aside>
       </div>
-    </AdminLayout>
+    </>
   )
 }

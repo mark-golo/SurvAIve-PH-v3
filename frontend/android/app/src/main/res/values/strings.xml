@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SurvAIve PH</string>
+    <string name="title_activity_main">SurvAIve PH</string>
+    <string name="package_name">ph.survaive.app</string>
+    <string name="custom_url_scheme">ph.survaive.app</string>
+</resources>

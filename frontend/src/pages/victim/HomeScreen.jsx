@@ -8,6 +8,7 @@ import { useAuthStore } from '../../store/auth'
 import { mesh } from '../../lib/mesh'
 import { autoSOS } from '../../lib/autoSOS'
 import { useState, useEffect } from 'react'
+import { getVictimTheme } from '../../lib/victimTheme'
 
 const STATUS_OPTIONS = [
   { label: 'Injured', colorFrom: 'rgb(239,68,68)',  colorTo: 'rgb(185,28,28)',  Icon: HeartPulse,   value: 'injured' },
@@ -26,6 +27,7 @@ const NAV = [
 export function HomeScreen() {
   const navigate = useNavigate()
   const { user, isGuest } = useAuthStore()
+  const [isLight] = useState(() => getVictimTheme() === 'light')
   const [quickStatus, setQuickStatus] = useState(null)
   const [peers] = useState(mesh.getPeers())
   const [isOnline, setIsOnline] = useState(navigator.onLine)
@@ -66,7 +68,7 @@ export function HomeScreen() {
   const handleSOS = () => navigate('/sos')
 
   return (
-    <div className="min-h-screen bg-mesh flex flex-col pb-20">
+    <div className={`min-h-screen bg-mesh flex flex-col pb-20${isLight ? ' light-theme' : ''}`}>
       {/* Top bar */}
       <header className="glass border-b border-[rgba(255,255,255,0.08)] px-4 py-3">
         <div className="flex items-center justify-between">

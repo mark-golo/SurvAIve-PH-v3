@@ -1,15 +1,14 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Globe, BarChart2, AlertOctagon, Building2, UserCog, FileText, LogOut, Menu } from 'lucide-react'
-import { useState } from 'react'
+import { Globe, UserCog, LogOut, Menu, ClipboardList, Layers, Settings2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
 import { useAuthStore } from '../../store/auth'
+import { getSuperAdminTheme, saveSuperAdminTheme } from '../../lib/victimTheme'
 
 const NAV = [
-  { icon: Globe,        label: 'Provincial Map',    path: '/superadmin'                    },
-  { icon: Building2,    label: 'Municipalities',    path: '/superadmin/municipalities'     },
-  { icon: BarChart2,    label: 'Analytics',         path: '/superadmin/analytics'          },
-  { icon: AlertOctagon, label: 'Escalations',       path: '/superadmin/escalations'        },
-  { icon: UserCog,      label: 'Staff Management',  path: '/superadmin/staff'              },
-  { icon: FileText,     label: 'Emergency Reports', path: '/superadmin/reports'            },
+  { icon: Globe,         label: 'Provincial Map',          path: '/superadmin'                          },
+  { icon: Layers,        label: 'Municipality Comparison', path: '/superadmin/municipality-comparison'  },
+  { icon: ClipboardList, label: 'SITREP',                  path: '/superadmin/sitrep'                   },
+  { icon: UserCog,       label: 'Staff Management',        path: '/superadmin/staff'                    },
 ]
 
 export function SuperAdminLayout({ children, title }) {
@@ -17,9 +16,18 @@ export function SuperAdminLayout({ children, title }) {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
   const [open, setOpen] = useState(false)
+  const [superAdminTheme, setSuperAdminTheme] = useState(() => getSuperAdminTheme())
+
+  useEffect(() => {
+    window.__setSuperAdminTheme = (t) => {
+      saveSuperAdminTheme(t)
+      setSuperAdminTheme(t)
+    }
+    return () => { delete window.__setSuperAdminTheme }
+  }, [])
 
   return (
-    <div className="min-h-screen bg-mesh flex">
+    <div className={`min-h-screen bg-mesh flex${superAdminTheme === 'light' ? ' light-theme' : ''}`}>
       <aside className={`
         fixed inset-y-0 left-0 z-50 w-60 glass border-r border-[rgba(255,255,255,0.08)] flex flex-col
         transition-transform duration-300 ${open ? 'translate-x-0' : '-translate-x-full'}
@@ -43,18 +51,29 @@ export function SuperAdminLayout({ children, title }) {
             const active = pathname === path
             return (
               <button key={path} onClick={() => { navigate(path); setOpen(false) }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-all ${
                   active
                     ? 'bg-[rgba(139,92,246,0.12)] text-[#8b5cf6] border border-[rgba(139,92,246,0.2)]'
-                    : 'text-slate-400 hover:text-white hover:bg-[rgba(255,255,255,0.05)]'
+                    : 'text-slate-400 hover:text-white hover:bg-[rgba(255,255,255,0.05)] border border-transparent'
                 }`}>
-                <Icon size={16} />
-                {label}
+                <Icon size={16} className="shrink-0" />
+                <span className="truncate">{label}</span>
               </button>
             )
           })}
         </nav>
-        <div className="p-3 border-t border-[rgba(255,255,255,0.08)]">
+        <div className="p-3 border-t border-[rgba(255,255,255,0.08)] space-y-1">
+          <button
+            onClick={() => { navigate('/superadmin/settings'); setOpen(false) }}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all ${
+              pathname === '/superadmin/settings'
+                ? 'text-[#8b5cf6] bg-[rgba(139,92,246,0.08)]'
+                : 'text-slate-500 hover:text-white'
+            }`}
+          >
+            <Settings2 size={15} />
+            Settings
+          </button>
           <button onClick={() => { logout(); navigate('/') }}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-slate-500 hover:text-white">
             <LogOut size={15} />

@@ -1,17 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Search, Download, Plus, UserCheck, Pencil, Trash2 } from 'lucide-react'
-import { AdminLayout } from './AdminLayout'
+
 import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassInput, GlassSelect } from '../../components/ui/GlassInput'
 import { GlassCard } from '../../components/ui/GlassCard'
 import api, { localFetch } from '../../lib/api'
+import { generateVictimId } from '../../lib/deviceAuth'
+import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 import { getBarangays } from '../../lib/philippineLocations'
 
 const STATUS_COLORS = {
-  active:   { bg: 'bg-[rgba(34,197,94,0.1)]',  text: 'text-[#22c55e]',  label: 'Active'   },
-  sos_sent: { bg: 'bg-[rgba(239,68,68,0.1)]',  text: 'text-[#ef4444]',  label: 'SOS Sent' },
-  rescued:  { bg: 'bg-[rgba(0,212,255,0.1)]',  text: 'text-[#00d4ff]',  label: 'Rescued'  },
+  sos_sent: { bg: 'bg-[rgba(239,68,68,0.1)]',  text: 'text-[#ef4444]',  label: 'Not Safe' },
+  rescued:  { bg: 'bg-[rgba(34,197,94,0.1)]',  text: 'text-[#22c55e]',  label: 'Safe'     },
   unknown:  { bg: 'bg-[rgba(107,114,128,0.1)]',text: 'text-[#9ca3af]',  label: 'Unknown'  },
 }
 
@@ -21,26 +22,31 @@ export function ConstituentRegistry() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [barangayFilter, setBarangayFilter] = useState('all')
   const [showAdd, setShowAdd] = useState(false)
   const [editId, setEditId] = useState(null)
   const [editForm, setEditForm] = useState({})
   const [addForm, setAddForm] = useState({ name: '', contact_number: '', barangay: '', household_count: 1 })
-  const [saving, setSaving] = useState(false)
+  const [saving, setSaving]       = useState(false)
+  const [lastAdded, setLastAdded] = useState(null)  // { name, victim_id }
 
   const muni = scope?.municipality
-  useEffect(() => {
+
+  const load = useCallback(() => {
     api.get(muni ? `/constituents?municipality=${encodeURIComponent(muni)}` : '/constituents')
       .then(rows => {
         setData(rows.map(r => ({
-          id: r.id,
-          name: r.name,
-          contact: r.contact_number,
-          barangay: r.barangay,
-          household: r.household_count,
-          status: r.status,
-          verified: !!r.is_verified,
+          id:              r.id,
+          name:            r.name,
+          contact:         r.contact_number,
+          barangay:        r.barangay,
+          household:       r.household_count,
+          status:          r.status,
+          verified:        !!r.is_verified,
           vulnerabilities: r.vulnerabilities ?? [],
-          account_status: r.account_status,   // null | 'active' | 'inactive'
+          account_status:  r.account_status,   // null | 'active' | 'inactive'
+          victim_id:       r.victim_id ?? null,
+          admin_entry:     r.trust_score === 'ADMIN_ENTRY',
         })))
         // Mirror victims to MySQL so the Constituent Registry works offline
         localFetch('sync?action=victims', {
@@ -50,7 +56,28 @@ export function ConstituentRegistry() {
       })
       .catch(() => setData([]))
       .finally(() => setLoading(false))
-  }, [])
+  }, [muni])
+
+  // Initial load — and re-load if municipality scope changes
+  useEffect(() => { load() }, [load])
+
+  // Realtime: patch victim status when a trigger (SOS submit / rescue) updates victims table
+  useEffect(() => {
+    const ch = supabase.channel('cr-victims-status')
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'victims' },
+        payload => {
+          const v = payload.new
+          setData(d => d.map(r => r.id === v.id ? { ...r, status: v.status } : r))
+        }
+      )
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'victims' },
+        () => { load() }   // new self-registration → re-fetch full list
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [load])
 
   function openEdit(c) {
     setShowAdd(false)
@@ -88,8 +115,15 @@ export function ConstituentRegistry() {
     if (!addForm.name.trim()) return
     setSaving(true)
     try {
-      const res = await api.post('/constituents', { ...addForm, municipality: muni })
-      setData(prev => [...prev, { id: res.id, name: addForm.name, contact: addForm.contact_number, barangay: addForm.barangay, household: Number(addForm.household_count), status: 'active', verified: false, vulnerabilities: [] }])
+      const vid = generateVictimId()
+      const res = await api.post('/constituents', { ...addForm, municipality: muni, victim_id: vid })
+      setData(prev => [...prev, {
+        id: res.id, name: addForm.name, contact: addForm.contact_number,
+        barangay: addForm.barangay, household: Number(addForm.household_count),
+        status: 'unknown', verified: false, vulnerabilities: [],
+        victim_id: vid, admin_entry: true,
+      }])
+      setLastAdded({ name: addForm.name, victim_id: vid })
       setAddForm({ name: '', contact_number: '', barangay: '', household_count: 1 })
       setShowAdd(false)
     } catch { /* keep form open */ }
@@ -98,6 +132,7 @@ export function ConstituentRegistry() {
 
   const filtered = data.filter(c => {
     if (search && !c.name.toLowerCase().includes(search.toLowerCase()) && !c.barangay.toLowerCase().includes(search.toLowerCase())) return false
+    if (barangayFilter !== 'all' && c.barangay !== barangayFilter) return false
     if (statusFilter !== 'all' && c.status !== statusFilter) return false
     return true
   })
@@ -110,19 +145,16 @@ export function ConstituentRegistry() {
   }
 
   if (loading) return (
-    <AdminLayout title="Constituent Registry">
-      <div className="flex items-center justify-center h-64 text-slate-400 text-sm">Loading constituents…</div>
-    </AdminLayout>
+    <div className="flex items-center justify-center h-64 text-slate-400 text-sm">Loading constituents…</div>
   )
 
   return (
-    <AdminLayout title="Constituent Registry">
-      <div className="p-4 space-y-4">
+    <div className="p-4 space-y-4">
         {/* Summary cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <SummaryChip label="Registered"   value={summary.total}   color="#00d4ff" />
-          <SummaryChip label="SOS Sent"     value={summary.sos}     color="#ef4444" />
-          <SummaryChip label="Rescued"      value={summary.rescued} color="#22c55e" />
+          <SummaryChip label="Not Safe"     value={summary.sos}     color="#ef4444" />
+          <SummaryChip label="Safe"         value={summary.rescued} color="#22c55e" />
           <SummaryChip label="Status Unknown" value={summary.unknown} color="#9ca3af" />
         </div>
 
@@ -131,11 +163,14 @@ export function ConstituentRegistry() {
           <div className="flex-1 min-w-[200px]">
             <GlassInput placeholder="Search name or barangay…" icon={Search} value={search} onChange={e => setSearch(e.target.value)} />
           </div>
+          <GlassSelect value={barangayFilter} onChange={e => setBarangayFilter(e.target.value)} className="w-44">
+            <option value="all">All Barangays</option>
+            {getBarangays(muni).map(b => <option key={b} value={b}>{b}</option>)}
+          </GlassSelect>
           <GlassSelect value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-40">
             <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="sos_sent">SOS Sent</option>
-            <option value="rescued">Rescued</option>
+            <option value="sos_sent">Not Safe</option>
+            <option value="rescued">Safe</option>
             <option value="unknown">Unknown</option>
           </GlassSelect>
           <NeonButton variant="ghost" size="sm" onClick={() => alert('Export CSV – would download barangay registry')}>
@@ -147,6 +182,23 @@ export function ConstituentRegistry() {
             Manual Entry
           </NeonButton>
         </div>
+
+        {/* Victim ID assigned banner */}
+        {lastAdded && (
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-[rgba(34,197,94,0.08)] border border-[rgba(34,197,94,0.2)]">
+            <div className="flex items-center gap-2">
+              <UserCheck size={14} className="text-[#22c55e] shrink-0" />
+              <span className="text-xs text-slate-300">
+                <strong className="text-white">{lastAdded.name}</strong> added · Victim ID:{' '}
+                <span className="font-mono text-[#22c55e] font-bold tracking-wide">{lastAdded.victim_id}</span>
+              </span>
+            </div>
+            <button onClick={() => setLastAdded(null)}
+              className="text-slate-500 hover:text-white text-xs px-2 py-0.5 rounded transition-colors">
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Manual entry form */}
         {showAdd && (
@@ -174,17 +226,17 @@ export function ConstituentRegistry() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-[rgba(255,255,255,0.06)]">
-                  {['Name', 'Contact', 'Barangay', 'Household', 'Vulnerabilities', 'Status', 'Account', 'Verified', 'Actions'].map(h => (
+                  {['Victim ID', 'Name', 'Contact', 'Barangay', 'Household', 'Vulnerabilities', 'Status', 'Verified', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {filtered.map(c => {
-                  const sc = STATUS_COLORS[c.status] ?? STATUS_COLORS.unknown
                   return (
                     <>
                       <tr key={c.id} className="border-b border-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.02)]">
+                        <td className="px-4 py-3 text-[11px] font-mono text-slate-500">{c.victim_id ?? <span className="text-slate-700">—</span>}</td>
                         <td className="px-4 py-3 text-sm font-medium text-white">{c.name}</td>
                         <td className="px-4 py-3 text-xs text-slate-400">{c.contact}</td>
                         <td className="px-4 py-3 text-xs text-slate-400">{c.barangay}</td>
@@ -200,23 +252,19 @@ export function ConstituentRegistry() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc.bg} ${sc.text}`}>{sc.label}</span>
+                          {STATUS_COLORS[c.status]
+                            ? <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[c.status].bg} ${STATUS_COLORS[c.status].text}`}>{STATUS_COLORS[c.status].label}</span>
+                            : <span className="text-xs text-slate-600">—</span>
+                          }
                         </td>
                         <td className="px-4 py-3">
-                          {c.account_status === 'inactive' && (
-                            <span className="text-xs px-2 py-0.5 rounded bg-[rgba(239,68,68,0.15)] text-[#ef4444]">Disabled</span>
-                          )}
-                          {c.account_status === 'active' && (
-                            <span className="text-xs px-2 py-0.5 rounded bg-[rgba(34,197,94,0.12)] text-[#22c55e]">Active</span>
-                          )}
-                          {c.account_status === null && (
-                            <span className="text-xs px-2 py-0.5 rounded bg-[rgba(107,114,128,0.1)] text-[#9ca3af]">No Account</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {c.verified
-                            ? <span className="text-[11px] text-[#00d4ff] font-medium flex items-center gap-1"><UserCheck size={11} /> Verified</span>
-                            : <span className="text-[11px] text-[#f59e0b]">Admin-Entered</span>
+                          {c.admin_entry
+                            ? <span className="text-[11px] text-[#f59e0b]">Admin-Entered</span>
+                            : c.victim_id
+                              ? <span className="text-[11px] text-[#8b5cf6] font-medium">Self-Registered</span>
+                              : c.verified
+                                ? <span className="text-[11px] text-[#00d4ff] font-medium flex items-center gap-1"><UserCheck size={11} /> Verified</span>
+                                : <span className="text-[11px] text-[#f59e0b]">Admin-Entered</span>
                           }
                         </td>
                         <td className="px-4 py-3">
@@ -246,9 +294,8 @@ export function ConstituentRegistry() {
                                 </GlassSelect>
                                 <GlassInput label="Household Count" type="number" value={editForm.household_count} onChange={e => setEditForm(p => ({ ...p, household_count: e.target.value }))} />
                                 <GlassSelect label="Status" value={editForm.status} onChange={e => setEditForm(p => ({ ...p, status: e.target.value }))}>
-                                  <option value="active">Active</option>
-                                  <option value="sos_sent">SOS Sent</option>
-                                  <option value="rescued">Rescued</option>
+                                  <option value="sos_sent">Not Safe</option>
+                                  <option value="rescued">Safe</option>
                                   <option value="unknown">Unknown</option>
                                 </GlassSelect>
                               </div>
@@ -285,7 +332,6 @@ export function ConstituentRegistry() {
         </div>
         <p className="text-xs text-slate-600 text-right">{filtered.length} of {data.length} constituents</p>
       </div>
-    </AdminLayout>
   )
 }
 

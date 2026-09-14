@@ -5,6 +5,7 @@ import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { mesh } from '../../lib/mesh'
+import { getVictimTheme } from '../../lib/victimTheme'
 
 const NAV = [
   { icon: Home, label: 'Home', path: '/home' },
@@ -27,6 +28,7 @@ function SignalBars({ level }) {
 }
 
 export function MeshStatus() {
+  const [isLight] = useState(() => getVictimTheme() === 'light')
   const [peers, setPeers] = useState(mesh.getPeers())
   const [stats, setStats] = useState(mesh.getStats())
   const [refreshing, setRefreshing] = useState(false)
@@ -49,7 +51,7 @@ export function MeshStatus() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-mesh flex flex-col pb-20">
+    <div className={`min-h-screen bg-mesh flex flex-col pb-20${isLight ? ' light-theme' : ''}`}>
       <TopBar title="Mesh Network Status" subtitle="Peer-to-peer emergency relay" onBack />
 
       <main className="flex-1 p-4 space-y-4">

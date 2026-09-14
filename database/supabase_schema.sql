@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS responders (
 -- ── victims ───────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS victims (
   id                             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  victim_id                      TEXT UNIQUE,
   name                           TEXT NOT NULL,
   contact_number                 TEXT UNIQUE,
   gmail                          TEXT,
@@ -84,6 +85,9 @@ CREATE TABLE IF NOT EXISTS victims (
   emergency_contact_name         TEXT,
   emergency_contact_number       TEXT,
   emergency_contact_relationship TEXT,
+  pin_hash                       TEXT,
+  device_key_hash                TEXT,
+  pin_salt                       TEXT,
   status                         TEXT NOT NULL DEFAULT 'active'
                                    CHECK (status IN ('active','sos_sent','rescued','unknown')),
   is_verified                    BOOLEAN NOT NULL DEFAULT FALSE,
@@ -91,10 +95,16 @@ CREATE TABLE IF NOT EXISTS victims (
   created_at                     TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Allow anonymous device-bound registration (no OTP / Supabase Auth required)
+CREATE POLICY IF NOT EXISTS "victims_device_register"
+  ON victims FOR INSERT TO anon
+  WITH CHECK (victim_id IS NOT NULL);
+
 -- ── sos_reports ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS sos_reports (
   id                    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   user_id               BIGINT REFERENCES victims(id) ON DELETE SET NULL,
+  name                  TEXT DEFAULT NULL,
   barangay              TEXT,
   municipality          TEXT,
   province              TEXT,
@@ -113,6 +123,11 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   rescue_status         TEXT NOT NULL DEFAULT 'pending'
                           CHECK (rescue_status IN ('pending','en_route','on_scene','rescued','cannot_reach')),
   field_notes           TEXT,
+  -- dual-mode SOS: YOLO11 AI analysis fields
+  sos_mode              TEXT     NOT NULL DEFAULT 'status',
+  ai_scene_label        TEXT     DEFAULT NULL,
+  ai_scene_confidence   SMALLINT DEFAULT NULL,
+  ai_detected_count     SMALLINT DEFAULT NULL,
   created_at            TIMESTAMPTZ DEFAULT NOW(),
   synced_at             TIMESTAMPTZ,
   dismissed             BOOLEAN NOT NULL DEFAULT FALSE
@@ -446,18 +461,18 @@ LANGUAGE sql SECURITY DEFINER AS $$
     r.lat, r.lng, r.status, r.people_count, r.victim_age_group, r.special_conditions, r.notes,
     r.is_verified, r.trust_score, r.ai_priority_score,
     r.assigned_responder_id, r.rescue_status, r.field_notes, r.created_at,
-    v.name,
+    COALESCE(v.name, r.name) AS name,
     v.contact_number,
     v.vulnerabilities,
     v.household_count,
-    r.dismissed,
     CASE
       WHEN r.ai_priority_score >= 80 THEN 'CRITICAL'
       WHEN r.ai_priority_score >= 60 THEN 'HIGH'
       WHEN r.ai_priority_score >= 40 THEN 'MODERATE'
       ELSE 'LOW'
     END AS priority,
-    ROUND(EXTRACT(EPOCH FROM NOW() - r.created_at) / 60, 0)::NUMERIC AS minutes_ago
+    ROUND(EXTRACT(EPOCH FROM NOW() - r.created_at) / 60, 0)::NUMERIC AS minutes_ago,
+    r.dismissed
   FROM sos_reports r
   LEFT JOIN victims v ON r.user_id = v.id
   WHERE
@@ -490,6 +505,26 @@ DROP TRIGGER IF EXISTS tr_sync_rescue_to_victim ON sos_reports;
 CREATE TRIGGER tr_sync_rescue_to_victim
   AFTER UPDATE ON sos_reports
   FOR EACH ROW EXECUTE FUNCTION sync_rescue_to_victim_status();
+
+-- ============================================================
+-- TRIGGER: set victims.status = 'sos_sent' on new SOS INSERT
+-- Fires when an authenticated victim submits a new SOS (user_id IS NOT NULL).
+-- Guest SOS reports (user_id IS NULL) are skipped.
+-- ============================================================
+CREATE OR REPLACE FUNCTION sync_sos_insert_to_victim_status()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  IF NEW.user_id IS NOT NULL THEN
+    UPDATE victims SET status = 'sos_sent' WHERE id = NEW.user_id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS tr_sync_sos_insert_to_victim ON sos_reports;
+CREATE TRIGGER tr_sync_sos_insert_to_victim
+  AFTER INSERT ON sos_reports
+  FOR EACH ROW EXECUTE FUNCTION sync_sos_insert_to_victim_status();
 
 -- ============================================================
 -- TRIGGER: sync role → app_metadata on user creation
@@ -546,3 +581,10 @@ ON CONFLICT (contact_number) DO NOTHING;
 -- VALUES ('<uuid-superadmin>', 'superadmin', '<Your Name>', '09170000001', '<Your Province>');
 --
 -- All other accounts (admins, responders) are created through the app UI.
+
+-- ── Realtime publications ─────────────────────────────────────────────────────
+-- Required for Supabase .on('postgres_changes', ...) subscriptions to fire.
+ALTER TABLE sos_reports REPLICA IDENTITY FULL;
+ALTER PUBLICATION supabase_realtime ADD TABLE sos_reports;
+ALTER TABLE victims REPLICA IDENTITY FULL;
+ALTER PUBLICATION supabase_realtime ADD TABLE victims;
