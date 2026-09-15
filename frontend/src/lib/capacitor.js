@@ -10,6 +10,13 @@
 import { Geolocation } from '@capacitor/geolocation'
 import { Network }     from '@capacitor/network'
 
+// Sync flag — seeded from navigator.onLine, updated by Capacitor listener on native.
+// Use getNetworkOnline() everywhere instead of navigator.onLine directly so the
+// Android WebView's ConnectivityManager result is used rather than the less reliable
+// browser property.
+let _online = navigator.onLine
+export function getNetworkOnline() { return _online }
+
 // ── Geolocation ───────────────────────────────────────────────────────────────
 
 /**
@@ -61,4 +68,9 @@ export function initCapacitor() {
   } else {
     console.log('[SurvAIve] Running in browser / PWA context')
   }
+
+  // Seed accurate network status from Capacitor, then keep _online live.
+  // On web this is a no-op since navigator.onLine is already the source of truth.
+  Network.getStatus().then(s => { _online = s.connected }).catch(() => {})
+  Network.addListener('networkStatusChange', ({ connected }) => { _online = connected })
 }

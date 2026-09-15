@@ -1,6 +1,7 @@
 // Supabase compatibility wrapper — maps old PHP URL patterns to Supabase calls
 import { supabase, signupClient } from './supabase'
 import { hashPIN, createOfflineToken } from './deviceAuth'
+import { getNetworkOnline } from './capacitor'
 
 // ── Local PHP backend (XAMPP) ── used in offline / Wi-Fi hotspot mode ─────────
 //
@@ -207,19 +208,19 @@ async function get(path) {
   }
 
   // ── Offline: route all reads to local XAMPP PHP backend ─────────────────────
-  if (!navigator.onLine && resource === 'sos') {
+  if (!getNetworkOnline() && resource === 'sos') {
     const qs = params.toString()
     const rows = await localFetch(`sos${qs ? '?' + qs : ''}`)
     return (Array.isArray(rows) ? rows : [rows]).map(normalizeSos)
   }
 
-  if (!navigator.onLine && resource === 'evacuation_centers') {
+  if (!getNetworkOnline() && resource === 'evacuation_centers') {
     const qs = params.toString()
     const rows = await localFetch(`evacuation_centers${qs ? '?' + qs : ''}`)
     return Array.isArray(rows) ? rows : (rows ? [rows] : [])
   }
 
-  if (!navigator.onLine && resource === 'constituents') {
+  if (!getNetworkOnline() && resource === 'constituents') {
     const qs = params.toString()
     const rows = await localFetch(`constituents${qs ? '?' + qs : ''}`)
     return (Array.isArray(rows) ? rows : (rows ? [rows] : [])).map(r => ({
@@ -228,7 +229,7 @@ async function get(path) {
     }))
   }
 
-  if (!navigator.onLine && (resource === 'responders' || resource === 'admins' || resource === 'superadmins')) {
+  if (!getNetworkOnline() && (resource === 'responders' || resource === 'admins' || resource === 'superadmins')) {
     const qs = params.toString()
     const rows = await localFetch(`${resource}${qs ? '?' + qs : ''}`)
     return Array.isArray(rows) ? rows : (rows ? [rows] : [])
@@ -327,7 +328,7 @@ async function post(path, body = {}) {
 
     if (action === 'login') {
       // ── Offline login: authenticate against local XAMPP MySQL ──
-      if (!navigator.onLine) {
+      if (!getNetworkOnline()) {
         const data = await localFetch('auth/login', {
           method: 'POST',
           body: JSON.stringify({
@@ -516,7 +517,7 @@ async function post(path, body = {}) {
     // ── Device-bound victim login (Victim ID + PIN + device key) ─────────────
     if (action === 'victim-login') {
       // Offline: forward to local XAMPP only (cannot reach Supabase)
-      if (!navigator.onLine) {
+      if (!getNetworkOnline()) {
         return localFetch('auth/victim-login', { method: 'POST', body: JSON.stringify(body) })
       }
 
@@ -581,7 +582,7 @@ async function post(path, body = {}) {
   // ── SOS submit ──
   if (resource === 'sos') {
     // Offline: POST directly to local XAMPP (victim on admin's Wi-Fi hotspot)
-    if (!navigator.onLine) {
+    if (!getNetworkOnline()) {
       return localFetch('sos', { method: 'POST', body: JSON.stringify(body) })
     }
 

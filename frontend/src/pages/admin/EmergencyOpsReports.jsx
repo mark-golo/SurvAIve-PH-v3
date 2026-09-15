@@ -9,6 +9,7 @@ import { SuperAdminLayout } from '../superadmin/SuperAdminLayout'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 import api from '../../lib/api'
+import { getNetworkOnline } from '../../lib/capacitor'
 
 const TABS = [
   { id: 'aar',        label: 'After-Action Report' },
@@ -773,7 +774,7 @@ export function EmergencyOpsReports() {
 
   // Reports require a live Supabase connection — show a clear notice offline
   // rather than letting all 6 tabs crash with a network error.
-  if (!navigator.onLine) {
+  if (!getNetworkOnline()) {
     return (
       <Layout title="Emergency Operations Reports">
         <div className="flex flex-col items-center justify-center h-64 gap-4 text-center px-6">

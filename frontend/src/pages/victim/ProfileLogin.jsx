@@ -7,6 +7,7 @@ import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassInput } from '../../components/ui/GlassInput'
 import { useAuthStore } from '../../store/auth'
 import api from '../../lib/api'
+import { getNetworkOnline } from '../../lib/capacitor'
 import {
   getOrCreateDeviceKey,
   hashDeviceKey,
@@ -71,7 +72,7 @@ export function ProfileLogin() {
 
           // Best-effort: sync victim to Supabase so SOS name/user_id link works.
           // This runs in background — we don't await it; navigation proceeds immediately.
-          if (navigator.onLine) {
+          if (getNetworkOnline()) {
             api.post('/auth/victim-login', { victim_id: cleanId, pin, device_key_hash: deviceKeyHash })
               .catch(() => {}) // fire-and-forget
           }
@@ -80,7 +81,7 @@ export function ProfileLogin() {
           return
         }
         // Wrong PIN or device key — fall through to online check only if online
-        if (!navigator.onLine) {
+        if (!getNetworkOnline()) {
           setError('Wrong PIN or device not recognised.')
           setLoading(false); return
         }

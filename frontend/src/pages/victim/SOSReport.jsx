@@ -15,6 +15,7 @@ import { mesh } from '../../lib/mesh'
 import api from '../../lib/api'
 import { analyzeScene } from '../../lib/yolo11'
 import { getVictimTheme } from '../../lib/victimTheme'
+import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
 import { Home, Map, Radio, Settings, MessageSquare } from 'lucide-react'
 
 const NAV = [
@@ -47,7 +48,7 @@ export function SOSReport() {
   const [submitted,   setSubmitted]   = useState(false)
   const [sosError,    setSosError]    = useState(null)
   const [priorityScore, setPriorityScore] = useState(null)
-  const [offline,     setOffline]     = useState(!navigator.onLine)
+  const [offline,     setOffline]     = useState(!getNetworkOnline())
 
   // ── Voice state ──────────────────────────────────────────────────────────────
   const [listening,      setListening]      = useState(false)
@@ -75,9 +76,7 @@ export function SOSReport() {
       (pos) => { setLat(pos.coords.latitude); setLng(pos.coords.longitude) },
       () => {}
     )
-    const handler = () => setOffline(!navigator.onLine)
-    window.addEventListener('online', handler)
-    window.addEventListener('offline', handler)
+    const handlePromise = onNetworkChange(connected => setOffline(!connected))
     setVoiceSupported(!!(window.SpeechRecognition || window.webkitSpeechRecognition))
 
     // Sync drain — flush queued offline SOS reports when internet returns
@@ -95,8 +94,7 @@ export function SOSReport() {
     window.addEventListener('online', drainQueue)
 
     return () => {
-      window.removeEventListener('online', handler)
-      window.removeEventListener('offline', handler)
+      handlePromise.then(h => h.remove()).catch(() => {})
       window.removeEventListener('online', drainQueue)
     }
   }, [])

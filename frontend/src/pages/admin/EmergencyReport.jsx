@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import {
   PieChart, Pie, Cell,
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
@@ -17,6 +17,14 @@ const daysAgo  = n => { const d = new Date(); d.setDate(d.getDate() - n); return
 
 const priLabel = s => s >= 80 ? 'CRITICAL' : s >= 60 ? 'HIGH' : s >= 40 ? 'MODERATE' : 'LOW'
 const priColor = n => ({ CRITICAL: '#ef4444', HIGH: '#f97316', MODERATE: '#f59e0b', LOW: '#22c55e' }[n] ?? '#64748b')
+
+// Serialize an SVG element inside a ref'd container for embedding in print HTML
+function captureSvg(ref) {
+  try {
+    const svg = ref?.current?.querySelector('svg')
+    return svg ? new XMLSerializer().serializeToString(svg) : ''
+  } catch { return '' }
+}
 
 // ── Print ──────────────────────────────────────────────────────────────────────
 function printReport(title, muni, body) {
@@ -37,6 +45,8 @@ function printReport(title, muni, body) {
       th,td{border:1px solid #bbb;padding:4px 8px;text-align:left}
       th{background:#e8e8e8;font-weight:bold;font-size:10px;text-transform:uppercase}
       .section{margin-top:18px;page-break-inside:avoid}
+      svg{max-width:100%;height:auto;display:block;margin:6px 0}
+      .chart-box{margin:10px 0;page-break-inside:avoid}
       @media print{button{display:none}}
     </style>
   </head><body>
@@ -106,6 +116,10 @@ export function EmergencyReport() {
   const [toDate,      setToDate]      = useState(todayStr)
   const [generatedAt, setGeneratedAt] = useState(null)
   const [preset,      setPreset]      = useState('today')
+
+  // Chart refs for print capture
+  const pieRef = useRef(null)
+  const barRef = useRef(null)
 
   function applyPreset(p) {
     setPreset(p)
@@ -180,6 +194,8 @@ export function EmergencyReport() {
     if (!data) return
     const { rows, rescued, unresolved, cannotReach, bMap, priMap, responderCount } = data
     const allRows = Object.entries(bMap).sort((a, b) => b[1].total - a[1].total)
+    const pieSvg = captureSvg(pieRef)
+    const barSvg = captureSvg(barRef)
     const body = `
       <div class="stat-row">
         <div class="stat"><div class="stat-n">${rows.length}</div><div class="stat-l">Total SOS</div></div>
@@ -190,13 +206,18 @@ export function EmergencyReport() {
       </div>
       <div class="section">
         <h2>Priority Breakdown</h2>
+        ${pieSvg ? `<div class="chart-box">${pieSvg}</div>` : ''}
         <table>
           <tr><th>Priority Level</th><th>Count</th></tr>
           ${Object.entries(priMap).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}
         </table>
       </div>
       <div class="section">
-        <h2>Barangay Breakdown (All)</h2>
+        <h2>Barangay Breakdown (Top 10)</h2>
+        ${barSvg ? `<div class="chart-box">${barSvg}</div>` : ''}
+      </div>
+      <div class="section">
+        <h2>All Barangays</h2>
         <table>
           <tr><th>Barangay</th><th>Total SOS</th><th>Rescued</th><th>Pending / Unresolved</th></tr>
           ${allRows.map(([b, v]) => `<tr><td>${b}</td><td>${v.total}</td><td>${v.rescued}</td><td>${v.total - v.rescued}</td></tr>`).join('')}
@@ -258,7 +279,8 @@ export function EmergencyReport() {
                 </button>
                 {hasData && (
                   <button onClick={doPrint}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-[#ef4444] border border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.08)] transition-all">
+                    disabled={loading}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-[#ef4444] border border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.08)] transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                     <Printer size={13} /> Print / Export
                   </button>
                 )}
@@ -320,7 +342,7 @@ export function EmergencyReport() {
                 {/* II. Priority Breakdown */}
                 <div>
                   <SectionTitle>II. Priority Breakdown</SectionTitle>
-                  <div className="glass rounded-2xl p-4">
+                  <div ref={pieRef} className="glass rounded-2xl p-4">
                     {pieData.length > 0 ? (
                       <>
                         <ResponsiveContainer width="100%" height={200}>
@@ -357,7 +379,7 @@ export function EmergencyReport() {
                 {/* III. Barangay Breakdown Top 10 */}
                 <div>
                   <SectionTitle>III. Barangay Breakdown (Top 10)</SectionTitle>
-                  <div className="glass rounded-2xl p-4">
+                  <div ref={barRef} className="glass rounded-2xl p-4">
                     {chartData.length > 0 ? (
                       <ResponsiveContainer width="100%" height={220}>
                         <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 16 }}>

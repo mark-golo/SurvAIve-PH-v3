@@ -7,6 +7,7 @@ import { GlassInput, GlassSelect } from '../components/ui/GlassInput'
 import { NeonButton } from '../components/ui/NeonButton'
 import { useAuthStore } from '../store/auth'
 import api from '../lib/api'
+import { getNetworkOnline } from '../lib/capacitor'
 import { PROVINCES, getMunicipalities } from '../lib/philippineLocations'
 
 const ROLES = [
@@ -66,7 +67,7 @@ export function StaffLogin() {
   // If offline and already logged in, skip the login form — go straight to the dashboard
   // (prevents auto-logout from wiping a valid cached session during disasters)
   useEffect(() => {
-    if (!navigator.onLine && isAuthenticated()) {
+    if (!getNetworkOnline() && isAuthenticated()) {
       navigate(ROLE_PATHS[role] ?? '/')
       return
     }

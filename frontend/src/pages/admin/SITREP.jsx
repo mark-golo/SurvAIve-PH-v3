@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import {
   ClipboardList, RefreshCw, Printer, AlertTriangle,
   CheckCircle, Clock, HelpCircle, Activity, Siren,
@@ -29,8 +29,16 @@ function severity(row) {
   return row.critical > 0 ? 'CRITICAL' : row.notSafe > 0 ? 'ACTIVE' : 'STABLE'
 }
 
+// Serialize an SVG element inside a ref'd container for embedding in print HTML
+function captureSvg(ref) {
+  try {
+    const svg = ref?.current?.querySelector('svg')
+    return svg ? new XMLSerializer().serializeToString(svg) : ''
+  } catch { return '' }
+}
+
 // ── Print ──────────────────────────────────────────────────────────────────────
-function doPrint({ summary, barangayRows, muni, generatedAt, fromDate, toDate }) {
+function doPrint({ summary, barangayRows, muni, generatedAt, fromDate, toDate, trendSvg = '' }) {
   const win = window.open('', '_blank')
   const dateRange = fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`
   const bTableRows = barangayRows.map(r => `
@@ -56,6 +64,8 @@ function doPrint({ summary, barangayRows, muni, generatedAt, fromDate, toDate })
       th{background:#e8e8e8;font-weight:bold;font-size:10px;text-transform:uppercase}
       .section{margin-top:18px;page-break-inside:avoid}
       .badge{display:inline-block;padding:2px 6px;border-radius:3px;font-size:9px;font-weight:bold;color:#fff}
+      svg{max-width:100%;height:auto;display:block;margin:6px 0}
+      .chart-box{margin:10px 0;page-break-inside:avoid}
       @media print{button{display:none}.no-print{display:none}}
     </style>
   </head><body>
@@ -94,6 +104,12 @@ function doPrint({ summary, barangayRows, muni, generatedAt, fromDate, toDate })
         ).join('') || '<tr><td colspan="5">—</td></tr>'}
       </table>
     </div>
+
+    ${trendSvg ? `
+    <div class="section">
+      <h2>IV. Trends Over Time</h2>
+      <div class="chart-box">${trendSvg}</div>
+    </div>` : ''}
 
     <script>window.onload=()=>{window.print()}</script>
   </body></html>`)
@@ -154,6 +170,9 @@ export function SITREP() {
   const [toDate,      setToDate]      = useState(todayStr)
   const [generatedAt, setGeneratedAt] = useState(null)
   const [preset,      setPreset]      = useState('today')
+
+  // Chart ref for print capture
+  const trendRef = useRef(null)
 
   function applyPreset(p) {
     setPreset(p)
@@ -310,8 +329,12 @@ export function SITREP() {
                   {loading ? 'Generating…' : 'Generate Report'}
                 </button>
                 {hasData && (
-                  <button onClick={() => doPrint({ summary, barangayRows, muni, generatedAt, fromDate, toDate })}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-[#ef4444] border border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.08)] transition-all">
+                  <button onClick={() => {
+                    const trendSvg = captureSvg(trendRef)
+                    doPrint({ summary, barangayRows, muni, generatedAt, fromDate, toDate, trendSvg })
+                  }}
+                    disabled={loading}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-[#ef4444] border border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.08)] transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                     <Printer size={13} /> Print / Export
                   </button>
                 )}
@@ -555,10 +578,10 @@ export function SITREP() {
             </section>
 
             {/* ── V. Trends over time ──────────────────────────────────────── */}
-            {trendData.length > 1 && (
+            {trendData.length > 0 && (
               <section>
                 <SectionTitle>V. Trends Over Time</SectionTitle>
-                <div className="glass rounded-2xl p-4">
+                <div ref={trendRef} className="glass rounded-2xl p-4">
                   <ResponsiveContainer width="100%" height={200}>
                     <BarChart data={trendData} margin={{ left: 0, right: 8 }}>
                       <XAxis

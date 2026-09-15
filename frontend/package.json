@@ -8,14 +8,17 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "build:app": "vite build --mode app",
     "build:victim": "vite build --mode victim",
     "build:responder": "vite build --mode responder",
     "cap:sync": "npx cap sync android",
+    "cap:app": "npm run build:app && npx cap sync android",
     "cap:victim": "npm run build:victim && npx cap sync android",
     "cap:responder": "npm run build:responder && npx cap sync android",
     "android": "npx cap open android"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.125.0",
     "@capacitor/android": "^8.5.0",
     "@capacitor/cli": "^8.5.0",
     "@capacitor/core": "^8.5.0",

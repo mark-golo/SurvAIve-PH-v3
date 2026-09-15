@@ -9,6 +9,7 @@ import { AdminLayout } from './AdminLayout'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassCard } from '../../components/ui/GlassCard'
 import api from '../../lib/api'
+import { getNetworkOnline } from '../../lib/capacitor'
 import { db } from '../../lib/db'
 import { useAuthStore } from '../../store/auth'
 
@@ -308,7 +309,7 @@ export function SituationalAwareness() {
   const [reports, setReports]       = useState([])
   const [loading, setLoading]       = useState(true)
   const [syncing, setSyncing]       = useState(false)
-  const [offlineMode, setOfflineMode] = useState(!navigator.onLine)
+  const [offlineMode, setOfflineMode] = useState(!getNetworkOnline())
   const [snapshotAge, setSnapshotAge] = useState(null)
   const [expandedZone, setExpandedZone] = useState(null)
   const [activeTab, setActiveTab]   = useState('zones') // 'zones' | 'insights'

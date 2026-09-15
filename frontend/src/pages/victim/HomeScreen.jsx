@@ -9,6 +9,7 @@ import { mesh } from '../../lib/mesh'
 import { autoSOS } from '../../lib/autoSOS'
 import { useState, useEffect } from 'react'
 import { getVictimTheme } from '../../lib/victimTheme'
+import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
 
 const STATUS_OPTIONS = [
   { label: 'Injured', colorFrom: 'rgb(239,68,68)',  colorTo: 'rgb(185,28,28)',  Icon: HeartPulse,   value: 'injured' },
@@ -30,7 +31,7 @@ export function HomeScreen() {
   const [isLight] = useState(() => getVictimTheme() === 'light')
   const [quickStatus, setQuickStatus] = useState(null)
   const [peers] = useState(mesh.getPeers())
-  const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const [isOnline, setIsOnline] = useState(getNetworkOnline())
   const [gpsState, setGpsState] = useState('unknown') // 'active' | 'denied' | 'unknown'
   const [battery, setBattery]   = useState(null)      // null = API not available
 
@@ -38,10 +39,7 @@ export function HomeScreen() {
     document.title = 'SurvAIve PH – Home'
     autoSOS.init()
 
-    const goOnline  = () => setIsOnline(true)
-    const goOffline = () => setIsOnline(false)
-    window.addEventListener('online',  goOnline)
-    window.addEventListener('offline', goOffline)
+    const handlePromise = onNetworkChange(connected => setIsOnline(connected))
 
     if (navigator.permissions) {
       const stateMap = { granted: 'active', denied: 'denied', prompt: 'unknown' }
@@ -59,10 +57,7 @@ export function HomeScreen() {
       }).catch(() => {})
     }
 
-    return () => {
-      window.removeEventListener('online',  goOnline)
-      window.removeEventListener('offline', goOffline)
-    }
+    return () => { handlePromise.then(h => h.remove()).catch(() => {}) }
   }, [])
 
   const handleSOS = () => navigate('/sos')

@@ -8,6 +8,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { StatCard } from '../../components/ui/StatCard'
 import { NeonButton } from '../../components/ui/NeonButton'
 import api, { localFetch } from '../../lib/api'
+import { getNetworkOnline } from '../../lib/capacitor'
 import { db } from '../../lib/db'
 import { useAuthStore } from '../../store/auth'
 import { supabase } from '../../lib/supabase'
@@ -120,7 +121,7 @@ export function CommandCenter() {
   const [selectedSOS, setSelectedSOS] = useState(null)
   const [weather, setWeather] = useState(null)
   const [weatherError, setWeatherError] = useState(false)
-  const [offlineMode, setOfflineMode] = useState(!navigator.onLine)
+  const [offlineMode, setOfflineMode] = useState(!getNetworkOnline())
   const [snapshotAge, setSnapshotAge] = useState(null)
   const [showHistory,  setShowHistory]  = useState(false)
   const [dailyHistory, setDailyHistory] = useState(() => loadDailyHistory())
@@ -184,7 +185,7 @@ export function CommandCenter() {
 
   useEffect(() => {
     // Offline: read on-duty responders from local MySQL (bypasses Supabase)
-    if (!navigator.onLine) {
+    if (!getNetworkOnline()) {
       localFetch(muni
         ? `responders?duty_status=on_duty&municipality=${encodeURIComponent(muni)}`
         : 'responders?duty_status=on_duty'

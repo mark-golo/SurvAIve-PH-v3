@@ -6,7 +6,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 export default defineConfig(({ mode }) => {
   // mode = 'victim' | 'responder' | 'development' | 'production'
   // Native variants use --mode victim / --mode responder (cross-platform, no env-var syntax)
-  const variant = ['victim', 'responder'].includes(mode) ? mode : 'web'
+  const variant = ['victim', 'responder', 'app'].includes(mode) ? mode : 'web'
   const isNative = variant !== 'web'
 
   return {
