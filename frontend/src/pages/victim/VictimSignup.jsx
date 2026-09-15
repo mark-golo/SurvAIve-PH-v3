@@ -264,9 +264,8 @@ export function VictimSignup() {
               </GlassCard>
 
               {error && <p className="text-xs text-[#ef4444] text-center">{error}</p>}
-              <NeonButton onClick={advanceToPin} className="w-full" size="lg"
-                style={{ background: 'rgba(139,92,246,0.15)', borderColor: 'rgba(139,92,246,0.4)' }}>
-                Continue <ChevronRight size={15} className="ml-1" />
+              <NeonButton onClick={advanceToPin} className="w-full !shadow-none hover:!shadow-none" size="lg">
+                Continue
               </NeonButton>
 
               <p className="text-center text-[11px] text-slate-500 mt-1">
@@ -332,9 +331,8 @@ export function VictimSignup() {
                   onClick={advanceToReview}
                   loading={loading}
                   disabled={activePinState.length < 6}
-                  className="w-full"
-                  style={{ background: 'rgba(139,92,246,0.15)', borderColor: 'rgba(139,92,246,0.4)' }}>
-                  {pinPhase === 'set' ? 'Confirm PIN →' : 'Generate Victim ID →'}
+                  className="w-full !shadow-none hover:!shadow-none">
+                  {pinPhase === 'set' ? 'Confirm PIN' : 'Generate Victim ID'}
                 </NeonButton>
 
                 <div className="text-center">
@@ -406,9 +404,7 @@ export function VictimSignup() {
 
               {error && <p className="text-xs text-[#ef4444] text-center">{error}</p>}
 
-              <NeonButton onClick={activateAccount} loading={loading} className="w-full" size="lg"
-                style={{ background: 'rgba(139,92,246,0.15)', borderColor: 'rgba(139,92,246,0.4)' }}>
-                <Check size={16} className="mr-2" />
+              <NeonButton onClick={activateAccount} loading={loading} className="w-full !shadow-none hover:!shadow-none" size="lg">
                 Activate Account
               </NeonButton>
             </motion.div>
