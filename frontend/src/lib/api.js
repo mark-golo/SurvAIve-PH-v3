@@ -496,13 +496,15 @@ async function post(path, body = {}) {
       }
 
       // Supabase fallback: insert victim row directly with the anon key.
-      // Allowed by the victims_device_register RLS policy (victim_id IS NOT NULL).
-      const { data: victimRow, error: ve } = await supabase
-        .from('victims').insert(victimData).select().single()
+      // Do NOT use .select() after insert — "staff read victims" SELECT policy blocks
+      // anon from reading back the row, causing PostgREST to raise a false RLS error
+      // even when the INSERT itself succeeds.
+      const { error: ve } = await supabase
+        .from('victims').insert(victimData)
       if (ve) sbThrow(ve)
 
       const user = {
-        id:             victimRow.id,
+        id:             null, // DB-generated id not readable by anon; not needed for offline token
         role:           'victim',
         name:           body.name,
         victim_id:      body.victim_id ?? null,
