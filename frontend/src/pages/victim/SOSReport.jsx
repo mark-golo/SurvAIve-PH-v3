@@ -371,7 +371,7 @@ export function SOSReport() {
 
   // ── Form ──────────────────────────────────────────────────────────────────────
   return (
-    <div className={`min-h-screen bg-mesh flex flex-col pb-20${isLight ? ' light-theme' : ''}`}>
+    <div className={`min-h-screen bg-mesh flex flex-col pb-32${isLight ? ' light-theme' : ''}`}>
       <TopBar
         title="Send SOS Report"
         subtitle={isGuest ? 'Guest Mode – Unverified' : 'Verified – High Priority'}
