@@ -95,8 +95,11 @@ export function LocalMap() {
     : null
 
   return (
-    <div className={`min-h-screen bg-mesh flex flex-col pb-20${isLight ? ' light-theme' : ''}`}>
+    <div className={`h-screen bg-mesh flex flex-col overflow-hidden${isLight ? ' light-theme' : ''}`}>
       <TopBar title="My Location & Evacuation Centers" subtitle="Tap a shelter for details" onBack />
+
+      {/* Scrollable area: banners + map + center list */}
+      <div className="flex-1 overflow-y-auto pb-20">
 
       {/* GPS warning */}
       {gpsError && (
@@ -118,11 +121,11 @@ export function LocalMap() {
       )}
 
       {/* Map */}
-      <div className="flex-1 mx-4 mt-2 mb-2 rounded-2xl overflow-hidden border border-[rgba(255,255,255,0.08)] min-h-[420px]">
+      <div className="mx-4 mt-2 mb-2 rounded-2xl overflow-hidden border border-[rgba(255,255,255,0.08)] h-[45vh] min-h-[280px]">
         <MapContainer
           center={userPos ?? DEFAULT_POS}
           zoom={14}
-          style={{ height: '100%', minHeight: '420px', background: '#0a1628' }}
+          style={{ height: '100%', background: '#0a1628' }}
           zoomControl={false}
         >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
@@ -197,6 +200,8 @@ export function LocalMap() {
             })
         }
       </div>
+
+      </div>{/* end scrollable area */}
 
       <MobileNavBar items={NAV} />
     </div>

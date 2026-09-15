@@ -63,7 +63,7 @@ export function HomeScreen() {
   const handleSOS = () => navigate('/sos')
 
   return (
-    <div className={`min-h-screen bg-mesh flex flex-col pb-20${isLight ? ' light-theme' : ''}`}>
+    <div className={`h-screen bg-mesh flex flex-col overflow-hidden${isLight ? ' light-theme' : ''}`}>
       {/* Top bar */}
       <header className="glass border-b border-[rgba(255,255,255,0.08)] px-4 py-3">
         <div className="flex items-center justify-between">
@@ -86,7 +86,7 @@ export function HomeScreen() {
         </div>
       </header>
 
-      <main className="flex-1 p-5 space-y-5">
+      <main className="flex-1 overflow-y-auto p-5 space-y-5 pb-20">
         {/* Status indicators */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Internet */}

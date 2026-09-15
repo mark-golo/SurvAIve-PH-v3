@@ -369,14 +369,14 @@ export function SOSReport() {
 
   // ── Form ──────────────────────────────────────────────────────────────────────
   return (
-    <div className={`min-h-screen bg-mesh flex flex-col pb-32${isLight ? ' light-theme' : ''}`}>
+    <div className={`h-screen bg-mesh flex flex-col overflow-hidden${isLight ? ' light-theme' : ''}`}>
       <TopBar
         title="Send SOS Report"
         subtitle={isGuest ? 'Guest Mode – Unverified' : 'Verified – High Priority'}
         onBack
       />
 
-      <main className="flex-1 p-4 space-y-4">
+      <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
 
         {/* Offline banner */}
         {offline && (

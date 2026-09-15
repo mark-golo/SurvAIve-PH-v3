@@ -51,10 +51,10 @@ export function MeshStatus() {
   }, [])
 
   return (
-    <div className={`min-h-screen bg-mesh flex flex-col pb-20${isLight ? ' light-theme' : ''}`}>
+    <div className={`h-screen bg-mesh flex flex-col overflow-hidden${isLight ? ' light-theme' : ''}`}>
       <TopBar title="Mesh Network Status" subtitle="Peer-to-peer emergency relay" onBack />
 
-      <main className="flex-1 p-4 space-y-4">
+      <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-20">
         {/* Overall status */}
         <GlassCard glow={peers.length > 0} className="text-center py-5">
           <motion.div

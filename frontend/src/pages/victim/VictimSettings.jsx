@@ -91,10 +91,10 @@ export function VictimSettings() {
   const handleLogout = () => { logout(); navigate('/') }
 
   return (
-    <div className={`min-h-screen bg-mesh flex flex-col pb-20${theme === 'light' ? ' light-theme' : ''}`}>
+    <div className={`h-screen bg-mesh flex flex-col overflow-hidden${theme === 'light' ? ' light-theme' : ''}`}>
       <TopBar title="Settings" onBack />
 
-      <main className="flex-1 p-4 space-y-4">
+      <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-20">
         {/* Account info */}
         <GlassCard>
           <div className="flex items-center gap-3">
