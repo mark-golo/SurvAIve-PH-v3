@@ -60,7 +60,7 @@ export function HomeScreen() {
     return () => { handlePromise.then(h => h.remove()).catch(() => {}) }
   }, [])
 
-  const handleSOS = () => navigate('/sos')
+  const handleSOS = () => navigate('/sos', { state: { status: quickStatus } })
 
   return (
     <div className={`h-screen bg-mesh flex flex-col overflow-hidden${isLight ? ' light-theme' : ''}`}>

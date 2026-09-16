@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  AlertTriangle, MapPin, Users, FileText, Send, Check,
+  AlertTriangle, MapPin, Users, FileText, Check,
   Mic, Camera, Scan,
 } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
@@ -28,12 +28,13 @@ const NAV = [
 
 export function SOSReport() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { user, isGuest, token } = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
 
   // ── Form state ───────────────────────────────────────────────────────────────
   const [form, setForm] = useState({
-    status:       'trapped',
+    status:       location.state?.status ?? 'trapped',
     people_count: 1,
     notes:        '',
     barangay:     user?.barangay    ?? '',
@@ -788,7 +789,6 @@ export function SOSReport() {
           disabled={sosMode === 'photo' && photoFile != null && aiAnalysis == null}
           className="w-full"
         >
-          <Send size={16} className="mr-2" />
           Send Emergency SOS
         </NeonButton>
 
