@@ -29,24 +29,29 @@ function SignalBars({ level }) {
 
 export function MeshStatus() {
   const [isLight] = useState(() => getVictimTheme() === 'light')
-  const [peers, setPeers] = useState(mesh.getPeers())
-  const [stats, setStats] = useState(mesh.getStats())
+  const [peers, setPeers]   = useState([])
+  const [stats, setStats]   = useState({ peersNearby: 0, transport: 'starting', relayEnabled: false })
   const [refreshing, setRefreshing] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(new Date())
 
   const refresh = async () => {
     setRefreshing(true)
     await new Promise(r => setTimeout(r, 800))
-    setPeers(mesh.refresh())
-    setStats(mesh.getStats())
+    const s = await mesh.getStats()
+    setStats(s)
+    setPeers(mesh.getPeers())
     setLastRefresh(new Date())
     setRefreshing(false)
   }
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setStats(mesh.getStats())
-    }, 5000)
+    const loadStats = async () => {
+      const s = await mesh.getStats()
+      setStats(s)
+      setPeers(mesh.getPeers())
+    }
+    loadStats()
+    const interval = setInterval(loadStats, 5000)
     return () => clearInterval(interval)
   }, [])
 
@@ -56,24 +61,24 @@ export function MeshStatus() {
 
       <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-20">
         {/* Overall status */}
-        <GlassCard glow={peers.length > 0} className="text-center py-5">
+        <GlassCard glow={stats.peersNearby > 0} className="text-center py-5">
           <motion.div
-            animate={peers.length > 0 ? { scale: [1, 1.08, 1] } : {}}
+            animate={stats.peersNearby > 0 ? { scale: [1, 1.08, 1] } : {}}
             transition={{ duration: 2, repeat: Infinity }}
             className={`w-16 h-16 rounded-full mx-auto flex items-center justify-center mb-3 ${
-              peers.length > 0
+              stats.peersNearby > 0
                 ? 'bg-[rgba(34,197,94,0.2)] border-2 border-[rgba(34,197,94,0.4)] shadow-[0_0_20px_rgba(34,197,94,0.3)]'
                 : 'bg-[rgba(107,114,128,0.2)] border-2 border-[rgba(107,114,128,0.3)]'
             }`}
           >
-            <Radio size={28} className={peers.length > 0 ? 'text-[#22c55e]' : 'text-slate-500'} />
+            <Radio size={28} className={stats.peersNearby > 0 ? 'text-[#22c55e]' : 'text-slate-500'} />
           </motion.div>
-          <p className={`font-bold text-lg ${peers.length > 0 ? 'text-[#22c55e]' : 'text-slate-400'}`}>
-            {peers.length > 0 ? `Mesh Connected` : 'No Peers Found'}
+          <p className={`font-bold text-lg ${stats.peersNearby > 0 ? 'text-[#22c55e]' : 'text-slate-400'}`}>
+            {stats.peersNearby > 0 ? `Mesh Connected` : 'No Peers Found'}
           </p>
           <p className="text-xs text-slate-500 mt-1">
-            {peers.length > 0
-              ? `${peers.length} device(s) in range · Relay active`
+            {stats.peersNearby > 0
+              ? `${stats.peersNearby} device(s) in range · Relay active`
               : 'Broadcasting beacon… waiting for nearby devices'}
           </p>
         </GlassCard>
@@ -81,16 +86,16 @@ export function MeshStatus() {
         {/* Stats row */}
         <div className="grid grid-cols-3 gap-3">
           <div className="glass rounded-xl p-3 text-center">
-            <p className="text-lg font-black text-[#00d4ff]">{stats.peersConnected}</p>
+            <p className="text-lg font-black text-[#00d4ff]">{stats.peersNearby}</p>
             <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-0.5">Peers</p>
           </div>
           <div className="glass rounded-xl p-3 text-center">
-            <p className="text-lg font-black text-[#8b5cf6]">{stats.messagesForwarded}</p>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-0.5">Forwarded</p>
+            <p className="text-lg font-black text-[#8b5cf6]">{stats.transport ?? '—'}</p>
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-0.5">Transport</p>
           </div>
           <div className="glass rounded-xl p-3 text-center">
-            <p className="text-lg font-black text-[#22c55e]">{stats.dataRelayed}</p>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-0.5">Data</p>
+            <p className="text-lg font-black text-[#22c55e]">{stats.relayEnabled ? 'On' : 'Off'}</p>
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-0.5">Relay</p>
           </div>
         </div>
 
@@ -142,7 +147,7 @@ export function MeshStatus() {
             <ArrowUpDown size={14} className="text-slate-400" />
             <div>
               <p className="text-xs font-medium text-white">Last Sync</p>
-              <p className="text-xs text-slate-500">{stats.lastSync}</p>
+              <p className="text-xs text-slate-500">{lastRefresh.toLocaleTimeString()}</p>
             </div>
           </div>
           <NeonButton size="sm" variant="ghost" onClick={refresh} loading={refreshing}>
