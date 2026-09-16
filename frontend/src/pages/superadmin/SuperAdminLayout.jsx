@@ -27,7 +27,7 @@ export function SuperAdminLayout({ children, title }) {
   }, [])
 
   return (
-    <div className={`min-h-screen bg-mesh flex${superAdminTheme === 'light' ? ' light-theme' : ''}`}>
+    <div className={`h-screen overflow-hidden bg-mesh flex${superAdminTheme === 'light' ? ' light-theme' : ''}`}>
       <aside className={`
         fixed inset-y-0 left-0 z-50 w-60 glass border-r border-[rgba(255,255,255,0.08)] flex flex-col
         transition-transform duration-300 ${open ? 'translate-x-0' : '-translate-x-full'}
