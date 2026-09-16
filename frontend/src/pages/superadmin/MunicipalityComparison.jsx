@@ -364,7 +364,7 @@ export function MunicipalityComparison() {
                 <Layers size={18} className="text-[#8b5cf6]" />
               </div>
               <div>
-                <h2 className="text-lg font-black text-white tracking-tight">MUNICIPALITY COMPARISON REPORT</h2>
+                <h1 className="text-sm font-bold text-white uppercase tracking-wide leading-tight">MUNICIPALITY COMPARISON REPORT</h1>
                 <p className="text-[11px] text-slate-500">Province of {prov || '—'} &nbsp;·&nbsp; Decision-Oriented Operational Overview</p>
                 {generatedAt && (
                   <p className="text-[10px] text-[#8b5cf6] mt-0.5">

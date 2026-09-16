@@ -390,7 +390,7 @@ export function BarangaysComparison() {
               <Layers size={18} className="text-[#00d4ff]" />
             </div>
             <div>
-              <h2 className="text-lg font-black text-white tracking-tight">BARANGAYS COMPARISON REPORT</h2>
+              <h1 className="text-sm font-bold text-white uppercase tracking-wide leading-tight">BARANGAYS COMPARISON REPORT</h1>
               <p className="text-[11px] text-slate-500">Municipality of {muni || '—'} &nbsp;·&nbsp; Decision-Oriented Operational Overview</p>
               {generatedAt && (
                 <p className="text-[10px] text-[#00d4ff] mt-0.5">
