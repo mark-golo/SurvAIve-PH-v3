@@ -279,10 +279,10 @@ export function SITREP() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-[calc(100vh-56px)] overflow-y-auto">
+    <div className="flex flex-col">
 
         {/* ── Header controls ─────────────────────────────────────────────── */}
-        <div className="p-4 border-b border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.15)] sticky top-0 z-10">
+        <div className="p-4 border-b border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.15)]">
           <div className="flex items-start justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.2)] flex items-center justify-center shrink-0">
