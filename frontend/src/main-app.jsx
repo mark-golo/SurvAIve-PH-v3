@@ -7,9 +7,11 @@ import { initCapacitor } from './lib/capacitor'
 import { db } from './lib/db'
 import api from './lib/api'
 import { startMeshSync } from './lib/meshSync'
+import { deviceSettings } from './lib/deviceSettings'
 
 initCapacitor()
 startMeshSync()
+deviceSettings.init()
 
 function App() {
   useEffect(() => {
@@ -24,6 +26,7 @@ function App() {
         }
       } catch {}
     }
+    drain()
     window.addEventListener('online', drain)
     return () => window.removeEventListener('online', drain)
   }, [])

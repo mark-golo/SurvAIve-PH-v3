@@ -11,11 +11,20 @@ import { db } from './db'
 import api from './api'
 
 let _unsubscribe = null
+const _seenIds = new Set()
 
 export function startMeshSync() {
   if (_unsubscribe) return
   _unsubscribe = mesh.onMessage(async (data, rawPacket) => {
     if (rawPacket?.type !== 'sos') return
+    const packetId = rawPacket.id
+    if (packetId && _seenIds.has(packetId)) return
+    if (packetId) {
+      _seenIds.add(packetId)
+      if (_seenIds.size > 200) {
+        _seenIds.delete(_seenIds.values().next().value)
+      }
+    }
     try {
       await db.queueSOS({
         ...data,

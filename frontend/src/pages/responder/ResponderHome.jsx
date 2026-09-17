@@ -36,6 +36,8 @@ export function ResponderHome() {
   useEffect(() => {
     const load = async () => { setStats(await mesh.getStats()) }
     load()
+    const t = setInterval(load, 10000)
+    return () => clearInterval(t)
   }, [])
 
   const activeList    = sosList.filter(r => r.rescue_status !== 'rescued')

@@ -34,7 +34,8 @@ class MeshNetworkService : Service() {
         const val ACTION_STOP  = "ph.survaive.app.MESH_STOP"
         const val NOTIF_ID     = 1001
         const val CHANNEL_ID   = "mesh_channel"
-        private const val MAX_SEEN_IDS = 500
+        private const val MAX_SEEN_IDS   = 500
+        private const val MAX_PENDING    = 20
     }
 
     inner class LocalBinder : Binder() {
@@ -45,6 +46,9 @@ class MeshNetworkService : Service() {
 
     // ── Deduplication set ────────────────────────────────────────────────────────
     private val seenPacketIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    // ── Store-and-forward buffer (packets that failed to send because no peer was available) ──
+    private val pendingPackets: ArrayDeque<MeshPacket> = ArrayDeque()
 
     // ── Callback registered by MeshNetworkPlugin → forwarded to JavaScript ────────
     var onPacketReceived: ((MeshPacket) -> Unit)? = null
@@ -98,10 +102,29 @@ class MeshNetworkService : Service() {
         for (strategy in strategies) {
             if (strategy.isAvailable) {
                 val sent = strategy.broadcast(packet)
-                if (sent) return Pair(true, strategy.name)
+                if (sent) {
+                    flushPending()
+                    return Pair(true, strategy.name)
+                }
+            }
+        }
+        // No strategy succeeded — buffer for when a peer becomes reachable
+        synchronized(pendingPackets) {
+            if (pendingPackets.none { it.id == packet.id }) {
+                if (pendingPackets.size >= MAX_PENDING) pendingPackets.removeFirst()
+                pendingPackets.addLast(packet)
             }
         }
         return Pair(false, "none")
+    }
+
+    private fun flushPending() {
+        val toFlush = synchronized(pendingPackets) { pendingPackets.toList().also { pendingPackets.clear() } }
+        for (p in toFlush) {
+            for (strategy in strategies) {
+                if (strategy.isAvailable && strategy.broadcast(p)) break
+            }
+        }
     }
 
     // ── Incoming packet handling ─────────────────────────────────────────────────
@@ -113,6 +136,9 @@ class MeshNetworkService : Service() {
         if (seenPacketIds.size > MAX_SEEN_IDS) {
             seenPacketIds.iterator().let { it.next(); it.remove() }
         }
+
+        // A peer sent us a packet — they're reachable, so try flushing buffered packets
+        flushPending()
 
         onPacketReceived?.invoke(packet)
 
