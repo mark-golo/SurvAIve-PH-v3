@@ -80,23 +80,8 @@ export function SOSReport() {
     const handlePromise = onNetworkChange(connected => setOffline(!connected))
     setVoiceSupported(!!(window.SpeechRecognition || window.webkitSpeechRecognition))
 
-    // Sync drain — flush queued offline SOS reports when internet returns
-    const drainQueue = async () => {
-      try {
-        const pending = await db.getPendingSOS()
-        for (const item of pending) {
-          try {
-            const res = await api.post('/sos', item)
-            await db.markSOSSynced(item.localId, res?.id ?? null)
-          } catch { /* keep in queue if upload fails */ }
-        }
-      } catch { /* ignore drain errors */ }
-    }
-    window.addEventListener('online', drainQueue)
-
     return () => {
       handlePromise.then(h => h.remove()).catch(() => {})
-      window.removeEventListener('online', drainQueue)
     }
   }, [])
 
@@ -294,9 +279,11 @@ export function SOSReport() {
       } : {}),
     }
 
+    // Always broadcast over mesh — fires regardless of internet state
+    mesh.broadcast({ type: 'sos', ...payload }).catch(() => {})
+
     if (offline) {
       await db.queueSOS({ ...payload, isGuest, timestamp: Date.now() })
-      mesh.broadcast({ type: 'sos', payload })
       setSubmitted(true)
       setLoading(false)
       return

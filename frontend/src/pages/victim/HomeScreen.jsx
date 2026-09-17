@@ -30,10 +30,20 @@ export function HomeScreen() {
   const { user, isGuest } = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
   const [quickStatus, setQuickStatus] = useState(null)
-  const [peers] = useState(mesh.getPeers())
+  const [peerCount, setPeerCount] = useState(0)
   const [isOnline, setIsOnline] = useState(getNetworkOnline())
   const [gpsState, setGpsState] = useState('unknown') // 'active' | 'denied' | 'unknown'
   const [battery, setBattery]   = useState(null)      // null = API not available
+
+  useEffect(() => {
+    const loadPeers = async () => {
+      const s = await mesh.getStats()
+      setPeerCount(s.peersNearby ?? 0)
+    }
+    loadPeers()
+    const t = setInterval(loadPeers, 5000)
+    return () => clearInterval(t)
+  }, [])
 
   useEffect(() => {
     document.title = 'SurvAIve PH – Home'
@@ -167,10 +177,10 @@ export function HomeScreen() {
             onClick={() => navigate('/mesh')}
             className="glass rounded-2xl p-4 cursor-pointer hover:border-[rgba(34,197,94,0.3)] transition-all border border-[rgba(255,255,255,0.08)]"
           >
-            <Radio size={20} className={peers.length > 0 ? 'text-[#22c55e] animate-pulse mb-2' : 'text-slate-500 mb-2'} />
+            <Radio size={20} className={peerCount > 0 ? 'text-[#22c55e] animate-pulse mb-2' : 'text-slate-500 mb-2'} />
             <p className="text-sm font-semibold text-white">Mesh Network</p>
             <p className="text-xs text-slate-500 mt-0.5">
-              {peers.length > 0 ? `${peers.length} peer(s) found` : 'No peers nearby'}
+              {peerCount > 0 ? `${peerCount} peer(s) found` : 'No peers nearby'}
             </p>
           </motion.div>
         </div>

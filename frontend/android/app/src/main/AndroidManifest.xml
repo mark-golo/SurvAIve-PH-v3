@@ -34,6 +34,11 @@
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES"
         android:usesPermissionFlags="neverForLocation" />
 
+    <!-- ── Foreground Service (required for background BLE + WiFi Direct) ───── -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- API 34+: connectedDevice foreground service type requires this permission -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
     <!-- ── Notifications ─────────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Vibrate for incoming SOS alerts -->
@@ -75,6 +80,12 @@
             </intent-filter>
 
         </activity>
+
+        <service
+            android:name=".MeshNetworkService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

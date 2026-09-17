@@ -1,43 +1,47 @@
 package ph.survaive.app
 
-import android.content.Context
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
+import android.content.Intent
+import android.os.Binder
+import android.os.IBinder
+import androidx.core.app.NotificationCompat
 import ph.survaive.app.strategies.BLEMeshStrategy
 import ph.survaive.app.strategies.MeshStrategy
 import ph.survaive.app.strategies.WiFiDirectStrategy
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * MeshNetworkService — core engine of the SurvAIve offline mesh network.
+ * MeshNetworkService — Android Foreground Service wrapping the BLE + Wi-Fi Direct mesh.
  *
- * This service is instantiated and owned by [MeshNetworkPlugin]. It:
- *   1. Manages a prioritised list of transport strategies.
- *   2. Deduplicates incoming packets to prevent relay loops.
- *   3. Forwards packets to the next hop when acting as a relay node.
- *   4. Delivers unique inbound packets to the Capacitor plugin via [onPacketReceived].
+ * Running as a foreground service keeps BLE advertising, the GATT server,
+ * and the Wi-Fi Direct relay server alive even when the user locks the screen
+ * or switches to another app (Android 8+ background restriction bypass).
+ *
+ * ── Binding ────────────────────────────────────────────────────────────────────
+ *   MeshNetworkPlugin binds to this service via [LocalBinder] to call
+ *   [broadcast], [getStats], and to set [relayEnabled] and [onPacketReceived].
  *
  * ── Strategy chain ─────────────────────────────────────────────────────────────
  *   [ BLEMeshStrategy ] → [ WiFiDirectStrategy ]
- *
- *   [broadcast] tries each strategy in order.  The first one to return true stops
- *   the chain (short-circuit).  Both strategies are started simultaneously so that
- *   BLE is always advertising and Wi-Fi Direct is always discovering peers — only
- *   the *send* path is sequential.
- *
- * ── Relay logic ────────────────────────────────────────────────────────────────
- *   When [relayEnabled] is true and a packet arrives with hopCount > 1,
- *   [MeshNetworkService] decrements hopCount and re-broadcasts the packet.
- *   The originating device never relays its own packet (originDeviceId check).
- *
- * ── Deduplication ──────────────────────────────────────────────────────────────
- *   [seenPacketIds] stores packet UUIDs in a [ConcurrentHashMap]-backed set.
- *   When the set exceeds [MAX_SEEN_IDS], it is cleared (simple overflow protection).
- *   A production system should use an LRU cache here.
  */
-class MeshNetworkService(private val context: Context) {
+class MeshNetworkService : Service() {
 
     companion object {
+        const val ACTION_START = "ph.survaive.app.MESH_START"
+        const val ACTION_STOP  = "ph.survaive.app.MESH_STOP"
+        const val NOTIF_ID     = 1001
+        const val CHANNEL_ID   = "mesh_channel"
         private const val MAX_SEEN_IDS = 500
     }
+
+    inner class LocalBinder : Binder() {
+        fun getService(): MeshNetworkService = this@MeshNetworkService
+    }
+
+    private val binder = LocalBinder()
 
     // ── Deduplication set ────────────────────────────────────────────────────────
     private val seenPacketIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
@@ -51,43 +55,46 @@ class MeshNetworkService(private val context: Context) {
         WiFiDirectStrategy(),
     )
 
-    /** True when this device should forward received packets to the next hop. */
     var relayEnabled: Boolean = true
 
-    /** Android device ID cached on first call — used to skip self-originating relays */
+    private var started = false
+
     private val deviceId: String by lazy {
         android.provider.Settings.Secure.getString(
-            context.contentResolver,
+            contentResolver,
             android.provider.Settings.Secure.ANDROID_ID,
         ) ?: "unknown"
     }
 
-    // ── Lifecycle ────────────────────────────────────────────────────────────────
+    // ── Service lifecycle ────────────────────────────────────────────────────────
 
-    /** Start all transport strategies (each strategy guards its own hardware check internally). */
-    fun start() {
-        strategies.forEach { strategy ->
-            strategy.start(context) { packet -> handleIncomingPacket(packet) }
+    override fun onBind(intent: Intent?): IBinder = binder
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            stopSelf()
+            return START_NOT_STICKY
         }
+        if (!started) {
+            startForeground(NOTIF_ID, buildNotification())
+            strategies.forEach { strategy ->
+                strategy.start(applicationContext) { packet -> handleIncomingPacket(packet) }
+            }
+            started = true
+        }
+        return START_STICKY
     }
 
-    /** Stop all transport strategies and release resources. */
-    fun stop() {
+    override fun onDestroy() {
         strategies.forEach { it.stop() }
+        started = false
+        super.onDestroy()
     }
 
     // ── Broadcast ────────────────────────────────────────────────────────────────
 
-    /**
-     * Broadcast [packet] via the first available strategy.
-     * Marks the packet as seen before sending to prevent self-relay.
-     *
-     * @return Pair(success, transportName)
-     */
     fun broadcast(packet: MeshPacket): Pair<Boolean, String> {
-        // Mark as seen so we ignore our own packet if it loops back
         seenPacketIds.add(packet.id)
-
         for (strategy in strategies) {
             if (strategy.isAvailable) {
                 val sent = strategy.broadcast(packet)
@@ -100,37 +107,47 @@ class MeshNetworkService(private val context: Context) {
     // ── Incoming packet handling ─────────────────────────────────────────────────
 
     private fun handleIncomingPacket(packet: MeshPacket) {
-        // ① Deduplication — drop if we've seen this UUID before
         if (seenPacketIds.contains(packet.id)) return
         seenPacketIds.add(packet.id)
 
-        // ② Overflow protection
         if (seenPacketIds.size > MAX_SEEN_IDS) {
-            seenPacketIds.clear()
+            seenPacketIds.iterator().let { it.next(); it.remove() }
         }
 
-        // ③ Deliver to the Capacitor plugin → WebView → React component
         onPacketReceived?.invoke(packet)
 
-        // ④ Relay: forward to next hop if TTL allows and we're a relay node
         if (relayEnabled && packet.hopCount > 1) {
             val relayed = packet.copy(hopCount = packet.hopCount - 1)
-            broadcast(relayed)  // relayed.id already in seenPacketIds — won't loop
+            broadcast(relayed)
         }
     }
 
     // ── Stats ────────────────────────────────────────────────────────────────────
 
-    /**
-     * Returns current mesh statistics for display in the React MeshStatus page.
-     * [peersNearby] is a best-effort count from the BLE strategy's discovered peer list.
-     */
     fun getStats(): Map<String, Any> {
         val activeStrategy = strategies.firstOrNull { it.isAvailable }
         return mapOf(
-            "peersNearby"   to strategies.sumOf { it.peerCount },
-            "transport"     to (activeStrategy?.name ?: "none"),
-            "relayEnabled"  to relayEnabled,
+            "peersNearby"  to strategies.sumOf { it.peerCount },
+            "transport"    to (activeStrategy?.name ?: "none"),
+            "relayEnabled" to relayEnabled,
         )
+    }
+
+    // ── Notification ─────────────────────────────────────────────────────────────
+
+    private fun buildNotification(): Notification {
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            "Mesh Network",
+            NotificationManager.IMPORTANCE_LOW,
+        )
+        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
+            .createNotificationChannel(channel)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("SurvAIve Mesh Active")
+            .setContentText("Emergency mesh relay is running")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setOngoing(true)
+            .build()
     }
 }

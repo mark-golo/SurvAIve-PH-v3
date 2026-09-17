@@ -172,16 +172,16 @@ export function ResponderHome() {
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div className="text-center">
-              <p className="text-lg font-black text-[#22c55e]">{stats.peersConnected}</p>
+              <p className="text-lg font-black text-[#22c55e]">{stats.peersNearby}</p>
               <p className="text-[10px] text-slate-500">Peers</p>
             </div>
             <div className="text-center">
-              <p className="text-lg font-black text-[#00d4ff]">{stats.messagesForwarded}</p>
-              <p className="text-[10px] text-slate-500">Forwarded</p>
+              <p className="text-lg font-black text-[#00d4ff]">{stats.transport ?? '—'}</p>
+              <p className="text-[10px] text-slate-500">Transport</p>
             </div>
             <div className="text-center">
-              <p className="text-lg font-black text-[#8b5cf6]">{stats.dataRelayed}</p>
-              <p className="text-[10px] text-slate-500">Relayed</p>
+              <p className="text-lg font-black text-[#8b5cf6]">{stats.relayEnabled ? 'On' : 'Off'}</p>
+              <p className="text-[10px] text-slate-500">Relay</p>
             </div>
           </div>
         </motion.div>

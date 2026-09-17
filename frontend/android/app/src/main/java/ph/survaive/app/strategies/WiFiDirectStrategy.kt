@@ -123,6 +123,12 @@ class WiFiDirectStrategy : MeshStrategy {
     private fun createP2pReceiver() = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
+                WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION -> {
+                    val state = intent.getIntExtra(WifiP2pManager.EXTRA_WIFI_STATE, -1)
+                    if (state != WifiP2pManager.WIFI_P2P_STATE_ENABLED) {
+                        groupOwnerAddress = null
+                    }
+                }
                 WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> {
                     // Peers found — request the list, then connect to the first one
                     manager?.requestPeers(channel) { peerList ->

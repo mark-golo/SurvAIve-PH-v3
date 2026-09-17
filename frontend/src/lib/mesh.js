@@ -111,11 +111,8 @@ export const mesh = {
    * @param {boolean} enabled
    */
   async setRelay(enabled) {
-    if (_isStarted) {
-      await MeshNetwork.setRelay({ enabled })
-    }
-    // Also mirror to native's internal flag via plugin regardless of start state
-    // (it will be applied on next startMesh() call)
+    await ensureStarted()
+    await MeshNetwork.setRelay({ enabled })
   },
 
   /**
