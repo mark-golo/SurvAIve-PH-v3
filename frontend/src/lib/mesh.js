@@ -17,6 +17,7 @@ import { MeshNetwork } from '../plugins/MeshNetworkPlugin'
 import { db } from './db'
 
 let _isStarted       = false    // true after startMesh() has been called
+let _startPromise    = null     // mutex — prevents concurrent startMesh() calls
 let _msgHandlers     = []       // registered onMessage() callbacks
 let _listenerHandle  = null     // Capacitor PluginListenerHandle for cleanup
 let _lastStats       = null     // cached result of the last getStats() call
@@ -30,21 +31,21 @@ let _lastStats       = null     // cached result of the last getStats() call
  */
 async function ensureStarted() {
   if (_isStarted) return
-
-  await MeshNetwork.startMesh()
-  _isStarted = true
-
-  // Register a single long-lived listener — all onMessage() subscribers
-  // receive packets through the _msgHandlers list below.
-  _listenerHandle = await MeshNetwork.addListener('meshPacketReceived', (packet) => {
-    try {
-      const data = JSON.parse(packet.payload)
-      // Attach raw mesh metadata so handlers can inspect hopCount / originDeviceId
-      _msgHandlers.forEach((fn) => fn(data, packet))
-    } catch {
-      // Malformed JSON — drop silently
-    }
-  })
+  if (!_startPromise) {
+    _startPromise = (async () => {
+      await MeshNetwork.startMesh()
+      _isStarted = true
+      _listenerHandle = await MeshNetwork.addListener('meshPacketReceived', (packet) => {
+        try {
+          const data = JSON.parse(packet.payload)
+          _msgHandlers.forEach((fn) => fn(data, packet))
+        } catch {}
+      })
+    })().catch(() => {
+      _startPromise = null  // reset on failure so next call can retry
+    })
+  }
+  await _startPromise
 }
 
 // ── Public interface ──────────────────────────────────────────────────────────
@@ -91,13 +92,11 @@ export const mesh = {
    * the async call is in flight.
    */
   async getStats() {
-    if (!_isStarted) {
-      return { peersNearby: 0, transport: 'not started', relayEnabled: false }
-    }
+    try { await ensureStarted() } catch {}  // self-heal: try to start if not started
+    if (!_isStarted) return { peersNearby: 0, transport: 'not started', relayEnabled: false }
     try {
       _lastStats = await MeshNetwork.getStats()
     } catch {
-      // Native call failed — return cached or default
       _lastStats = _lastStats ?? { peersNearby: 0, transport: 'error', relayEnabled: false }
     }
     return _lastStats

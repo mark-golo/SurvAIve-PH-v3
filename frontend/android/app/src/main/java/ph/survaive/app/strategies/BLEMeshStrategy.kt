@@ -2,7 +2,10 @@ package ph.survaive.app.strategies
 
 import android.bluetooth.*
 import android.bluetooth.le.*
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -49,6 +52,7 @@ class BLEMeshStrategy : MeshStrategy {
     private var scanner: BluetoothLeScanner?     = null
     private var advertiser: BluetoothLeAdvertiser? = null
     private var advertiseCallback: AdvertiseCallback? = null
+    private var btReceiver: BroadcastReceiver? = null
     private var onPacketReceived: ((MeshPacket) -> Unit)? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -67,8 +71,27 @@ class BLEMeshStrategy : MeshStrategy {
     override fun start(context: Context, onPacketReceived: (MeshPacket) -> Unit) {
         _context = context.applicationContext
         this.onPacketReceived = onPacketReceived
-        if (!isAvailable) return   // BT disabled — context is set so isAvailable now works
 
+        btReceiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1)
+                val c = _context ?: return
+                if (state == BluetoothAdapter.STATE_ON) {
+                    startGattServer(c); startAdvertising(c); startScanning(c)
+                } else if (state == BluetoothAdapter.STATE_OFF) {
+                    scanner?.stopScan(scanCallback)
+                    advertiser?.stopAdvertising(advertiseCallback)
+                    gattServer?.close()
+                    gattServer = null; scanner = null; advertiser = null
+                    discoveredPeers.clear()
+                }
+            }
+        }
+        context.applicationContext.registerReceiver(
+            btReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+        )
+
+        if (!isAvailable) return  // BT off — receiver handles startup when BT turns on
         startGattServer(context)
         startAdvertising(context)
         startScanning(context)
@@ -82,6 +105,8 @@ class BLEMeshStrategy : MeshStrategy {
         scanner    = null
         advertiser = null
         discoveredPeers.clear()
+        try { _context?.unregisterReceiver(btReceiver) } catch (_: Exception) {}
+        btReceiver = null
     }
 
     // ── GATT Server — receives incoming packets ───────────────────────────────────
@@ -148,41 +173,41 @@ class BLEMeshStrategy : MeshStrategy {
             .build()
 
         advertiseCallback = object : AdvertiseCallback() {
-            override fun onStartFailure(errorCode: Int) {
-                // Advertising may fail if hardware doesn't support peripheral mode —
-                // scanner-only mode still allows receiving packets from other advertisers.
-            }
+            override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {}
+            override fun onStartFailure(errorCode: Int) {}
         }
-        advertiser?.startAdvertising(settings, data, advertiseCallback!!)
+        try {
+            advertiser?.startAdvertising(settings, data, advertiseCallback!!)
+        } catch (_: SecurityException) {}
     }
 
     // ── BLE Scanner — discovers nearby SurvAIve devices ──────────────────────────
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
+            // Software UUID filter — avoids broken HW filter on many chipsets (MediaTek, older Qualcomm)
+            val uuids = result.scanRecord?.serviceUuids
+            if (uuids == null || uuids.none { it.uuid == SERVICE_UUID }) return
             val device = result.device
             if (discoveredPeers.none { it.address == device.address }) {
-                if (discoveredPeers.size >= MAX_CACHED_PEERS) {
-                    discoveredPeers.removeAt(0)
-                }
+                if (discoveredPeers.size >= MAX_CACHED_PEERS) discoveredPeers.removeAt(0)
                 discoveredPeers.add(device)
             }
         }
+        override fun onScanFailed(errorCode: Int) {}
     }
 
     private fun startScanning(context: Context) {
         val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         scanner = bm.adapter.bluetoothLeScanner ?: return
 
-        val filter = ScanFilter.Builder()
-            .setServiceUuid(ParcelUuid(SERVICE_UUID))
-            .build()
-
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
 
-        scanner?.startScan(listOf(filter), settings, scanCallback)
+        try {
+            scanner?.startScan(null, settings, scanCallback)  // null = no HW filter, check UUID in software
+        } catch (_: SecurityException) {}
     }
 
     // ── Broadcast — write packet to each known peer ───────────────────────────────
