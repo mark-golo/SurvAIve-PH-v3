@@ -48,6 +48,7 @@ class BLEMeshStrategy : MeshStrategy {
     private var gattServer: BluetoothGattServer? = null
     private var scanner: BluetoothLeScanner?     = null
     private var advertiser: BluetoothLeAdvertiser? = null
+    private var advertiseCallback: AdvertiseCallback? = null
     private var onPacketReceived: ((MeshPacket) -> Unit)? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -57,6 +58,8 @@ class BLEMeshStrategy : MeshStrategy {
             return bm?.adapter?.isEnabled == true
         }
 
+    override val peerCount: Int get() = discoveredPeers.size
+
     private var _context: Context? = null
 
     // ── Lifecycle ────────────────────────────────────────────────────────────────
@@ -64,6 +67,7 @@ class BLEMeshStrategy : MeshStrategy {
     override fun start(context: Context, onPacketReceived: (MeshPacket) -> Unit) {
         _context = context.applicationContext
         this.onPacketReceived = onPacketReceived
+        if (!isAvailable) return   // BT disabled — context is set so isAvailable now works
 
         startGattServer(context)
         startAdvertising(context)
@@ -72,7 +76,7 @@ class BLEMeshStrategy : MeshStrategy {
 
     override fun stop() {
         scanner?.stopScan(scanCallback)
-        advertiser?.stopAdvertising(null)
+        advertiser?.stopAdvertising(advertiseCallback)
         gattServer?.close()
         gattServer = null
         scanner    = null
@@ -143,12 +147,13 @@ class BLEMeshStrategy : MeshStrategy {
             .addServiceUuid(ParcelUuid(SERVICE_UUID))
             .build()
 
-        advertiser?.startAdvertising(settings, data, object : AdvertiseCallback() {
+        advertiseCallback = object : AdvertiseCallback() {
             override fun onStartFailure(errorCode: Int) {
                 // Advertising may fail if hardware doesn't support peripheral mode —
                 // scanner-only mode still allows receiving packets from other advertisers.
             }
-        })
+        }
+        advertiser?.startAdvertising(settings, data, advertiseCallback!!)
     }
 
     // ── BLE Scanner — discovers nearby SurvAIve devices ──────────────────────────

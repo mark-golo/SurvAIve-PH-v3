@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.wifi.p2p.*
+import android.net.wifi.p2p.WifiP2pConfig
 import android.os.Looper
 import ph.survaive.app.MeshPacket
 import java.io.BufferedReader
@@ -53,11 +54,14 @@ class WiFiDirectStrategy : MeshStrategy {
         return _context?.getSystemService(Context.WIFI_P2P_SERVICE) != null
     }
 
+    override val peerCount: Int get() = if (groupOwnerAddress != null) 1 else 0
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
     override fun start(context: Context, onPacketReceived: (MeshPacket) -> Unit) {
         _context = context.applicationContext
         this.onPacketReceived = onPacketReceived
+        if (!isAvailable) return   // WiFi P2P service not available on this device
 
         manager = context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
         channel = manager?.initialize(context, Looper.getMainLooper(), null)
@@ -119,6 +123,18 @@ class WiFiDirectStrategy : MeshStrategy {
     private fun createP2pReceiver() = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
+                WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> {
+                    // Peers found — request the list, then connect to the first one
+                    manager?.requestPeers(channel) { peerList ->
+                        val peers = peerList.deviceList.toList()
+                        if (peers.isNotEmpty() && groupOwnerAddress == null) {
+                            val config = WifiP2pConfig().apply {
+                                deviceAddress = peers[0].deviceAddress
+                            }
+                            manager?.connect(channel, config, null)
+                        }
+                    }
+                }
                 WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {
                     manager?.requestConnectionInfo(channel) { info ->
                         if (info?.groupFormed == true && info.isGroupOwner) {

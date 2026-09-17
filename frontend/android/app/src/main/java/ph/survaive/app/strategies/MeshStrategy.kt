@@ -22,9 +22,12 @@ interface MeshStrategy {
 
     /**
      * Returns true if the transport hardware is present and enabled on this device.
-     * [MeshNetworkService] skips strategies that report false here.
+     * Checked after [start] has been called so the strategy has a valid context.
      */
     val isAvailable: Boolean
+
+    /** Number of peers currently reachable via this transport. */
+    val peerCount: Int
 
     /**
      * Start the transport:

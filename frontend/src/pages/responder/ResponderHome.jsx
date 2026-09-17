@@ -31,7 +31,12 @@ export function ResponderHome() {
   const [profile, setProfile] = useState(null)
   const [responderId, setResponderId] = useState(null)
   const responderIdRef = useRef(null)
-  const stats = mesh.getStats()
+  const [stats, setStats] = useState({ peersNearby: 0, transport: 'starting', relayEnabled: false })
+
+  useEffect(() => {
+    const load = async () => { setStats(await mesh.getStats()) }
+    load()
+  }, [])
 
   const activeList    = sosList.filter(r => r.rescue_status !== 'rescued')
   const assignedCount = activeList.length

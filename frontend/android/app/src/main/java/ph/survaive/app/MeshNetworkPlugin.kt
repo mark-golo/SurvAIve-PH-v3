@@ -58,6 +58,10 @@ import java.util.UUID
             strings  = [Manifest.permission.ACCESS_WIFI_STATE],
             alias    = "wifiAccess",
         ),
+        Permission(
+            strings  = ["android.permission.NEARBY_WIFI_DEVICES"],
+            alias    = "nearbyWifi",
+        ),
     ],
 )
 class MeshNetworkPlugin : Plugin() {

@@ -18,11 +18,17 @@ const NAV = [
 export function MeshRelay() {
   const [isLight] = useState(() => getResponderTheme() === 'light')
   const [relayOn, setRelayOn] = useState(true)
-  const [peers, setPeers] = useState(mesh.getPeers())
-  const [stats, setStats] = useState(mesh.getStats())
+  const [peers, setPeers] = useState([])
+  const [stats, setStats] = useState({ peersNearby: 0, transport: '—', relayEnabled: false })
 
   useEffect(() => {
-    const interval = setInterval(() => setStats(mesh.getStats()), 3000)
+    const loadStats = async () => {
+      const s = await mesh.getStats()
+      setStats(s)
+      setPeers(mesh.getPeers())
+    }
+    loadStats()
+    const interval = setInterval(loadStats, 3000)
     return () => clearInterval(interval)
   }, [])
 
@@ -65,7 +71,11 @@ export function MeshRelay() {
           <div className="mt-4">
             <NeonButton
               variant={relayOn ? 'ghost' : 'green'}
-              onClick={() => setRelayOn(v => !v)}
+              onClick={async () => {
+                const next = !relayOn
+                setRelayOn(next)
+                await mesh.setRelay(next)
+              }}
               size="sm"
             >
               {relayOn ? 'Disable Relay' : 'Enable Relay'}
@@ -76,20 +86,20 @@ export function MeshRelay() {
         {/* Stats */}
         <div className="grid grid-cols-2 gap-3">
           <div className="glass rounded-xl p-3 text-center">
-            <p className="text-2xl font-black text-[#22c55e]">{stats.peersConnected}</p>
-            <p className="text-[10px] text-slate-500 uppercase mt-0.5">Peers Connected</p>
+            <p className="text-2xl font-black text-[#22c55e]">{stats.peersNearby}</p>
+            <p className="text-[10px] text-slate-500 uppercase mt-0.5">Peers Nearby</p>
           </div>
           <div className="glass rounded-xl p-3 text-center">
-            <p className="text-2xl font-black text-[#00d4ff]">{stats.messagesForwarded}</p>
-            <p className="text-[10px] text-slate-500 uppercase mt-0.5">Messages Forwarded</p>
+            <p className="text-2xl font-black text-[#00d4ff]">{stats.transport ?? '—'}</p>
+            <p className="text-[10px] text-slate-500 uppercase mt-0.5">Transport</p>
           </div>
           <div className="glass rounded-xl p-3 text-center">
-            <p className="text-2xl font-black text-[#8b5cf6]">{stats.dataRelayed}</p>
-            <p className="text-[10px] text-slate-500 uppercase mt-0.5">Data Relayed</p>
+            <p className="text-2xl font-black text-[#8b5cf6]">{stats.relayEnabled ? 'On' : 'Off'}</p>
+            <p className="text-[10px] text-slate-500 uppercase mt-0.5">Relay Active</p>
           </div>
           <div className="glass rounded-xl p-3 text-center">
-            <p className="text-2xl font-black text-[#f59e0b]">{stats.lastSync}</p>
-            <p className="text-[10px] text-slate-500 uppercase mt-0.5">Last Sync</p>
+            <p className="text-2xl font-black text-[#f59e0b]">{peers.length}</p>
+            <p className="text-[10px] text-slate-500 uppercase mt-0.5">Cached Peers</p>
           </div>
         </div>
 

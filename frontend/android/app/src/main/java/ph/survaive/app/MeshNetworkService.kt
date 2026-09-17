@@ -64,12 +64,10 @@ class MeshNetworkService(private val context: Context) {
 
     // ── Lifecycle ────────────────────────────────────────────────────────────────
 
-    /** Start all available transport strategies. */
+    /** Start all transport strategies (each strategy guards its own hardware check internally). */
     fun start() {
         strategies.forEach { strategy ->
-            if (strategy.isAvailable) {
-                strategy.start(context) { packet -> handleIncomingPacket(packet) }
-            }
+            strategy.start(context) { packet -> handleIncomingPacket(packet) }
         }
     }
 
@@ -130,7 +128,7 @@ class MeshNetworkService(private val context: Context) {
     fun getStats(): Map<String, Any> {
         val activeStrategy = strategies.firstOrNull { it.isAvailable }
         return mapOf(
-            "peersNearby"   to 0,   // TODO: expose discoveredPeers.size from BLEMeshStrategy
+            "peersNearby"   to strategies.sumOf { it.peerCount },
             "transport"     to (activeStrategy?.name ?: "none"),
             "relayEnabled"  to relayEnabled,
         )
