@@ -1,10 +1,14 @@
 package ph.survaive.app
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import androidx.core.content.ContextCompat
@@ -174,6 +178,40 @@ class MeshNetworkPlugin : Plugin() {
     @PluginMethod
     fun setRelay(call: PluginCall) {
         meshService?.relayEnabled = call.getBoolean("enabled") ?: true
+        call.resolve()
+    }
+
+    // ── @PluginMethod: enableRadios ───────────────────────────────────────────────
+
+    @PluginMethod
+    fun enableRadios(call: PluginCall) {
+        // Bluetooth — prompt or silently enable based on API level
+        val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        val adapter = bm?.adapter
+        if (adapter != null && !adapter.isEnabled) {
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
+                try {
+                    @Suppress("DEPRECATION")
+                    adapter.enable()
+                } catch (_: Exception) {
+                    activity?.startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                }
+            } else {
+                activity?.startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            }
+        }
+
+        // WiFi — prompt or silently enable based on API level
+        val wm = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        if (wm != null && !wm.isWifiEnabled) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                activity?.startActivity(Intent(Settings.Panel.ACTION_WIFI))
+            } else {
+                @Suppress("DEPRECATION")
+                wm.setWifiEnabled(true)
+            }
+        }
+
         call.resolve()
     }
 

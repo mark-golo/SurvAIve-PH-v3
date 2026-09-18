@@ -9,6 +9,7 @@
  */
 import { Geolocation } from '@capacitor/geolocation'
 import { Network }     from '@capacitor/network'
+import { MeshNetwork } from '../plugins/MeshNetworkPlugin'
 
 // Sync flag — seeded from navigator.onLine, updated by Capacitor listener on native.
 // Use getNetworkOnline() everywhere instead of navigator.onLine directly so the
@@ -65,6 +66,8 @@ export async function onNetworkChange(callback) {
 export function initCapacitor() {
   if (window.Capacitor?.isNativePlatform?.()) {
     console.log('[SurvAIve] Running in native Android context (Capacitor)')
+    // Prompt BT + WiFi enable so mesh can start immediately — fire and forget
+    MeshNetwork.enableRadios().catch(() => {})
   } else {
     console.log('[SurvAIve] Running in browser / PWA context')
   }

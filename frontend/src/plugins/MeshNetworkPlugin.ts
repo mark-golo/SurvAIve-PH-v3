@@ -77,6 +77,13 @@ export interface MeshNetworkPlugin {
   setRelay(options: { enabled: boolean }): Promise<void>
 
   /**
+   * Prompt the user to enable Bluetooth and WiFi if either is currently off.
+   * On Android ≤11: enables silently. On Android 12+: shows system BT dialog.
+   * On Android 10+: opens system WiFi panel. No-op on web.
+   */
+  enableRadios(): Promise<void>
+
+  /**
    * Register a listener for packets received from nearby mesh peers.
    * Fires whenever the native BLE GATT server or Wi-Fi Direct HTTP endpoint
    * receives a new (non-duplicate, non-expired) packet.

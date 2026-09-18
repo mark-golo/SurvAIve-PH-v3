@@ -59,6 +59,12 @@ export class MeshNetworkPluginWeb extends WebPlugin implements MeshNetworkPlugin
     // no-op on web
   }
 
+  // ── Radio enable ─────────────────────────────────────────────────────────────
+
+  async enableRadios(): Promise<void> {
+    // no-op: BT/WiFi radios don't exist in the browser
+  }
+
   // ── Event listener (typed override) ─────────────────────────────────────────
 
   // The base WebPlugin class handles addListener() / removeAllListeners().
