@@ -94,6 +94,7 @@ export function startMeshSync() {
   // subscription lives for the full app session so "connecting" / "sos_transmitted"
   // events are never lost because the originating component navigated away.
   _unsubBroadcast = onBroadcastStatus(({ status, errorCode }) => {
+    if (status === 'advertising_requesting') setBroadcastSubState('requesting')
     if (status === 'advertising_started') setBroadcastSubState('advertising')
     if (status === 'advertising_failed')  { setBroadcastSubState('failed'); setBroadcastErrorCode(errorCode ?? null) }
     if (status === 'awaiting_peers')      setBroadcastSubState('awaiting_peers')
@@ -101,6 +102,8 @@ export function startMeshSync() {
     if (status === 'sos_transmitted')     setBroadcastSubState('transmitted')
   })
   _unsubscribe = mesh.onMessage(async (data, rawPacket) => {
+    // Stage 4 of receive chain: meshSync.js message handler reached.
+    console.log('[meshSync] onMessage: id=', rawPacket?.id, 'type=', rawPacket?.type, 'hops=', rawPacket?.hopCount)
     // ── ACK packets — update victim's SOS status level ─────────────────────────
     if (rawPacket?.type === 'ack') {
       try {

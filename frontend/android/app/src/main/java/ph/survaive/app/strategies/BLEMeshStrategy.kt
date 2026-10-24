@@ -91,6 +91,11 @@ class BLEMeshStrategy : MeshStrategy {
     // Key = device address, value = ordered map of byteOffset → chunk bytes.
     private val preparedWriteBuffers = ConcurrentHashMap<String, java.util.TreeMap<Int, ByteArray>>()
 
+    // Buffers application-level fragment chunks for large SOS payloads that exceed MTU-3.
+    // Key = 12-char hex fragment-set ID, value = ordered map of fragIndex → data bytes.
+    // Each fragment carries a 9-byte binary header: [0xFE][index:1][total:1][id:6][data...].
+    private val fragmentBuffers = ConcurrentHashMap<String, java.util.TreeMap<Int, ByteArray>>()
+
     // Records the timestamp (ms) when each peer was last seen in a scan result.
     private val peerLastSeen = ConcurrentHashMap<String, Long>()
 
@@ -411,6 +416,9 @@ class BLEMeshStrategy : MeshStrategy {
         }
 
         val beacon = currentBeacon
+        // Notify JS that we are about to call startAdvertising() so the UI can show
+        // a "requesting" state before onStartSuccess / onStartFailure fires.
+        onBroadcastStatus?.invoke("advertising_requesting", 0)
         try {
             if (beacon != null) {
                 // SOS/ACK active: beacon delivery via manufacturer data + connectable advertising.
@@ -486,6 +494,7 @@ class BLEMeshStrategy : MeshStrategy {
             }
         } catch (e: SecurityException) {
             Log.e(TAG, "startAdvertising denied — BLUETOOTH_ADVERTISE not granted: ${e.message}")
+            onBroadcastStatus?.invoke("advertising_failed", -3)
         }
     }
 
@@ -536,6 +545,22 @@ class BLEMeshStrategy : MeshStrategy {
                         ))
                         onPacketReceived?.invoke(packet)
                     }
+                } else {
+                    // mfgData present and ≥18B but decodeBeacon returned null — type byte or
+                    // content doesn't match expected format (wrong COMPANY_ID or corrupt data).
+                    Log.w(TAG, "decodeBeacon null from ${device.address}: ${mfgData.size}B type=0x${"%02x".format(mfgData[0].toInt() and 0xFF)}")
+                    fireMeshEvent("beacon_decode_failed", mapOf("deviceAddress" to device.address, "size" to mfgData.size))
+                }
+            } else {
+                // Diagnostic: peer was accepted by the service-UUID filter but has no usable beacon.
+                if (mfgData == null) {
+                    // GATT-only peer: no manufacturer data in ADV — beacon path unavailable.
+                    // This is normal for peers that have never sent an SOS (idle advertising).
+                    Log.v(TAG, "No mfgData from ${device.address} — GATT-only peer")
+                } else {
+                    // Manufacturer data present but truncated by OEM firmware below minimum 18B.
+                    Log.w(TAG, "mfgData too short from ${device.address}: ${mfgData.size}B < 18B minimum")
+                    fireMeshEvent("beacon_too_short", mapOf("deviceAddress" to device.address, "size" to mfgData.size))
                 }
             }
         }
@@ -649,6 +674,12 @@ class BLEMeshStrategy : MeshStrategy {
         val mtuCallbackFired   = AtomicBoolean(false)
         val writeCallbackFired = AtomicBoolean(false)
 
+        // Fragment-write state: non-null when the payload doesn't fit in a single MTU-3 write.
+        // Fragments are drained one-by-one in onCharacteristicWrite after each GATT_SUCCESS ack.
+        var currentMtu          = 23  // conservative default; updated in onMtuChanged
+        var pendingFragments: ArrayDeque<ByteArray>? = null
+        var fragmentChar: BluetoothGattCharacteristic? = null
+
         try {
             peer.connectGatt(ctx, false, object : BluetoothGattCallback() {
 
@@ -700,22 +731,19 @@ class BLEMeshStrategy : MeshStrategy {
                     // getAndSet: if timeout already fired, this is a no-op (avoids double discoverServices)
                     if (mtuCallbackFired.getAndSet(true)) return
                     if (status == BluetoothGatt.GATT_SUCCESS) {
+                        currentMtu = mtu
                         Log.d(TAG, "MTU set to $mtu for ${gatt.device.address} (payload=${payload.size}B, max=${mtu - 3}B)")
                         if (payload.size > mtu - 3) {
-                            // The write would be silently truncated or fail with GATT_ERROR on
-                            // devices that negotiate the BLE 4.x default 23-byte MTU. Abort here
-                            // and leave the packet in pendingPackets for the 3s retry cycle — by
-                            // then Android may have negotiated a larger MTU with a fresh connect.
-                            Log.e(TAG, "PAYLOAD TOO LARGE: ${payload.size}B > ${mtu - 3}B max write — aborting write, will retry")
-                            inFlightPacketIds.remove(packet.id)
-                            try { gatt.disconnect() } catch (_: Exception) {}
-                            gatt.close()
-                            return
+                            // Payload exceeds single-write limit — onServicesDiscovered will fragment.
+                            Log.w(TAG, "Payload ${payload.size}B > MTU-3 (${mtu - 3}B) for ${gatt.device.address} — will fragment")
+                            fireMeshEvent("payload_exceeds_mtu", mapOf(
+                                "deviceAddress" to gatt.device.address,
+                                "payloadSize"   to payload.size,
+                                "mtu"           to mtu,
+                            ))
                         }
                     } else {
-                        Log.w(TAG, "MTU negotiation failed (status=$status) for ${gatt.device.address} — using default 23B MTU")
-                        // Proceed; if payload exceeds 20B the write will fail, but discoverServices
-                        // must still be called to clean up the connection path.
+                        Log.w(TAG, "MTU negotiation failed (status=$status) for ${gatt.device.address} — using default ${currentMtu}B MTU")
                     }
                     gatt.discoverServices()
                 }
@@ -753,30 +781,72 @@ class BLEMeshStrategy : MeshStrategy {
                         gatt.disconnect(); return
                     }
 
-                    // WRITE_TYPE_DEFAULT: server must call sendResponse; onCharacteristicWrite fires
-                    // only after server confirms receipt — ensures data was actually received.
+                    // Choose single-write or fragment path based on negotiated MTU.
                     var writeStarted = false
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        val result = gatt.writeCharacteristic(char, payload, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
-                        if (result != BluetoothStatusCodes.SUCCESS) {
-                            Log.e(TAG, "writeCharacteristic returned $result for ${gatt.device.address}")
+                    val maxSingleWrite = currentMtu - 3
+                    if (payload.size <= maxSingleWrite) {
+                        // Single write — payload fits within negotiated MTU.
+                        val ok = writeOneChunk(gatt, char, payload)
+                        if (!ok) {
+                            Log.e(TAG, "writeCharacteristic (single) failed for ${gatt.device.address}")
                             inFlightPacketIds.remove(packet.id)
-                            gatt.disconnect()   // free slot so retry can make a fresh connection
+                            gatt.disconnect()
                             return
                         }
                         writeStarted = true
                     } else {
-                        @Suppress("DEPRECATION")
-                        char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-                        @Suppress("DEPRECATION")
-                        char.value = payload
-                        @Suppress("DEPRECATION")
-                        val ok = gatt.writeCharacteristic(char)
+                        // Fragment write — payload exceeds MTU-3; split into chunks with binary headers.
+                        val maxDataPerFrag = currentMtu - 12   // 9-byte fragment header overhead
+                        if (maxDataPerFrag < 10) {
+                            Log.e(TAG, "MTU $currentMtu too small to fragment ${payload.size}B for ${gatt.device.address}")
+                            fireMeshEvent("transmission_failed", mapOf(
+                                "deviceAddress" to gatt.device.address, "packetId" to packet.id,
+                                "reason" to "mtu_too_small_to_fragment", "mtu" to currentMtu,
+                            ))
+                            inFlightPacketIds.remove(packet.id); gatt.disconnect(); return
+                        }
+                        // Build the fragment queue
+                        val fragId = ByteArray(6).also { java.security.SecureRandom().nextBytes(it) }
+                        val frags  = ArrayDeque<ByteArray>()
+                        var offset = 0
+                        while (offset < payload.size) {
+                            val end   = minOf(offset + maxDataPerFrag, payload.size)
+                            val chunk = payload.copyOfRange(offset, end)
+                            val frag  = ByteArray(9 + chunk.size)
+                            frag[0] = 0xFE.toByte()
+                            frag[1] = frags.size.toByte()   // fragment index (set before addLast)
+                            frag[2] = 0                     // placeholder — total set after loop
+                            fragId.copyInto(frag, 3)
+                            chunk.copyInto(frag, 9)
+                            frags.addLast(frag)
+                            offset = end
+                        }
+                        val totalFrags = frags.size
+                        if (totalFrags > 255) {
+                            Log.e(TAG, "Too many fragments ($totalFrags) for ${peer.address} — payload ${payload.size}B")
+                            fireMeshEvent("transmission_failed", mapOf(
+                                "deviceAddress" to gatt.device.address, "packetId" to packet.id,
+                                "reason" to "payload_too_large_to_fragment", "payloadSize" to payload.size,
+                            ))
+                            inFlightPacketIds.remove(packet.id); gatt.disconnect(); return
+                        }
+                        // Patch total-count byte now that we know it
+                        frags.forEach { it[2] = totalFrags.toByte() }
+                        pendingFragments = frags
+                        fragmentChar = char
+                        Log.d(TAG, "Fragment write: ${payload.size}B → $totalFrags frags of ≤${maxDataPerFrag}B to ${peer.address}")
+                        fireMeshEvent("fragment_write_started", mapOf(
+                            "deviceAddress" to peer.address,
+                            "packetId"      to packet.id,
+                            "totalChunks"   to totalFrags,
+                            "payloadSize"   to payload.size,
+                        ))
+                        val firstFrag = frags.removeFirst()
+                        val ok = writeOneChunk(gatt, char, firstFrag)
                         if (!ok) {
-                            Log.e(TAG, "writeCharacteristic returned false for ${gatt.device.address}")
-                            inFlightPacketIds.remove(packet.id)
-                            gatt.disconnect()   // free slot so retry can make a fresh connection
-                            return
+                            Log.e(TAG, "First fragment write failed for ${gatt.device.address}")
+                            pendingFragments = null; fragmentChar = null
+                            inFlightPacketIds.remove(packet.id); gatt.disconnect(); return
                         }
                         writeStarted = true
                     }
@@ -801,6 +871,25 @@ class BLEMeshStrategy : MeshStrategy {
                 ) {
                     writeCallbackFired.set(true)   // cancel the 30s watchdog
                     if (status == BluetoothGatt.GATT_SUCCESS) {
+                        val remaining = pendingFragments
+                        if (remaining != null && remaining.isNotEmpty()) {
+                            // More fragments to send — write next chunk and stay connected.
+                            val nextFrag = remaining.removeFirst()
+                            val ok = writeOneChunk(gatt, fragmentChar ?: characteristic, nextFrag)
+                            if (!ok) {
+                                Log.e(TAG, "Fragment write failed mid-sequence for ${gatt.device.address}")
+                                pendingFragments = null; fragmentChar = null
+                                inFlightPacketIds.remove(packet.id)
+                                fireMeshEvent("transmission_failed", mapOf(
+                                    "deviceAddress" to gatt.device.address, "packetId" to packet.id,
+                                    "reason" to "fragment_write_failed", "transport" to "BLE_GATT",
+                                ))
+                                gatt.disconnect()
+                            }
+                            return   // don't disconnect — wait for next callback
+                        }
+                        // All data delivered (single write or last fragment)
+                        pendingFragments = null; fragmentChar = null
                         Log.d(TAG, "Write confirmed to ${gatt.device.address} — packet ${packet.id.take(8)} delivered")
                         inFlightPacketIds.remove(packet.id)
                         onWriteConfirmed?.invoke(packet.id)
@@ -808,6 +897,7 @@ class BLEMeshStrategy : MeshStrategy {
                         fireMeshEvent("sos_transmitted", mapOf("deviceAddress" to gatt.device.address, "packetId" to packet.id, "transport" to "BLE_GATT"))
                     } else {
                         Log.e(TAG, "Write failed: status=$status to ${gatt.device.address} — retry loop will re-send")
+                        pendingFragments = null; fragmentChar = null
                         inFlightPacketIds.remove(packet.id)
                         fireMeshEvent("transmission_failed", mapOf("deviceAddress" to gatt.device.address, "packetId" to packet.id, "errorCode" to status, "transport" to "BLE_GATT"))
                     }
@@ -985,7 +1075,37 @@ class BLEMeshStrategy : MeshStrategy {
         }
     }
 
+    // Writes one chunk to a GATT characteristic using WRITE_TYPE_DEFAULT.
+    // Returns true if the write was successfully queued; false on any error.
+    private fun writeOneChunk(
+        gatt: BluetoothGatt,
+        char: BluetoothGattCharacteristic,
+        data: ByteArray,
+    ): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                gatt.writeCharacteristic(char, data, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) == BluetoothStatusCodes.SUCCESS
+            } else {
+                @Suppress("DEPRECATION")
+                char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                @Suppress("DEPRECATION")
+                char.value = data
+                @Suppress("DEPRECATION")
+                gatt.writeCharacteristic(char)
+            }
+        } catch (e: SecurityException) {
+            Log.e(TAG, "writeOneChunk SecurityException: ${e.message}")
+            false
+        }
+    }
+
     private fun processIncomingPayload(value: ByteArray, senderAddress: String? = null) {
+        // Fragment magic: 0xFE signals an application-level fragment chunk.
+        // Binary header: [0xFE][fragIndex:1B][totalFrags:1B][fragSetId:6B][data...]
+        if (value.isNotEmpty() && (value[0].toInt() and 0xFF) == 0xFE) {
+            handleFragment(value, senderAddress)
+            return
+        }
         val json = value.toString(Charsets.UTF_8)
         fireMeshEvent("gatt_packet_received", mapOf("size" to value.size, "sender" to (senderAddress ?: "unknown")))
         try {
@@ -996,12 +1116,63 @@ class BLEMeshStrategy : MeshStrategy {
                 return
             }
             // Populate address→originId mapping so getPeers() relay counter resolves correctly.
-            // This is the only reliable path since SOS advertising carries no manufacturer data.
             if (senderAddress != null) addressToOriginId[senderAddress] = packet.originDeviceId
+            // Stage 1 of receive chain: native packet forwarded to service layer.
+            Log.d(TAG, "processIncomingPayload: invoking onPacketReceived id=${packet.id.take(8)} type=${packet.type}")
+            fireMeshEvent("packet_delivered_to_service", mapOf(
+                "packetId"      to packet.id,
+                "packetType"    to packet.type,
+                "senderAddress" to (senderAddress ?: "unknown"),
+            ))
             onPacketReceived?.invoke(packet)
         } catch (_: Exception) {
             fireMeshEvent("gatt_packet_parse_failed", mapOf("size" to value.size))
             Log.w(TAG, "processIncomingPayload: unexpected error parsing packet (${value.size}B) — discarded")
+        }
+    }
+
+    private fun handleFragment(value: ByteArray, senderAddress: String?) {
+        if (value.size < 10) {
+            Log.w(TAG, "Fragment too short: ${value.size}B — discarded")
+            return
+        }
+        val fragIndex = value[1].toInt() and 0xFF
+        val totalFrags = value[2].toInt() and 0xFF
+        if (totalFrags == 0 || fragIndex >= totalFrags) {
+            Log.w(TAG, "Fragment header invalid: index=$fragIndex total=$totalFrags — discarded")
+            return
+        }
+        // 6-byte fragment-set ID at bytes 3–8, encoded as 12 hex chars for the map key.
+        val fragSetId = (3..8).joinToString("") { "%02x".format(value[it].toInt() and 0xFF) }
+        val dataBytes = value.copyOfRange(9, value.size)
+
+        val buf = fragmentBuffers.getOrPut(fragSetId) { java.util.TreeMap() }
+        synchronized(buf) { buf[fragIndex] = dataBytes }
+
+        Log.d(TAG, "Fragment: id=$fragSetId [$fragIndex/$totalFrags] ${dataBytes.size}B from ${senderAddress ?: "unknown"}")
+
+        val complete = synchronized(buf) { buf.size == totalFrags }
+        if (complete) {
+            fragmentBuffers.remove(fragSetId)
+            val assembled = synchronized(buf) {
+                val parts = (0 until totalFrags).mapNotNull { buf[it] }
+                if (parts.size != totalFrags) return@synchronized null
+                val totalSize = parts.sumOf { it.size }
+                val out = ByteArray(totalSize)
+                var pos = 0
+                for (part in parts) { part.copyInto(out, pos); pos += part.size }
+                out
+            } ?: run {
+                Log.w(TAG, "Fragment assembly failed: id=$fragSetId — missing chunks")
+                return
+            }
+            Log.d(TAG, "Fragment assembly complete: id=$fragSetId ${assembled.size}B")
+            fireMeshEvent("fragment_assembled", mapOf(
+                "fragSetId"     to fragSetId,
+                "totalBytes"    to assembled.size,
+                "senderAddress" to (senderAddress ?: "unknown"),
+            ))
+            processIncomingPayload(assembled, senderAddress)
         }
     }
 }

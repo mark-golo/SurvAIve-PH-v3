@@ -55,15 +55,23 @@ const EVENT_META = {
   scan_failed:            { label: 'BLE Scan Failed',               color: '#ef4444', Icon: ZapOff         },
   scanner_null:           { label: 'Scanner Null (retrying)',        color: '#f59e0b', Icon: ZapOff         },
   beacon_decoded:         { label: 'Beacon Decoded',                color: '#00d4ff', Icon: Radio          },
-  gatt_packet_received:   { label: 'GATT Packet Received',          color: '#3b82f6', Icon: Wifi           },
-  gatt_packet_parse_failed:{ label: 'GATT Parse Failed',            color: '#ef4444', Icon: AlertTriangle  },
+  gatt_packet_received:      { label: 'GATT Packet Received',       color: '#3b82f6', Icon: Wifi           },
+  gatt_packet_parse_failed:  { label: 'GATT Parse Failed',          color: '#ef4444', Icon: AlertTriangle  },
+  broadcast_dispatched:      { label: 'Broadcast Dispatched',       color: '#22c55e', Icon: Radio          },
+  broadcast_error:           { label: 'Broadcast Error',            color: '#ef4444', Icon: ZapOff         },
+  beacon_too_short:          { label: 'Beacon Too Short',           color: '#f59e0b', Icon: AlertTriangle  },
+  beacon_decode_failed:      { label: 'Beacon Decode Failed',       color: '#ef4444', Icon: AlertTriangle  },
+  packet_delivered_to_service:{ label: 'Packet → Service',         color: '#3b82f6', Icon: Wifi           },
+  fragment_write_started:    { label: 'Fragment Write Started',     color: '#a78bfa', Icon: Wifi           },
+  fragment_assembled:        { label: 'Fragment Assembled',         color: '#22c55e', Icon: Wifi           },
+  payload_exceeds_mtu:       { label: 'Payload Exceeds MTU',        color: '#f59e0b', Icon: AlertTriangle  },
 }
 
 const FILTER_MAP = {
-  sos:   ['sos_received', 'sos_transmitted', 'sos_relayed', 'sos_broadcast', 'sos_stored_locally', 'duplicate_detected', 'beacon_decoded', 'gatt_packet_received', 'gatt_packet_parse_failed'],
+  sos:   ['sos_received', 'sos_transmitted', 'sos_relayed', 'sos_broadcast', 'sos_stored_locally', 'duplicate_detected', 'beacon_decoded', 'gatt_packet_received', 'gatt_packet_parse_failed', 'broadcast_dispatched', 'packet_delivered_to_service', 'fragment_write_started', 'fragment_assembled'],
   ack:   ['ack_sent', 'ack_received', 'ack_unmatched', 'sos_acknowledged'],
   peer:  ['peer_discovered', 'connection_established', 'peer_disconnected'],
-  error: ['transmission_failed', 'broadcast_failed', 'scan_failed', 'scanner_null'],
+  error: ['transmission_failed', 'broadcast_failed', 'scan_failed', 'scanner_null', 'broadcast_error', 'beacon_too_short', 'beacon_decode_failed', 'payload_exceeds_mtu'],
 }
 
 function ago(ms) {

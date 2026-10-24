@@ -3,6 +3,7 @@ package ph.survaive.app
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
+import android.util.Log
 import android.bluetooth.BluetoothManager
 import android.content.ComponentName
 import android.content.Context
@@ -79,6 +80,8 @@ import java.util.UUID
 )
 class MeshNetworkPlugin : Plugin() {
 
+    companion object { private const val TAG = "MeshPlugin" }
+
     private var meshService: MeshNetworkService? = null
     private var pendingStartCall: PluginCall? = null
 
@@ -87,6 +90,8 @@ class MeshNetworkPlugin : Plugin() {
             val service = (binder as MeshNetworkService.LocalBinder).getService()
             meshService = service
             service.onPacketReceived = { packet ->
+                // Stage 2 of receive chain: plugin forwarding packet to JS via Capacitor event.
+                Log.d(TAG, "notifyListeners meshPacketReceived id=${packet.id.take(8)} type=${packet.type}")
                 val data = JSObject().apply {
                     put("id",             packet.id)
                     put("type",           packet.type)

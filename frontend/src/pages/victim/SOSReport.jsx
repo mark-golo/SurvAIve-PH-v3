@@ -334,7 +334,7 @@ export function SOSReport() {
       sosDisplayId, packetId: realPacketId,
       status: payload.status, barangay: payload.barangay, peopleCount: payload.people_count,
     })
-    mesh.broadcast({
+    const _sosPayload = {
       t:   'sos',
       _id: realPacketId,
       la:  payload.lat,
@@ -344,8 +344,11 @@ export function SOSReport() {
       b:   payload.barangay,
       m:   payload.municipality,
       sv:  payload.service_type,
-    })
-      .catch(() => {})
+    }
+    const _payloadBytes = JSON.stringify(_sosPayload).length
+    mesh.broadcast(_sosPayload)
+      .then(r  => logMeshEvent('broadcast_dispatched', { packetId: realPacketId, payloadBytes: _payloadBytes, success: r?.success, transport: r?.transport }))
+      .catch(err => logMeshEvent('broadcast_error',    { packetId: realPacketId, payloadBytes: _payloadBytes, error: String(err) }))
 
     if (offline || !getNetworkOnline()) {
       await db.queueSOS({ ...payload, isGuest, timestamp: Date.now() })
@@ -379,7 +382,9 @@ export function SOSReport() {
           ? 'CONNECTING TO NEARBY DEVICE…'
           : ackState.broadcastSubState === 'transmitted'
           ? 'SOS DELIVERED TO NEARBY DEVICE ✓'
-          : 'SOS BROADCASTING',                                                                         color: '#f59e0b' },
+          : ackState.broadcastSubState === 'requesting'
+          ? 'REQUESTING BROADCAST…'
+          : 'SOS ADVERTISING',                                                                          color: '#f59e0b' },
       { n: 2, label: 'SOS RECEIVED BY NEARBY DEVICE',                                                color: '#22c55e' },
       { n: 3, label: `SOS RELAYED — ${ackState.ackMaxHops || '?'} HOP${(ackState.ackMaxHops ?? 1) !== 1 ? 'S' : ''}`, color: '#00d4ff' },
       { n: 4, label: 'RESPONDER RECEIVED YOUR SOS',                                                  color: '#22c55e' },

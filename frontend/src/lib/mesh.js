@@ -54,6 +54,8 @@ async function ensureStarted() {
       // that arrives between startMesh() resolving and addListener() being called
       // would otherwise be silently dropped.
       _listenerHandle = await MeshNetwork.addListener('meshPacketReceived', (packet) => {
+        // Stage 3 of receive chain: Capacitor event reached JS listener.
+        console.log('[mesh] meshPacketReceived: id=', packet?.id, 'type=', packet?.type, 'hopCount=', packet?.hopCount)
         // Beacon packets carry a 20-byte binary payload that decodes to an empty or
         // minimal JSON string. Rather than discarding them, fall through with {} so
         // the handler can still route by rawPacket.type and log the SOS detection.
@@ -134,12 +136,16 @@ export const mesh = {
     await ensureStarted()
     const serialised = typeof data === 'string' ? data : JSON.stringify(data)
     const pktType = data.t ?? data.type
-    if (serialised.length > 240) {
-      console.warn('[mesh] broadcast rejected: payload', serialised.length, 'bytes exceeds 240-byte BLE ATT limit')
-      if (pktType === 'sos' || !pktType) {
-        try { await db.queueSOS(data) } catch { /* db may not be open yet */ }
-      }
-      return { success: false, transport: 'none' }
+    // No JS-side byte limit: native layer requests MTU 512 and fragments oversized
+    // payloads using the binary fragment protocol. Rejecting here would prevent
+    // native from even attempting delivery.
+    const innerBytes = new TextEncoder().encode(serialised).byteLength
+    // MeshPacket.toJson() wraps this inner payload: UUID(36) + ANDROID_ID(16) +
+    // field names + JSON escaping of inner quotes ≈ 140 bytes of overhead.
+    const estWireBytes = innerBytes + 140
+    if (estWireBytes > 244) {
+      console.warn('[mesh] broadcast: est. wire size', estWireBytes, 'B (inner',
+        innerBytes, 'B + ~140B wrapper) > 244B ATT limit — native will fragment')
     }
     // Pre-persist SOS before transmission so a process kill between send and
     // GATT confirmation leaves a local record on the sender side.
@@ -152,6 +158,7 @@ export const mesh = {
       payload: serialised,
       ...(data._id ? { id: data._id } : {}),
     })
+    console.log('[mesh] broadcast result: success=', result?.success, 'transport=', result?.transport, 'innerBytes=', innerBytes, 'estWireBytes=', estWireBytes)
     if (!result.success && !_localSosId) {
       // Both native transports failed and pre-persist also failed — last attempt.
       if (pktType === 'sos' || serialised.includes('"t":"sos"')) {

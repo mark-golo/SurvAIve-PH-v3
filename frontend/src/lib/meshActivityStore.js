@@ -151,6 +151,7 @@ export function addReceivedSOS(data, rawPacket) {
       const merged = {
         rawPacket,
         time: existing.time,
+        isPartial: false,  // GATT full packet arrived; entry is now complete
         data: {
           ...existing.data,
           ...Object.fromEntries(
@@ -169,7 +170,7 @@ export function addReceivedSOS(data, rawPacket) {
     }
   }
 
-  _receivedSOS = [{ data, rawPacket, time: now }, ..._receivedSOS].slice(0, MAX_LOG)
+  _receivedSOS = [{ data, rawPacket, time: now, isPartial: newId.startsWith('beacon-') }, ..._receivedSOS].slice(0, MAX_LOG)
   _notify()
 }
 
