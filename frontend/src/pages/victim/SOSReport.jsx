@@ -381,7 +381,7 @@ export function SOSReport() {
           : ackState.broadcastSubState === 'connecting'
           ? 'CONNECTING TO NEARBY DEVICE…'
           : ackState.broadcastSubState === 'transmitted'
-          ? 'SOS DELIVERED TO NEARBY DEVICE ✓'
+          ? 'SOS TRANSMITTED — AWAITING RECEIVER ACK ✓'
           : ackState.broadcastSubState === 'requesting'
           ? 'REQUESTING BROADCAST…'
           : 'SOS ADVERTISING',                                                                          color: '#f59e0b' },

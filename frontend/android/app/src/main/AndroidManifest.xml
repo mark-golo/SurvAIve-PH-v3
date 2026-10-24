@@ -11,8 +11,10 @@
     <!-- BLUETOOTH_CONNECT: connect to GATT servers on discovered peers -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <!-- BLUETOOTH_SCAN: discover nearby SurvAIve devices advertising our SERVICE_UUID -->
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
-        android:usesPermissionFlags="neverForLocation" />
+    <!-- neverForLocation removed: it can suppress manufacturer-data beacon results on
+         some OEM BLE stacks (Samsung/Qualcomm). ACCESS_FINE_LOCATION declared below
+         covers the location-dependent path for all API levels. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
 
     <!-- ── Bluetooth (Android 11 / API 30 and below) ─────────────────────────── -->
     <uses-permission android:name="android.permission.BLUETOOTH"
