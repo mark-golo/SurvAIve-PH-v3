@@ -72,6 +72,10 @@ class BLEMeshStrategy : MeshStrategy {
         private const val SCAN_RESTART_INTERVAL_MS  = 30_000L
         private const val MAX_FRAGMENT_ASSEMBLIES   = 32
         private const val FRAGMENT_TTL_MS           = 30_000L
+        // Keep a newly announced SOS beacon on air long enough for multiple nearby
+        // scanners to receive it. ACKs are sent over GATT first; the ACK beacon may
+        // take the advertising slot only after this grace period expires.
+        private const val SOS_BEACON_RETENTION_MS    = 30_000L
     }
 
     private val discoveredPeers = CopyOnWriteArrayList<BluetoothDevice>()
@@ -173,6 +177,12 @@ class BLEMeshStrategy : MeshStrategy {
     // Current SOS/ACK beacon payload (20 bytes) broadcast in the main ADV_IND (connectable) packet.
     // Passively received by all nearby scanners — no SCAN_REQ or GATT connection needed.
     private var currentBeacon: ByteArray? = null
+    // One advertiser can carry only one legacy BLE payload at a time. Do not let the
+    // first receiver's ACK immediately replace the SOS beacon before other nearby
+    // phones have had a chance to scan it. ACKs still use GATT while this grace period
+    // is active and can take the beacon slot later if GATT has no path.
+    @Volatile private var activeSosBeaconPacketId: String? = null
+    @Volatile private var activeSosBeaconUntilMs: Long = 0L
 
     // Exponential backoff delay for scan retries (5 s → 10 s → 20 s → 30 s cap).
     private var scanRetryDelayMs = 5_000L
@@ -383,6 +393,14 @@ class BLEMeshStrategy : MeshStrategy {
             return
         }
 
+        val server = gattServer
+        if (server == null) {
+            Log.e(TAG, "openGattServer returned null — cannot accept incoming SOS writes")
+            fireMeshEvent("gatt_server_unavailable", mapOf("reason" to "openGattServer_returned_null"))
+            onBroadcastStatus?.invoke("gatt_server_failed", -2)
+            return
+        }
+
         val service = BluetoothGattService(
             SERVICE_UUID,
             BluetoothGattService.SERVICE_TYPE_PRIMARY,
@@ -393,7 +411,16 @@ class BLEMeshStrategy : MeshStrategy {
             BluetoothGattCharacteristic.PERMISSION_WRITE,
         )
         service.addCharacteristic(char)
-        gattServer?.addService(service)
+        if (!server.addService(service)) {
+            Log.e(TAG, "GATT addService() returned false — retrying in 2s")
+            fireMeshEvent("gatt_service_add_rejected", mapOf("serviceUuid" to SERVICE_UUID.toString()))
+            onBroadcastStatus?.invoke("gatt_server_failed", -4)
+            mainHandler.postDelayed({
+                val ctx = _context
+                if (ctx != null && isAvailable) startGattServer(ctx)
+            }, 2000L)
+            return
+        }
         Log.d(TAG, "GATT server open — waiting for onServiceAdded before advertising")
     }
 
@@ -629,7 +656,9 @@ class BLEMeshStrategy : MeshStrategy {
             Log.d(TAG, "BLE scan started (no-filter, SERVICE_UUID software check)")
             fireMeshEvent("scan_started", mapOf("mode" to "LOW_LATENCY", "filter" to "software-UUID"))
         } catch (e: SecurityException) {
-            Log.e(TAG, "startScan denied — BLUETOOTH_SCAN not granted: ${e.message}")
+            Log.e(TAG, "startScan denied — verify BLUETOOTH_SCAN and ACCESS_FINE_LOCATION grants: ${e.message}")
+            fireMeshEvent("scan_permission_denied", mapOf("error" to (e.message ?: "SecurityException")))
+            onBroadcastStatus?.invoke("scan_failed", -4)
         }
     }
 
@@ -640,18 +669,40 @@ class BLEMeshStrategy : MeshStrategy {
         // Passively broadcast every ~100ms; all nearby scanners receive it without
         // sending SCAN_REQ — no scan-response caching issues.
         if (packet.type == "sos" || packet.type == "ack") {
-            // Both SOS and ACK beacons always update the advertising data.
-            // The prior "isSosRelay" guard blocked ACK beacons when a relay SOS was active,
-            // pushing ACKs to GATT-only (unreliable: STATUS_133, 2–5s delay). This kept
-            // ackLevel at 1 on the victim forever. The guard was unnecessary: Device C already
-            // deduplicated the relay SOS in seenBeaconIds, so briefly switching to an ACK
-            // beacon has no practical impact on Device C's ability to receive the relay.
-            updateBeacon(packet)
             if (packet.type == "sos") {
-                fireMeshEvent("sos_transmitted", mapOf(
+                val encoded = encodeSosBeacon(packet)
+                // A retry of the same, still-active SOS must not keep resetting this
+                // deadline; otherwise an ACK could never take the beacon slot. If the
+                // active beacon has changed (e.g. an ACK took the slot after 30 seconds),
+                // give the SOS a fresh 30-second reception window.
+                if (encoded != null && (
+                    activeSosBeaconPacketId != packet.id ||
+                    currentBeacon == null ||
+                    !currentBeacon!!.contentEquals(encoded)
+                )) {
+                    activeSosBeaconPacketId = packet.id
+                    activeSosBeaconUntilMs = System.currentTimeMillis() + SOS_BEACON_RETENTION_MS
+                }
+                updateBeacon(packet)
+                // Scheduling/updating an advertisement is not proof that a phone received it.
+                fireMeshEvent("sos_beacon_queued", mapOf(
                     "packetId" to packet.id,
                     "hopCount" to packet.hopCount,
                 ))
+            } else {
+                val remaining = activeSosBeaconUntilMs - System.currentTimeMillis()
+                if (activeSosBeaconPacketId != null && remaining > 0L) {
+                    // Preserve the SOS beacon during the initial fan-out window. We still
+                    // attempt ACK delivery over GATT below; if no GATT peer is available,
+                    // the pending-packet retry loop can advertise this ACK after the grace.
+                    fireMeshEvent("ack_beacon_deferred", mapOf(
+                        "packetId" to packet.id,
+                        "remainingMs" to remaining,
+                        "activeSosPacketId" to activeSosBeaconPacketId,
+                    ))
+                } else {
+                    updateBeacon(packet)
+                }
             }
             if (discoveredPeers.isEmpty()) {
                 onBroadcastStatus?.invoke("awaiting_peers", 0)
@@ -949,8 +1000,32 @@ class BLEMeshStrategy : MeshStrategy {
                         Log.d(TAG, "Write confirmed to ${gatt.device.address} — packet ${packet.id.take(8)} delivered")
                         inFlightPacketIds.remove(packet.id)
                         onWriteConfirmed?.invoke(packet.id)
-                        onBroadcastStatus?.invoke("sos_transmitted", 0)
-                        fireMeshEvent("sos_transmitted", mapOf("deviceAddress" to gatt.device.address, "packetId" to packet.id, "transport" to "BLE_GATT"))
+                        if (packet.type == "sos") {
+                            // This is a successful ATT write response from the receiving GATT
+                            // server; an application-level ACK is still required to prove that
+                            // the receiver's JS handler processed and stored the SOS.
+                            onBroadcastStatus?.invoke("sos_transmitted", 0)
+                            fireMeshEvent("sos_transmitted", mapOf(
+                                "deviceAddress" to gatt.device.address,
+                                "packetId" to packet.id,
+                                "transport" to "BLE_GATT",
+                                "confirmation" to "gatt_write_response",
+                            ))
+                        } else if (packet.type == "ack") {
+                            fireMeshEvent("ack_transmitted", mapOf(
+                                "deviceAddress" to gatt.device.address,
+                                "packetId" to packet.id,
+                                "transport" to "BLE_GATT",
+                                "confirmation" to "gatt_write_response",
+                            ))
+                        } else {
+                            fireMeshEvent("packet_transmitted", mapOf(
+                                "deviceAddress" to gatt.device.address,
+                                "packetId" to packet.id,
+                                "packetType" to packet.type,
+                                "transport" to "BLE_GATT",
+                            ))
+                        }
                     } else {
                         Log.e(TAG, "Write failed: status=$status to ${gatt.device.address} — retry loop will re-send")
                         pendingFragments = null; fragmentChar = null
