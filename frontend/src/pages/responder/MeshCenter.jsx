@@ -41,7 +41,7 @@ const EVENT_META = {
   peer_discovered:        { label: 'Peer Discovered',             color: '#00d4ff', Icon: Wifi           },
   connection_established: { label: 'GATT Connection',             color: '#22c55e', Icon: Wifi           },
   peer_disconnected:      { label: 'Peer Disconnected',           color: '#8b5cf6', Icon: Wifi           },
-  sos_transmitted:        { label: 'SOS Transmitted',             color: '#22c55e', Icon: CheckCircle2   },
+  sos_transmitted:        { label: 'SOS GATT Write Confirmed — Receiver ACK Pending', color: '#22c55e', Icon: CheckCircle2 },
   sos_received:           { label: 'SOS Received via Mesh',       color: '#ef4444', Icon: AlertTriangle  },
   sos_stored_locally:     { label: 'SOS Stored Offline',          color: '#8b5cf6', Icon: Archive        },
   sos_acknowledged:       { label: 'SOS Acknowledged',            color: '#22c55e', Icon: CheckCircle2   },
@@ -56,6 +56,19 @@ const EVENT_META = {
   scan_failed:            { label: 'BLE Scan Failed',             color: '#ef4444', Icon: ZapOff         },
   scanner_null:           { label: 'Scanner Null (retrying)',      color: '#f59e0b', Icon: ZapOff         },
   beacon_decoded:         { label: 'Beacon Decoded',              color: '#00d4ff', Icon: Radio          },
+  sos_beacon_queued:      { label: 'SOS Beacon Queued — receipt not confirmed', color: '#f59e0b', Icon: Radio },
+  ack_beacon_deferred:    { label: 'ACK Beacon Deferred to Preserve SOS', color: '#f59e0b', Icon: Activity },
+  ack_transmitted:        { label: 'ACK GATT Write Confirmed',        color: '#22c55e', Icon: CheckCircle2 },
+  packet_transmitted:     { label: 'Packet GATT Write Confirmed',     color: '#22c55e', Icon: CheckCircle2 },
+  scan_permission_denied: { label: 'BLE Scan Permission Failure',     color: '#ef4444', Icon: ZapOff },
+  gatt_server_unavailable:{ label: 'GATT Server Unavailable',         color: '#ef4444', Icon: ZapOff },
+  gatt_service_add_rejected:{ label: 'GATT Service Registration Failed', color: '#ef4444', Icon: ZapOff },
+  ack_transport_accepted: { label: 'ACK Transport Accepted — not receipt proof', color: '#f59e0b', Icon: Activity },
+  ack_transport_pending:  { label: 'ACK Waiting for Nearby Peer',     color: '#f59e0b', Icon: RefreshCw },
+  ack_broadcast_error:    { label: 'ACK Broadcast Error',             color: '#ef4444', Icon: XCircle },
+  ack_deferred_storage_failure:{ label: 'ACK Deferred — SOS Not Stored', color: '#ef4444', Icon: Archive },
+  sos_persisted:          { label: 'SOS Persisted',                   color: '#22c55e', Icon: Archive },
+  sos_mirrored_locally:   { label: 'SOS Mirrored Locally',            color: '#22c55e', Icon: Archive },
 }
 
 function ago(ms) {
