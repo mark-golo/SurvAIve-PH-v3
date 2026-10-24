@@ -165,13 +165,20 @@ class MeshNetworkPlugin : Plugin() {
     @PermissionCallback
     private fun startMeshAfterPermissions(call: PluginCall) {
         // Verify that all critical permissions were actually granted
-        val requiredAliases = mutableListOf("bluetoothScan", "bluetoothAdvertise", "bluetoothConnect")
-        // On API ≤ 30 (Android 11), BLE scan requires ACCESS_FINE_LOCATION even when
-        // BLUETOOTH_SCAN is granted, because the pre-31 BT stack enforces it.
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) requiredAliases.add("location")
+        // BLUETOOTH_SCAN intentionally does NOT declare neverForLocation in AndroidManifest.xml,
+        // because the receiver must see the SurvAIve manufacturer-data beacon on OEM BLE stacks.
+        // Without neverForLocation, Android requires ACCESS_FINE_LOCATION at runtime on API 31+ too.
+        // Require it explicitly: otherwise startMesh can succeed while the OS silently withholds
+        // scan results, so the sender advertises but this phone never discovers/receives the SOS.
+        val requiredAliases = mutableListOf(
+            "bluetoothScan",
+            "bluetoothAdvertise",
+            "bluetoothConnect",
+            "location",
+        )
         val deniedAliases = requiredAliases.filter { getPermissionState(it) != PermissionState.GRANTED }
         if (deniedAliases.isNotEmpty()) {
-            call.reject("Mesh requires Bluetooth permissions. Denied: $deniedAliases")
+            call.reject("Mesh cannot receive nearby SOS packets without Bluetooth Scan, Advertise, Connect, and Location permissions. Denied: $deniedAliases")
             return
         }
 

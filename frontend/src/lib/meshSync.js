@@ -156,11 +156,12 @@ export function startMeshSync() {
 
     console.log('[meshSync] SOS received via mesh', rawPacket.id, 'hops:', rawPacket.hopCount)
 
+    let durablyStored = false
+    let storageMode = 'none'
+    let localRecordId = null
     try {
-      // ── UI updates first — never block these on network I/O ───────────────────
-      // RC-10: moved before api.post so the SOS shows immediately even when the
-      // XAMPP backend is unreachable (WiFi connected but server down causes api.post
-      // to hang for the full HTTP timeout, blocking these calls in the old order).
+      // Display the SOS immediately; the receiver's card is also updated if the
+      // full GATT payload arrives after the first partial advertisement beacon.
       addReceivedSOS(expanded, rawPacket)
       logMeshEvent('sos_received', {
         packetId:       rawPacket.id         ?? null,
@@ -170,79 +171,97 @@ export function startMeshSync() {
         hops:           5 - (rawPacket.hopCount ?? 5),
         originDeviceId: rawPacket.originDeviceId ?? 'unknown',
       })
-      console.log('[meshSync] SOS alert emitted to UI subscribers', rawPacket.id)
       emitMeshSOSAlert(expanded, rawPacket)
 
-      // ── Backend/offline persistence (runs after UI, so delay is invisible) ────
-      // RC-6: avoid double-insert — only queue to IndexedDB when the Supabase POST
-      // fails or the device is offline; a successful POST is the authoritative record.
-      if (getNetworkOnline()) {
+      // Persist locally FIRST, even while the internet indicator is online. "Online"
+      // only means a network interface is present; the PHP/Supabase/API server may be
+      // unreachable. Waiting for api.post() before saving locally delayed the receiver
+      // ACK and could leave a displayed-but-not-stored SOS during the HTTP timeout.
+      try {
+        localRecordId = await db.queueSOS({
+          ...expanded,
+          receivedViaMesh: true,
+          meshOriginId: rawPacket.originDeviceId,
+          meshPacketId: rawPacket.id,
+          timestamp: rawPacket.timestamp ?? Date.now(),
+        })
+        durablyStored = true
+        storageMode = 'indexeddb'
+        logMeshEvent('sos_stored_locally', {
+          packetId: rawPacket.id,
+          barangay: expanded.barangay,
+          storage: storageMode,
+        })
+      } catch (dbErr) {
+        console.error('[meshSync] IndexedDB could not persist received SOS:', dbErr?.message)
+      }
+
+      // If local storage failed but connectivity is available, make a best-effort server
+      // write. Only ACK if one of the durable stores confirms acceptance.
+      if (!durablyStored && getNetworkOnline()) {
         try {
-          const serverResponse = await api.post('/sos', {
+          await api.post('/sos', {
             ...expanded,
-            relay_source:    rawPacket.originDeviceId,
-            mesh_packet_id:  rawPacket.id,
+            relay_source: rawPacket.originDeviceId,
+            mesh_packet_id: rawPacket.id,
           })
-          console.log('[meshSync] SOS relayed to Supabase', rawPacket.id)
-          // Queue locally with synced=true so it survives drain dedup
-          try {
-            const localId = await db.queueSOS({
-              ...expanded,
-              receivedViaMesh: true,
-              meshOriginId: rawPacket.originDeviceId,
-              meshPacketId: rawPacket.id,
-              timestamp: rawPacket.timestamp ?? Date.now(),
-            })
-            await db.markSOSSynced(localId, serverResponse?.id)
-          } catch {}
+          durablyStored = true
+          storageMode = 'backend'
+          logMeshEvent('sos_persisted', { packetId: rawPacket.id, storage: storageMode })
         } catch (e) {
-          console.warn('[meshSync] backend relay failed — queuing locally:', e.message)
-          try {
-            await db.queueSOS({
-              ...expanded,
-              receivedViaMesh: true,
-              meshOriginId: rawPacket.originDeviceId,
-              meshPacketId: rawPacket.id,
-              timestamp: rawPacket.timestamp ?? Date.now(),
-            })
-            console.log('[meshSync] SOS saved to IndexedDB', expanded.barangay, expanded.municipality)
-            logMeshEvent('sos_stored_locally', { packetId: rawPacket.id, barangay: expanded.barangay })
-          } catch (dbErr) {
-            console.warn('[meshSync] IndexedDB write also failed:', dbErr.message)
-          }
-        }
-      } else {
-        try {
-          await db.queueSOS({
-            ...expanded,
-            receivedViaMesh: true,
-            meshOriginId: rawPacket.originDeviceId,
-            meshPacketId: rawPacket.id,
-            timestamp: rawPacket.timestamp ?? Date.now(),
-          })
-          console.log('[meshSync] SOS saved to IndexedDB (offline)', expanded.barangay, expanded.municipality)
-          logMeshEvent('sos_stored_locally', { packetId: rawPacket.id, barangay: expanded.barangay })
-        } catch (e) {
-          console.warn('[meshSync] IndexedDB write failed:', e.message)
+          console.error('[meshSync] SOS could not be persisted locally or by backend:', e?.message)
         }
       }
 
-      // ── ACK ───────────────────────────────────────────────────────────────────
-      // Send ACK back through mesh with this device's role (compact payload)
-      // trustLevel capped at 3 for client-side roles; level 4 reserved for server-confirmed responders
-      const role = useAuthStore.getState().role ?? 'device'
-      mesh.broadcast({
-        t:   'ack',
-        si:  rawPacket.id,
-        hcr: rawPacket.hopCount,
-        rr:  role,
-      }).catch(() => {})
-      logMeshEvent('ack_sent', {
-        sos_id:              rawPacket.id,
-        receiver_role:       role,
-        hop_count_remaining: rawPacket.hopCount,
-        barangay:            expanded.barangay ?? null,
-      })
+      // Send the application-level ACK only after a durable store accepted the SOS.
+      // A BLE write response proves only GATT transport receipt, not app persistence.
+      if (durablyStored) {
+        const role = useAuthStore.getState().role ?? 'device'
+        mesh.broadcast({
+          t:   'ack',
+          si:  rawPacket.id,
+          hcr: rawPacket.hopCount,
+          rr:  role,
+        }).then((result) => {
+          logMeshEvent(result?.success ? 'ack_transport_accepted' : 'ack_transport_pending', {
+            sos_id: rawPacket.id,
+            receiver_role: role,
+            hop_count_remaining: rawPacket.hopCount,
+            barangay: expanded.barangay ?? null,
+            storage: storageMode,
+            transport: result?.transport ?? 'none',
+            confirmation: 'transport_acceptance_only',
+          })
+        }).catch((err) => {
+          logMeshEvent('ack_broadcast_error', {
+            sos_id: rawPacket.id,
+            error: String(err?.message ?? err),
+          })
+        })
+      } else {
+        logMeshEvent('ack_deferred_storage_failure', { packetId: rawPacket.id })
+      }
+
+      // Server sync is deliberately after local persistence and the ACK attempt. If the
+      // backend is unreachable, the durable IndexedDB record remains in the offline queue
+      // and drainOfflineQueue() retries it when connectivity returns.
+      if (getNetworkOnline() && localRecordId != null) {
+        try {
+          const serverResponse = await api.post('/sos', {
+            ...expanded,
+            relay_source: rawPacket.originDeviceId,
+            mesh_packet_id: rawPacket.id,
+          })
+          await db.markSOSSynced(localRecordId, serverResponse?.id)
+          logMeshEvent('sos_persisted', { packetId: rawPacket.id, storage: 'backend+indexeddb' })
+        } catch (e) {
+          logMeshEvent('backend_sync_pending', {
+            packetId: rawPacket.id,
+            error: String(e?.message ?? e),
+            storage: 'indexeddb',
+          })
+        }
+      }
 
       // ── Local push notification ───────────────────────────────────────────────
       if (window.Capacitor?.isNativePlatform?.()) {

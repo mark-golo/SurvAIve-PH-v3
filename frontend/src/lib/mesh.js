@@ -197,7 +197,21 @@ export const mesh = {
    * the async call is in flight.
    */
   async getStats() {
-    try { await ensureStarted() } catch {}  // self-heal: try to start if not started
+    try {
+      await ensureStarted()
+    } catch (err) {
+      // Do not hide a denied scan/location permission or a native service startup failure.
+      // An app can advertise on one phone and silently fail to scan on another; expose the
+      // startup failure in logs and in the stats shape instead of reporting a generic 0 peers.
+      console.error('[mesh] native mesh startup failed:', err?.message ?? err)
+      _lastStats = {
+        peersNearby: 0,
+        transport: 'start_failed',
+        relayEnabled: false,
+        error: String(err?.message ?? err ?? 'unknown startup error'),
+      }
+      return _lastStats
+    }
     if (!_isStarted) return { peersNearby: 0, transport: 'not started', relayEnabled: false }
     try {
       _lastStats = await MeshNetwork.getStats()
