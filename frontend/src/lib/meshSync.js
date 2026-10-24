@@ -19,7 +19,7 @@ import { mesh, onNativeMeshEvent, onBroadcastStatus } from './mesh'
 import { db } from './db'
 import api from './api'
 import { emitMeshSOSAlert } from './meshAlerts'
-import { addReceivedSOS, updateACKState, getActiveSOS, logMeshEvent, setBroadcastSubState, setBroadcastErrorCode } from './meshActivityStore'
+import { addReceivedSOS, getReceivedSOS, updateACKState, getActiveSOS, logMeshEvent, setBroadcastSubState, setBroadcastErrorCode } from './meshActivityStore'
 import { getNetworkOnline } from './capacitor'
 import { useAuthStore } from '../store/auth'
 import { useAlertStore } from '../store/alertStore'
@@ -161,6 +161,9 @@ export function startMeshSync() {
       // RC-10: moved before api.post so the SOS shows immediately even when the
       // XAMPP backend is unreachable (WiFi connected but server down causes api.post
       // to hang for the full HTTP timeout, blocking these calls in the old order).
+      // Duplicate guard: check BEFORE addReceivedSOS so we can skip db.queueSOS on
+      // re-ACK'd duplicate SOS packets (forwarded again by Kotlin after 30s cooldown).
+      const alreadyReceived = getReceivedSOS().some(s => s.rawPacket?.id === rawPacket.id)
       addReceivedSOS(expanded, rawPacket)
       logMeshEvent('sos_received', {
         packetId:       rawPacket.id         ?? null,
@@ -174,38 +177,63 @@ export function startMeshSync() {
       emitMeshSOSAlert(expanded, rawPacket)
 
       // ── RC3: persist locally FIRST — before ACK and before backend ─────────────
-      // A successful local write survives app kill, flaky WiFi, and unreachable backend.
-      // Never gate the ACK on a backend round-trip.
+      // Skip DB write for duplicates (re-ACK path) to prevent double IndexedDB entries.
       const role = useAuthStore.getState().role ?? 'device'
       let localId
-      try {
-        localId = await db.queueSOS({
-          ...expanded,
-          receivedViaMesh: true,
-          meshOriginId: rawPacket.originDeviceId,
-          meshPacketId: rawPacket.id,
-          timestamp: rawPacket.timestamp ?? Date.now(),
-        })
-        console.log('[meshSync] SOS saved to IndexedDB', expanded.barangay, expanded.municipality)
-        logMeshEvent('sos_stored_locally', { sos_id: rawPacket.id, local_id: localId, barangay: expanded.barangay })
-      } catch (dbErr) {
-        console.warn('[meshSync] IndexedDB write failed:', dbErr.message)
-        logMeshEvent('sos_persist_failed', { sos_id: rawPacket.id, error: String(dbErr) })
+      if (!alreadyReceived) {
+        try {
+          localId = await db.queueSOS({
+            ...expanded,
+            receivedViaMesh: true,
+            meshOriginId: rawPacket.originDeviceId,
+            meshPacketId: rawPacket.id,
+            timestamp: rawPacket.timestamp ?? Date.now(),
+          })
+          console.log('[meshSync] SOS saved to IndexedDB', expanded.barangay, expanded.municipality)
+          logMeshEvent('sos_stored_locally', { sos_id: rawPacket.id, local_id: localId, barangay: expanded.barangay })
+        } catch (dbErr) {
+          console.warn('[meshSync] IndexedDB write failed:', dbErr.message)
+          logMeshEvent('sos_persist_failed', { sos_id: rawPacket.id, error: String(dbErr) })
+        }
       }
 
-      // ── ACK — sent right after local persist, not gated on backend ────────────
-      mesh.broadcast({
-        t:   'ack',
-        si:  rawPacket.id,
-        hcr: rawPacket.hopCount,
-        rr:  role,
-      }).catch(() => {})
-      logMeshEvent('ack_sent', {
-        sos_id:              rawPacket.id,
-        receiver_role:       role,
-        hop_count_remaining: rawPacket.hopCount,
-        barangay:            expanded.barangay ?? null,
+      // ── ACK — sent after local persist (or skipped persist for duplicate) ───────
+      logMeshEvent('ack_send_started', {
+        sos_id:        rawPacket.id,
+        receiver_role: role,
       })
+
+      try {
+        const ackResult = await mesh.broadcast({
+          t:   'ack',
+          si:  rawPacket.id,
+          hcr: rawPacket.hopCount,
+          rr:  role,
+        })
+
+        if (ackResult?.success === true) {
+          logMeshEvent('ack_sent', {
+            sos_id:              rawPacket.id,
+            ack_packet_id:       ackResult.packetId ?? null,
+            receiver_role:       role,
+            transport:           ackResult.transport ?? 'unknown',
+            hop_count_remaining: rawPacket.hopCount,
+            barangay:            expanded.barangay ?? null,
+            status:              'transport_accepted',
+          })
+        } else {
+          logMeshEvent('ack_send_failed', {
+            sos_id:   rawPacket.id,
+            reason:   'broadcast_not_accepted',
+            response: ackResult ?? null,
+          })
+        }
+      } catch (ackErr) {
+        logMeshEvent('ack_send_failed', {
+          sos_id: rawPacket.id,
+          reason: String(ackErr),
+        })
+      }
 
       // ── Backend sync in background — does NOT gate the ACK ───────────────────
       if (getNetworkOnline()) {

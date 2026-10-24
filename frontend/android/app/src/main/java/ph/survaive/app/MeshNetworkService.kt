@@ -79,6 +79,10 @@ class MeshNetworkService : Service() {
     // Caps SOS relay at 1 per 8s per unique originDeviceId to prevent relay storms from
     // a single injected packet with hopCount=5 producing 3^5=243 transmissions.
     private val _relayRateMs = ConcurrentHashMap<String, Long>()
+
+    // Rate-limits re-ACK forwarding for duplicate SOS packets (ACK may have been lost).
+    // Maps SOS packet ID → timestamp of last re-ACK forward. 30-second cooldown per ID.
+    private val reAckCooldownMs = ConcurrentHashMap<String, Long>()
     private fun isRelayRateLimited(originId: String): Boolean {
         val now = System.currentTimeMillis()
         val last = _relayRateMs.getOrDefault(originId, 0L)
@@ -313,7 +317,25 @@ class MeshNetworkService : Service() {
         // JS-side addReceivedSOS merges the two into one entry.
         val shortId = "beacon-" + packet.id.replace("-", "").take(6)
         if (seenPacketIds.contains(packet.id)) {
-            android.util.Log.d("MeshService", "Duplicate suppressed id=${packet.id}")
+            // For SOS duplicates: re-forward to JS so the receiver can re-ACK.
+            // The original ACK may have been lost; the sender retransmits the same ID.
+            // Rate-limited to once per 30s per SOS ID. Relay is NOT attempted again.
+            if (packet.type == "sos") {
+                val now = System.currentTimeMillis()
+                val lastReAck = reAckCooldownMs.getOrDefault(packet.id, 0L)
+                if (now - lastReAck >= 30_000L) {
+                    reAckCooldownMs[packet.id] = now
+                    android.util.Log.d("MeshService", "Duplicate SOS — re-forwarding for re-ACK id=${packet.id.take(8)}")
+                    onPacketReceived?.invoke(packet)
+                        ?: synchronized(startupBuffer) {
+                            if (startupBuffer.size < 20) startupBuffer.addLast(packet)
+                        }
+                } else {
+                    android.util.Log.d("MeshService", "Duplicate SOS re-ACK rate-limited id=${packet.id.take(8)}")
+                }
+            } else {
+                android.util.Log.d("MeshService", "Duplicate suppressed id=${packet.id}")
+            }
             return
         }
         seenPacketIds.add(packet.id)

@@ -49,7 +49,9 @@ const EVENT_META = {
   backend_sync_pending:   { label: 'Backend Sync Pending',        color: '#f59e0b', Icon: Archive        },
   sos_acknowledged:       { label: 'SOS Acknowledged',            color: '#22c55e', Icon: CheckCircle2   },
   sos_relayed:            { label: 'SOS Relayed',                 color: '#00d4ff', Icon: ArrowRightLeft  },
+  ack_send_started:       { label: 'ACK Send Started',            color: '#f59e0b', Icon: Radio          },
   ack_sent:               { label: 'ACK Sent',                    color: '#22c55e', Icon: CheckCircle2   },
+  ack_send_failed:        { label: 'ACK Send Failed',             color: '#ef4444', Icon: ZapOff         },
   ack_received:           { label: 'ACK Received',                color: '#22c55e', Icon: CheckCircle2   },
   ack_transmitted:        { label: 'ACK Transmitted (GATT)',      color: '#22c55e', Icon: CheckCircle2   },
   duplicate_detected:     { label: 'Duplicate Suppressed',        color: '#6b7280', Icon: XCircle        },
@@ -266,7 +268,7 @@ function ActivityTab({ eventLog }) {
   const filterMap = {
     sos:   ['sos_received', 'sos_transmitted', 'sos_beacon_queued', 'sos_relayed', 'sos_broadcast',
             'sos_stored_locally', 'sos_persisted', 'backend_sync_pending'],
-    ack:   ['ack_sent', 'ack_received', 'ack_transmitted', 'sos_acknowledged'],
+    ack:   ['ack_send_started', 'ack_sent', 'ack_send_failed', 'ack_received', 'ack_transmitted', 'sos_acknowledged'],
     peer:  ['peer_discovered', 'connection_established', 'peer_disconnected'],
     error: ['transmission_failed', 'broadcast_failed', 'scan_failed', 'scan_permission_denied',
             'scanner_null', 'sos_beacon_encode_failed', 'gatt_service_add_failed'],

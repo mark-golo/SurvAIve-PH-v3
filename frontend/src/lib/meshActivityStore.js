@@ -86,7 +86,9 @@ export function updateACKState({ ackLevel, device, ackMaxHops }) {
     ..._activeSOS,
     ackLevel,
     ackMaxHops,
-    ackDevices: device ? [..._activeSOS.ackDevices, device] : _activeSOS.ackDevices,
+    ackDevices: device && !_activeSOS.ackDevices.some(d => d.deviceId === device.deviceId)
+      ? [..._activeSOS.ackDevices, device]
+      : _activeSOS.ackDevices,
   }
   _debouncedSaveMeshState()
   _notify()

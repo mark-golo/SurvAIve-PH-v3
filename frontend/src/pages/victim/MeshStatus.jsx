@@ -91,16 +91,18 @@ function peerAlias(id) {
 
 // ── Stats Strip ───────────────────────────────────────────────────────────────
 
-function StatsStrip({ stats, receivedSOS, eventLog, sosQueue }) {
-  const relayCount = eventLog.filter(e => e.type === 'sos_relayed').length
+function StatsStrip({ stats, receivedSOS, eventLog, sosQueue, ackState }) {
+  const relayCount  = eventLog.filter(e => e.type === 'sos_relayed').length
+  const ackDevCount = ackState?.ackDevices?.length ?? 0
   const tiles = [
     { label: 'Peers Found',  value: stats.peersNearby,  icon: Users,          color: '#00d4ff' },
     { label: 'SOS Received', value: receivedSOS.length, icon: AlertTriangle,  color: '#ef4444' },
+    { label: 'ACK Devices',  value: ackDevCount,         icon: CheckCircle2,   color: '#22c55e' },
     { label: 'Relays Sent',  value: relayCount,          icon: ArrowRightLeft, color: '#00d4ff' },
     { label: 'Pending Msgs', value: sosQueue.length,     icon: Archive,        color: '#f59e0b' },
   ]
   return (
-    <div className="grid grid-cols-4 gap-2 px-4 pt-3 pb-2 shrink-0">
+    <div className="grid grid-cols-5 gap-1.5 px-4 pt-3 pb-2 shrink-0">
       {tiles.map(({ label, value, icon: Icon, color }) => (
         <div key={label} className="glass rounded-xl py-2 px-1.5 text-center">
           <Icon size={13} style={{ color }} className="mx-auto mb-1" />
@@ -509,6 +511,7 @@ export function MeshStatus() {
         receivedSOS={receivedSOS}
         eventLog={eventLog}
         sosQueue={sosQueue}
+        ackState={ackState}
       />
 
       {/* Tab bar — 3 equal tabs at top, cyan accent */}
