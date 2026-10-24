@@ -57,6 +57,9 @@ const EVENT_META = {
   scanner_null:           { label: 'Scanner Null (retrying)',      color: '#f59e0b', Icon: ZapOff         },
   beacon_decoded:         { label: 'Beacon Decoded',              color: '#00d4ff', Icon: Radio          },
   sos_beacon_queued:      { label: 'SOS Beacon Queued — receipt not confirmed', color: '#f59e0b', Icon: Radio },
+  sos_beacon_retry_held:   { label: 'SOS Beacon Retry Held — another beacon active', color: '#f59e0b', Icon: Activity },
+  sos_beacon_encode_failed:{ label: 'SOS Beacon Encoding Failed — GATT may still work', color: '#ef4444', Icon: XCircle },
+  backend_sync_pending:    { label: 'SOS Stored Locally — Backend Sync Pending', color: '#f59e0b', Icon: Archive },
   ack_beacon_deferred:    { label: 'ACK Beacon Deferred to Preserve SOS', color: '#f59e0b', Icon: Activity },
   ack_transmitted:        { label: 'ACK GATT Write Confirmed',        color: '#22c55e', Icon: CheckCircle2 },
   packet_transmitted:     { label: 'Packet GATT Write Confirmed',     color: '#22c55e', Icon: CheckCircle2 },
@@ -102,7 +105,8 @@ function getEventSubtext(e) {
 // ── Tab: Overview ─────────────────────────────────────────────────────────────
 
 function OverviewTab({ stats, peers, receivedSOS, eventLog, relayOn, setRelayOn }) {
-  const acksSent = eventLog.filter(e => e.type === 'ack_sent').length
+  // Count only confirmed ATT write responses. "Transport accepted" means queued/attempted, not received.
+  const acksSent = eventLog.filter(e => e.type === 'ack_transmitted').length
   const relayed  = eventLog.filter(e => e.type === 'sos_relayed').length
   const synced   = eventLog.filter(e => e.type === 'sync_completed').reduce((a, e) => a + (e.data?.count ?? 0), 0)
   const errors   = eventLog.filter(e => e.type === 'transmission_failed').length
@@ -149,7 +153,7 @@ function OverviewTab({ stats, peers, receivedSOS, eventLog, relayOn, setRelayOn 
           { label: 'Peers Nearby',   value: stats.peersNearby, color: '#22c55e' },
           { label: 'Transport',      value: stats.transport ?? '—', color: '#00d4ff' },
           { label: 'SOS Received',   value: receivedSOS.length, color: '#ef4444' },
-          { label: 'ACKs Sent',      value: acksSent, color: '#22c55e' },
+          { label: 'ACK Writes Confirmed', value: acksSent, color: '#22c55e' },
           { label: 'Relayed',        value: relayed, color: '#00d4ff' },
           { label: 'Server Synced',  value: synced, color: '#8b5cf6' },
           { label: 'Relay On',       value: stats.relayEnabled ? 'Yes' : 'No', color: stats.relayEnabled ? '#22c55e' : '#6b7280' },
