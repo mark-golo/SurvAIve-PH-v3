@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   AlertTriangle, MapPin, Users, FileText, Check,
   Mic, Camera, Scan,
+  CloudLightning, HeartPulse, Flame, Shield, Anchor,
 } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
@@ -11,11 +12,12 @@ import { GlassSelect, GlassInput, GlassTextarea } from '../../components/ui/Glas
 import { NeonButton } from '../../components/ui/NeonButton'
 import { useAuthStore } from '../../store/auth'
 import { db } from '../../lib/db'
-import { mesh } from '../../lib/mesh'
+import { mesh, onBroadcastStatus } from '../../lib/mesh'
 import api from '../../lib/api'
 import { analyzeScene } from '../../lib/yolo11'
 import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
+import { setActiveSOS, updateACKState, clearActiveSOS, getActiveSOS, onActivityChange, logMeshEvent, setBroadcastSubState } from '../../lib/meshActivityStore'
 import { Home, Map, Radio, Settings, MessageSquare } from 'lucide-react'
 
 const NAV = [
@@ -31,6 +33,15 @@ export function SOSReport() {
   const location = useLocation()
   const { user, isGuest, token } = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
+  const [isDark, setIsDark] = useState(
+    () => window.matchMedia('(prefers-color-scheme: dark)').matches
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = e => setIsDark(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
 
   // ── Form state ───────────────────────────────────────────────────────────────
   const [form, setForm] = useState({
@@ -40,6 +51,7 @@ export function SOSReport() {
     barangay:     user?.barangay    ?? '',
     municipality: user?.municipality ?? '',
     province:     user?.province    ?? '',
+    service_type: [],
   })
   const [ageGroup,    setAgeGroup]    = useState('adult')
   const [conditions,  setConditions]  = useState([])
@@ -50,6 +62,9 @@ export function SOSReport() {
   const [sosError,    setSosError]    = useState(null)
   const [priorityScore, setPriorityScore] = useState(null)
   const [offline,     setOffline]     = useState(!getNetworkOnline())
+
+  // ── Mesh ACK state (shared via meshActivityStore) ────────────────────────────
+  const [ackState, setAckState] = useState(getActiveSOS)
 
   // ── Voice state ──────────────────────────────────────────────────────────────
   const [listening,      setListening]      = useState(false)
@@ -85,11 +100,33 @@ export function SOSReport() {
     }
   }, [])
 
+  // Sync ackState from store whenever store changes
+  useEffect(() => onActivityChange(() => setAckState(getActiveSOS())), [])
+
+  // Subscribe to native BLE advertising status — update sub-state display AND activity log
+  useEffect(() => {
+    return onBroadcastStatus(({ status, errorCode }) => {
+      if (status === 'advertising_started') {
+        setBroadcastSubState('advertising')
+        logMeshEvent('broadcast_started', { status: 'advertising' })
+      } else if (status === 'advertising_failed') {
+        setBroadcastSubState('retrying')
+        logMeshEvent('broadcast_failed', { errorCode: errorCode ?? 0 })
+      } else if (status === 'awaiting_peers') {
+        setBroadcastSubState('awaiting_peers')
+        logMeshEvent('broadcast_started', { status: 'awaiting_peers' })
+      } else if (status === 'connecting') {
+        setBroadcastSubState('connecting')
+      } else if (status === 'sos_transmitted') {
+        setBroadcastSubState('transmitted')
+      }
+    })
+  }, [])
+
+  // ACK updates are handled by meshSync.js → updateACKState → onActivityChange (line 93 above)
+
   // ── Helpers ──────────────────────────────────────────────────────────────────
   const f = (k) => (v) => setForm(p => ({ ...p, [k]: typeof v === 'function' ? v(p[k]) : v }))
-
-  const toggleCondition = (key) =>
-    setConditions(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
 
   const applyKeywords = (text) => {
     const t = text.toLowerCase()
@@ -261,6 +298,8 @@ export function SOSReport() {
 
   // ── Submit ────────────────────────────────────────────────────────────────────
   const submit = async () => {
+    const svcArr = Array.isArray(form.service_type) ? form.service_type : [form.service_type]
+    if (svcArr.length === 0) return
     setLoading(true)
     const payload = {
       ...form,
@@ -279,10 +318,36 @@ export function SOSReport() {
       } : {}),
     }
 
-    // Always broadcast over mesh — fires regardless of internet state
-    mesh.broadcast({ type: 'sos', ...payload }).catch(() => {})
+    // Always broadcast over mesh — fires regardless of internet state.
+    // Generate the display ID and record state immediately so the Activity tab
+    // shows it even if the user navigates away before the async broadcast resolves.
+    const sosDisplayId   = 'SOS-' + String(Math.floor(10000 + Math.random() * 90000))
+    const realPacketId   = (() => {
+      try { return crypto.randomUUID() } catch {}
+      const b = new Uint8Array(16)
+      crypto.getRandomValues(b)
+      b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80
+      return [...b].map((x, i) => ([3,5,7,9].includes(i)?'-':'') + x.toString(16).padStart(2,'0')).join('')
+    })()
+    setActiveSOS(realPacketId, sosDisplayId)
+    logMeshEvent('sos_broadcast', {
+      sosDisplayId, packetId: realPacketId,
+      status: payload.status, barangay: payload.barangay, peopleCount: payload.people_count,
+    })
+    mesh.broadcast({
+      t:   'sos',
+      _id: realPacketId,
+      la:  payload.lat,
+      lo:  payload.lng,
+      s:   payload.status,
+      n:   payload.people_count,
+      b:   payload.barangay,
+      m:   payload.municipality,
+      sv:  payload.service_type,
+    })
+      .catch(() => {})
 
-    if (offline) {
+    if (offline || !getNetworkOnline()) {
       await db.queueSOS({ ...payload, isGuest, timestamp: Date.now() })
       setSubmitted(true)
       setLoading(false)
@@ -292,12 +357,12 @@ export function SOSReport() {
     try {
       const res = await api.post('/sos', payload)
       setPriorityScore(res.ai_priority_score)
+      updateACKState({ ackLevel: 4, ackMaxHops: getActiveSOS().ackMaxHops })  // H2 fix: server confirmed
       setSubmitted(true)
     } catch (err) {
-      const msg = err?.message ?? String(err)
-      console.error('[SOSReport] insert failed:', msg)
+      console.error('[SOSReport] insert failed:', err?.message ?? String(err))
       await db.queueSOS({ ...payload, isGuest, timestamp: Date.now() })
-      setSosError(`SOS saved offline. (Error: ${msg})`)
+      setSosError('SOS saved offline. Your request will sync automatically when reconnected.')
       setSubmitted(true)
     }
     setLoading(false)
@@ -305,6 +370,21 @@ export function SOSReport() {
 
   // ── Success screen ────────────────────────────────────────────────────────────
   if (submitted) {
+    const MESH_STEPS = [
+      { n: 1, label: ackState.broadcastSubState === 'awaiting_peers'
+          ? 'AWAITING NEARBY DEVICE — BEACON ACTIVE'
+          : ackState.broadcastSubState === 'retrying'
+          ? 'RETRYING — ADVERTISING FAILED, QUEUED'
+          : ackState.broadcastSubState === 'connecting'
+          ? 'CONNECTING TO NEARBY DEVICE…'
+          : ackState.broadcastSubState === 'transmitted'
+          ? 'SOS DELIVERED TO NEARBY DEVICE ✓'
+          : 'SOS BROADCASTING',                                                                         color: '#f59e0b' },
+      { n: 2, label: 'SOS RECEIVED BY NEARBY DEVICE',                                                color: '#22c55e' },
+      { n: 3, label: `SOS RELAYED — ${ackState.ackMaxHops || '?'} HOP${(ackState.ackMaxHops ?? 1) !== 1 ? 'S' : ''}`, color: '#00d4ff' },
+      { n: 4, label: 'RESPONDER RECEIVED YOUR SOS',                                                  color: '#22c55e' },
+    ]
+
     return (
       <div className={`min-h-screen bg-mesh flex flex-col items-center justify-center p-5${isLight ? ' light-theme' : ''}`}>
         <motion.div
@@ -312,10 +392,54 @@ export function SOSReport() {
           transition={{ type: 'spring', damping: 12 }}
           className="text-center space-y-4 max-w-sm w-full"
         >
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[rgba(239,68,68,0.3)] to-[rgba(220,38,38,0.3)]
+          {/* 4-level SOS propagation checklist */}
+          <div className="rounded-2xl px-5 py-4 glass border-2 mx-auto w-full border-[rgba(255,255,255,0.1)]">
+            {/* SOS ID */}
+            <p className="text-[10px] text-slate-500 text-center mb-3 font-mono tracking-wider">
+              {ackState.sosDisplayId ?? 'SOS-XXXXX'}
+            </p>
+            {/* Level rows */}
+            <div className="space-y-2.5">
+              {MESH_STEPS.map(({ n, label, color }) => {
+                const done    = ackState.ackLevel > n
+                const active  = ackState.ackLevel === n
+                const pending = ackState.ackLevel < n
+                return (
+                  <div key={n} className="flex items-center gap-2.5">
+                    {done ? (
+                      <div className="w-4 h-4 rounded-full flex items-center justify-center shrink-0"
+                           style={{ background: color }}>
+                        <Check size={9} className="text-black" strokeWidth={3} />
+                      </div>
+                    ) : active ? (
+                      <div className="w-4 h-4 rounded-full shrink-0 animate-pulse"
+                           style={{ background: color }} />
+                    ) : (
+                      <div className="w-4 h-4 rounded-full shrink-0 border border-slate-700" />
+                    )}
+                    <p className={`text-[11px] font-bold tracking-wider${pending ? ' text-slate-600' : ''}`}
+                       style={pending ? {} : { color }}>
+                      {label}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+            {/* Mesh node summary */}
+            {ackState.ackDevices.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-[rgba(255,255,255,0.06)]">
+                <p className="text-[10px] text-slate-500">
+                  Mesh nodes reached: {ackState.ackDevices.length}
+                  {ackState.ackMaxHops > 0 ? ` · Max hops: ${ackState.ackMaxHops}` : ''}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[rgba(239,68,68,0.3)] to-[rgba(220,38,38,0.3)]
                           border-2 border-[rgba(239,68,68,0.5)] flex items-center justify-center mx-auto
-                          shadow-[0_0_40px_rgba(239,68,68,0.4)]">
-            <Check size={36} className="text-white" />
+                          shadow-[0_0_32px_rgba(239,68,68,0.4)]">
+            <Check size={28} className="text-white" />
           </div>
           <h2 className="text-xl font-black text-white">SOS Sent!</h2>
           {offline && <p className="text-sm text-[#f59e0b]">Saved offline — will sync when signal returns</p>}
@@ -334,7 +458,7 @@ export function SOSReport() {
           {/* YOLO11 AI analysis summary badge (Photo Mode) */}
           {sosMode === 'photo' && aiAnalysis && (
             <div className="glass rounded-xl p-3 border border-[rgba(139,92,246,0.3)]">
-              <p className="text-xs text-violet-400 font-semibold mb-1">🤖 YOLO11 Scene Analysis</p>
+              <p className="text-xs text-violet-400 font-semibold mb-1">YOLO11 Scene Analysis</p>
               <p className="text-sm text-white font-bold">{aiAnalysis.classification.label}</p>
               <p className="text-xs text-slate-400">
                 {aiAnalysis.classification.confidence}% confidence · {aiAnalysis.detection.count} detected
@@ -343,7 +467,7 @@ export function SOSReport() {
           )}
           <div className="glass rounded-xl p-3 border border-[rgba(245,158,11,0.2)]">
             <p className="text-xs text-slate-400 leading-relaxed">
-              Your SOS has been broadcast via mesh network and queued for rescue teams.
+              Your SOS is broadcast via mesh. Status updates above as nearby devices acknowledge it.
               Stay in place if possible. Keep your phone on.
             </p>
           </div>
@@ -575,6 +699,70 @@ export function SOSReport() {
           )}
         </AnimatePresence>
 
+        {/* ── Emergency Service ────────────────────────────────────────────────── */}
+        <GlassCard>
+          <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-2">
+            Emergency Service
+          </p>
+          <p className="text-[11px] text-slate-400 mb-3">Select all that apply</p>
+          <div className="grid grid-cols-5 gap-1.5">
+            {[
+              { value: 'mdrrmo',   label: 'Disaster',         gradient: 'linear-gradient(145deg,#1565C0,#42A5F5)', color: '#2196F3', Icon: CloudLightning },
+              { value: 'hospital', label: 'Medical',           gradient: 'linear-gradient(145deg,#006064,#26C6DA)', color: '#00ACC1', Icon: HeartPulse     },
+              { value: 'bfp',      label: 'Fire',              gradient: 'linear-gradient(145deg,#B71C1C,#EF5350)', color: '#F44336', Icon: Flame           },
+              { value: 'pnp',      label: 'Crime /\nSecurity', gradient: 'linear-gradient(145deg,#311B92,#7E57C2)', color: '#673AB7', Icon: Shield          },
+              { value: 'pcg',      label: 'Maritime',          gradient: 'linear-gradient(145deg,#0D47A1,#1E88E5)', color: '#1565C0', Icon: Anchor          },
+            ].map(s => {
+              const active = Array.isArray(form.service_type)
+                ? form.service_type.includes(s.value)
+                : form.service_type === s.value
+              return (
+                <motion.button
+                  key={s.value}
+                  type="button"
+                  whileTap={{ scale: 0.93 }}
+                  onClick={() => setForm(p => {
+                    const cur = Array.isArray(p.service_type) ? p.service_type : [p.service_type]
+                    return {
+                      ...p,
+                      service_type: cur.includes(s.value)
+                        ? cur.filter(v => v !== s.value)
+                        : [...cur, s.value],
+                    }
+                  })}
+                  className="relative flex flex-col items-center justify-center rounded-xl transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                  style={{
+                    height: '78px',
+                    background: active
+                      ? s.gradient
+                      : isDark
+                        ? `linear-gradient(rgba(5,10,24,0.85),rgba(5,10,24,0.85)) padding-box, ${s.gradient} border-box`
+                        : `linear-gradient(rgba(255,255,255,0.88),rgba(255,255,255,0.88)) padding-box, ${s.gradient} border-box`,
+                    border: active ? '1.5px solid rgba(255,255,255,0.25)' : '1.5px solid transparent',
+                    boxShadow: active ? `0 4px 14px ${s.color}55` : 'none',
+                  }}
+                >
+                  <s.Icon
+                    size={22}
+                    className="mb-1.5 transition-colors"
+                    style={{ color: active ? 'white' : s.color }}
+                    strokeWidth={active ? 2.2 : 1.8}
+                  />
+                  <span
+                    className="text-[8.5px] font-bold leading-tight text-center px-0.5 uppercase tracking-wide whitespace-pre-line"
+                    style={{ color: active ? 'rgba(255,255,255,0.95)' : isDark ? 'rgba(255,255,255,0.75)' : 'rgba(15,23,42,0.75)' }}
+                  >
+                    {s.label}
+                  </span>
+                </motion.button>
+              )
+            })}
+          </div>
+          {Array.isArray(form.service_type) && form.service_type.length === 0 && (
+            <p className="text-xs text-[#ef4444] mt-2">Select at least one service</p>
+          )}
+        </GlassCard>
+
         {/* ── Emergency Status ─────────────────────────────────────────────────── */}
         {/* Shown in both modes; in Photo Mode shows AI-suggested value */}
         <GlassCard>
@@ -657,49 +845,6 @@ export function SOSReport() {
                 <span className="text-[10px] text-slate-500">{opt.sub}</span>
               </button>
             ))}
-          </div>
-        </GlassCard>
-
-        {/* ── Special Conditions ───────────────────────────────────────────────── */}
-        <GlassCard>
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider">
-              Special Conditions{' '}
-              <span className="text-slate-600 normal-case font-normal">(select all that apply)</span>
-            </p>
-            {sosMode === 'photo' && aiAnalysis && conditions.length > 0 && (
-              <span className="text-[10px] text-violet-400">🤖 AI-detected</span>
-            )}
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { key: 'medical_emergency',   label: 'Medical Emergency', icon: '🏥' },
-              { key: 'fire',                label: 'Fire',              icon: '🔥' },
-              { key: 'flooding',            label: 'Flooding',          icon: '🌊' },
-              { key: 'structural_collapse', label: 'Structural Collapse', icon: '🏚️' },
-            ].map(cond => {
-              const active = conditions.includes(cond.key)
-              return (
-                <button
-                  key={cond.key}
-                  type="button"
-                  onClick={() => toggleCondition(cond.key)}
-                  className={`glass rounded-xl p-3 flex items-center gap-2 transition-all border ${
-                    active
-                      ? 'border-[rgba(239,68,68,0.5)] bg-[rgba(239,68,68,0.08)]'
-                      : 'border-[rgba(255,255,255,0.08)] hover:border-[rgba(255,255,255,0.2)]'
-                  }`}
-                >
-                  <span className="text-base">{cond.icon}</span>
-                  <span
-                    className="text-xs font-medium text-left leading-tight"
-                    style={{ color: active ? '#ef4444' : '#94a3b8' }}
-                  >
-                    {cond.label}
-                  </span>
-                </button>
-              )
-            })}
           </div>
         </GlassCard>
 

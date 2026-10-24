@@ -34,6 +34,9 @@
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES"
         android:usesPermissionFlags="neverForLocation" />
 
+    <!-- ── Boot receiver — restarts mesh service after device reboot ────────── -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- ── Foreground Service (required for background BLE + WiFi Direct) ───── -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!-- API 34+: connectedDevice foreground service type requires this permission -->
@@ -53,18 +56,13 @@
     <uses-feature android:name="android.hardware.wifi.direct" android:required="false" />
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
-        android:usesCleartextTraffic="true">
-        <!--
-            android:usesCleartextTraffic="true" allows HTTP connections to the local
-            XAMPP server (no TLS on the admin hotspot LAN).  This only affects
-            connections to private IPs, not to the public internet.
-        -->
+        android:networkSecurityConfig="@xml/network_security_config">
 
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
@@ -86,6 +84,14 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

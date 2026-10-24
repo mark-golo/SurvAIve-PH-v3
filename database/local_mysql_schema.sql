@@ -42,6 +42,22 @@ CREATE TABLE IF NOT EXISTS superadmins (
   INDEX idx_province (province)
 ) ENGINE=InnoDB;
 
+-- ── Response Agencies (MDRRMO, Hospital, BFP, PNP, PCG) ─────────────────────
+CREATE TABLE IF NOT EXISTS response_agencies (
+  id             INT          AUTO_INCREMENT PRIMARY KEY,
+  name           VARCHAR(200) NOT NULL,
+  contact_number VARCHAR(20)  NOT NULL,
+  agency_type    ENUM('mdrrmo','hospital','bfp','pnp','pcg') NOT NULL,
+  province       VARCHAR(100) DEFAULT NULL,
+  municipality   VARCHAR(100) NOT NULL,
+  password_hash  VARCHAR(255) NOT NULL,
+  status         ENUM('active','inactive') NOT NULL DEFAULT 'active',
+  created_at     TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_contact (contact_number),
+  INDEX idx_municipality (municipality),
+  INDEX idx_agency_type (agency_type)
+) ENGINE=InnoDB;
+
 -- ── Admins (DRRM Municipal level) ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS admins (
   id             INT          AUTO_INCREMENT PRIMARY KEY,
@@ -154,6 +170,10 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   ai_scene_label         VARCHAR(100)     DEFAULT NULL,
   ai_scene_confidence    TINYINT UNSIGNED DEFAULT NULL,
   ai_detected_count      TINYINT UNSIGNED DEFAULT NULL,
+  service_type           JSON             DEFAULT NULL,
+  -- mesh relay tracking
+  mesh_packet_id         VARCHAR(36)      DEFAULT NULL,
+  relay_source           VARCHAR(50)      DEFAULT NULL,
   -- offline-tracking columns (not in Supabase)
   dismissed              TINYINT(1)       NOT NULL DEFAULT 0,
   synced_to_cloud        TINYINT(1)       NOT NULL DEFAULT 0,
@@ -164,6 +184,7 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   INDEX idx_rescue_status (rescue_status),
   INDEX idx_priority (ai_priority_score),
   INDEX idx_verified (is_verified),
+  UNIQUE KEY uk_mesh_packet_id (mesh_packet_id),
   FOREIGN KEY (user_id)               REFERENCES victims(id)    ON DELETE SET NULL,
   FOREIGN KEY (assigned_responder_id) REFERENCES responders(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
@@ -218,6 +239,21 @@ CREATE TABLE IF NOT EXISTS mesh_events (
   INDEX idx_device (device_id)
 ) ENGINE=InnoDB;
 
+-- ── Audit / Activity Logs ────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS activity_logs (
+  id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+  actor_id     VARCHAR(100) DEFAULT NULL,
+  actor_role   VARCHAR(50)  DEFAULT NULL,
+  action       TEXT         NOT NULL,
+  target_table VARCHAR(100) DEFAULT NULL,
+  target_id    VARCHAR(50)  DEFAULT NULL,
+  details      JSON         DEFAULT NULL,
+  created_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_actor   (actor_id),
+  INDEX idx_table   (target_table),
+  INDEX idx_created (created_at)
+) ENGINE=InnoDB;
+
 -- ============================================================
 --  Staff credentials and SOS records sync automatically from
 --  the live Supabase project on every online login and every
@@ -253,11 +289,20 @@ ALTER TABLE victims
   ADD COLUMN IF NOT EXISTS trust_score VARCHAR(20)  DEFAULT 'LOW'      AFTER is_verified;
 
 ALTER TABLE sos_reports
-  ADD COLUMN IF NOT EXISTS assigned_responder_id INT  DEFAULT NULL         AFTER ai_priority_score,
-  ADD COLUMN IF NOT EXISTS field_notes           TEXT DEFAULT NULL         AFTER rescue_status,
-  ADD COLUMN IF NOT EXISTS dismissed             TINYINT(1) NOT NULL DEFAULT 0 AFTER field_notes,
-  ADD COLUMN IF NOT EXISTS synced_to_cloud       TINYINT(1) NOT NULL DEFAULT 0 AFTER dismissed,
-  ADD COLUMN IF NOT EXISTS synced_at             TIMESTAMP NULL DEFAULT NULL   AFTER synced_to_cloud;
+  ADD COLUMN IF NOT EXISTS assigned_responder_id INT          DEFAULT NULL     AFTER ai_priority_score,
+  ADD COLUMN IF NOT EXISTS field_notes           TEXT         DEFAULT NULL     AFTER rescue_status,
+  ADD COLUMN IF NOT EXISTS confirmed_by_name     VARCHAR(200) DEFAULT NULL     AFTER field_notes,
+  ADD COLUMN IF NOT EXISTS confirmed_at          TIMESTAMP    NULL DEFAULT NULL AFTER confirmed_by_name,
+  ADD COLUMN IF NOT EXISTS dismissed             TINYINT(1)   NOT NULL DEFAULT 0 AFTER confirmed_at,
+  ADD COLUMN IF NOT EXISTS synced_to_cloud       TINYINT(1)   NOT NULL DEFAULT 0 AFTER dismissed,
+  ADD COLUMN IF NOT EXISTS synced_at             TIMESTAMP    NULL DEFAULT NULL AFTER synced_to_cloud,
+  ADD COLUMN IF NOT EXISTS mesh_packet_id        VARCHAR(36)  DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS relay_source          VARCHAR(50)  DEFAULT NULL,
+  -- service_type: replace VARCHAR with JSON for multi-select array storage
+  MODIFY COLUMN service_type JSON DEFAULT NULL;
+
+ALTER TABLE sos_reports
+  ADD UNIQUE KEY IF NOT EXISTS uk_mesh_packet_id (mesh_packet_id);
 
 ALTER TABLE evacuation_centers
   ADD COLUMN IF NOT EXISTS address        TEXT        DEFAULT NULL AFTER barangay,

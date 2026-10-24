@@ -1,5 +1,5 @@
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
-import { LayoutDashboard, Users, BookUser, BarChart2, Radio, UserCog, MapPin, LogOut, Menu, ClipboardList, FileBarChart, Settings2, Bell, Layers } from 'lucide-react'
+import { LayoutDashboard, Users, BookUser, BarChart2, Radio, UserCog, MapPin, LogOut, Menu, ClipboardList, FileBarChart, Settings2, Bell, Layers, ScrollText } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '../../store/auth'
@@ -18,7 +18,8 @@ const NAV_ITEMS = [
   { icon: Layers,          label: 'Barangays Comparison',     path: '/admin/barangays-comparison'     },
   { icon: ClipboardList,   label: 'SITREP',                   path: '/admin/sitrep'                   },
   { icon: BarChart2,       label: 'AI Situational Analytics', path: '/admin/analytics'          },
-  { icon: UserCog,         label: 'Staff Management',         path: '/admin/staff'              },
+  { icon: UserCog,         label: 'User Management',          path: '/admin/staff'              },
+  { icon: ScrollText,      label: 'Audit Logs',               path: '/admin/audit-logs'         },
 ]
 
 // ─── Page title lookup (used by single layout instance) ──────────────────────
@@ -28,12 +29,13 @@ const PAGE_TITLES = {
   '/admin/constituents':       'Constituent Registry',
   '/admin/analytics':          'AI Situational Analytics',
   '/admin/responders':         'Rescue Updates',
-  '/admin/staff':              'Staff Management',
+  '/admin/staff':              'User Management',
   '/admin/evacuation-centers': 'Evacuation Centers',
   '/admin/emergency-report':        'Emergency Report',
   '/admin/barangays-comparison':    'Barangays Comparison',
   '/admin/sitrep':                  'SITREP',
   '/admin/settings':           'Settings',
+  '/admin/audit-logs':         'Audit Logs',
 }
 
 // ─── Web Audio alarm tone (synthesised — no audio file needed) ────────────────
@@ -246,7 +248,7 @@ export function AdminLayout() {
             </div>
             <div>
               <p className="text-xs font-black text-white">SurvAIve PH</p>
-              <p className="text-[9px] text-slate-500">DRRM Admin</p>
+              <p className="text-[9px] text-slate-500">LGU Admin</p>
             </div>
           </div>
           <p className="text-[10px] text-slate-500 truncate">{user?.name ?? 'Admin'}</p>

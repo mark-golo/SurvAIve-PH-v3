@@ -10,6 +10,7 @@ import { NeonButton } from '../../components/ui/NeonButton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme, saveVictimTheme } from '../../lib/victimTheme'
+import { AccountSettings } from '../../components/AccountSettings'
 
 const NAV = [
   { icon: Home, label: 'Home', path: '/home' },
@@ -244,13 +245,15 @@ export function VictimSettings() {
           </p>
         </GlassCard>
 
+        {/* Account Settings */}
+        <AccountSettings />
+
         {/* Logout */}
         <NeonButton variant="ghost" onClick={handleLogout} className="w-full">
-          <LogOut size={14} className="mr-2" />
           {isGuest ? 'Exit Guest Mode' : 'Sign Out'}
         </NeonButton>
 
-        <p className="text-center text-[10px] text-slate-600">SurvAIve PH v3.0 · Offline-First Emergency System</p>
+        <p className="text-center text-[10px] text-slate-600">SurvAIve PH</p>
       </main>
 
       <MobileNavBar items={NAV} />

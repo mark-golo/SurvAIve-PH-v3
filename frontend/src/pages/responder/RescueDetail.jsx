@@ -75,9 +75,21 @@ export function RescueDetail() {
     })
   }, [])
 
-  const updateStatus = (newStatus) => {
+  const updateStatus = async (newStatus) => {
     if (newStatus === 'on_scene') setTimer(Date.now())
     setRescueStatus(newStatus)
+    if (victim?.id) {
+      const payload = { rescue_status: newStatus }
+      if (newStatus === 'rescued') {
+        payload.confirmed_by_name = responderProfile?.name ?? null
+        payload.confirmed_at = new Date().toISOString()
+      }
+      try {
+        await api.put(`/sos/${victim.id}`, payload)
+      } catch {
+        // local state already reflects the change; failure is surfaced by submitReport if needed
+      }
+    }
   }
 
   const submitReport = async () => {

@@ -193,6 +193,50 @@ export function createOfflineToken(user) {
   }
 }
 
+// ── Staff / Responder offline credential cache ────────────────────────────────
+
+const STAFF_CREDS_PREFIX = 'survAIve-staff-creds-'
+
+/**
+ * Hash and persist staff/responder credentials on-device after a successful online login.
+ * Called automatically from api.js — never store plaintext passwords.
+ */
+export async function storeStaffOfflineCredentials(contactNumber, password, role, user) {
+  const salt = generateSalt()
+  const hash = await hashPIN(password, salt)
+  const payload = JSON.stringify({ hash, salt, role, user: { ...user } })
+  try {
+    const { Preferences } = await import('@capacitor/preferences')
+    await Preferences.set({ key: STAFF_CREDS_PREFIX + contactNumber, value: payload })
+  } catch {
+    try { localStorage.setItem(STAFF_CREDS_PREFIX + contactNumber, payload) } catch {}
+  }
+}
+
+/**
+ * Verify staff credentials against the on-device PBKDF2 hash.
+ * Returns the cached user object on match, null on failure or no cached creds.
+ * A responder who never logged in while online will always get null — no bypass.
+ */
+export async function verifyStaffOffline(contactNumber, password) {
+  let creds = null
+  try {
+    const { Preferences } = await import('@capacitor/preferences')
+    const { value } = await Preferences.get({ key: STAFF_CREDS_PREFIX + contactNumber })
+    if (value) creds = JSON.parse(value)
+  } catch {}
+  if (!creds) {
+    try {
+      const v = localStorage.getItem(STAFF_CREDS_PREFIX + contactNumber)
+      if (v) creds = JSON.parse(v)
+    } catch {}
+  }
+  if (!creds) return null
+  const computed = await hashPIN(password, creds.salt)
+  if (computed !== creds.hash) return null
+  return { ...creds.user, role: creds.role }
+}
+
 // ── Internal helper ───────────────────────────────────────────────────────────
 
 function toHex(uint8Array) {

@@ -3,3 +3,6 @@
 
 .vercel
 .env*
+
+# IDE
+.vscode

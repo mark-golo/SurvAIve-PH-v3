@@ -11,6 +11,8 @@ import { mesh } from '../../lib/mesh'
 import api from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
+import { onMeshSOSAlert } from '../../lib/meshAlerts'
+import { getReceivedSOS, onActivityChange } from '../../lib/meshActivityStore'
 
 const NAV = [
   { icon: Home,     label: 'Home',     path: '/responder'          },
@@ -31,13 +33,30 @@ export function ResponderHome() {
   const [profile, setProfile] = useState(null)
   const [responderId, setResponderId] = useState(null)
   const responderIdRef = useRef(null)
+  const lastGpsUpdateRef = useRef(null)
   const [stats, setStats] = useState({ peersNearby: 0, transport: 'starting', relayEnabled: false })
+  const [meshAlert, setMeshAlert] = useState(null)
+  // RC-1/RC-2: persistent mesh SOS list — seeded from activity store at mount so
+  // SOS packets received while this component was unmounted are not missed.
+  const [receivedMeshSOS, setReceivedMeshSOS] = useState(() => getReceivedSOS())
 
   useEffect(() => {
     const load = async () => { setStats(await mesh.getStats()) }
     load()
     const t = setInterval(load, 10000)
     return () => clearInterval(t)
+  }, [])
+
+  useEffect(() => {
+    return onMeshSOSAlert((data, rawPacket) => {
+      setMeshAlert({ data, rawPacket, time: Date.now() })
+    })
+  }, [])
+
+  // RC-2: subscribe to meshActivityStore so the persistent list updates whenever
+  // a packet is received — regardless of which page was open at receive time.
+  useEffect(() => {
+    return onActivityChange(() => setReceivedMeshSOS(getReceivedSOS()))
   }, [])
 
   const activeList    = sosList.filter(r => r.rescue_status !== 'rescued')
@@ -68,9 +87,22 @@ export function ResponderHome() {
       pos => {
         const id = responderIdRef.current
         if (!id) return
+        const now = Date.now()
+        const { latitude: lat, longitude: lng } = pos.coords
+        const last = lastGpsUpdateRef.current
+        if (last) {
+          const elapsed = now - last.ts
+          // Flat-earth approximation — accurate enough for 10 m threshold
+          const dlat = (lat - last.lat) * Math.PI / 180
+          const dlng = (lng - last.lng) * Math.PI / 180
+          const a = dlat * dlat + Math.cos(last.lat * Math.PI / 180) * Math.cos(lat * Math.PI / 180) * dlng * dlng
+          const distM = 6371000 * Math.sqrt(a)
+          if (elapsed < 30000 && distM < 10) return
+        }
+        lastGpsUpdateRef.current = { ts: now, lat, lng }
         supabase.from('responders').update({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
+          lat,
+          lng,
           last_seen_at: new Date().toISOString(),
         }).eq('id', id).then(() => {})
       },
@@ -105,18 +137,25 @@ export function ResponderHome() {
 
   const syncNow = async () => {
     setSyncing(true)
-    await new Promise(r => setTimeout(r, 1200))
+    try {
+      const url = muni ? `/sos?municipality=${encodeURIComponent(muni)}` : '/sos'
+      const rows = await api.get(url)
+      setSosList(rows)
+    } catch {}
     setSyncing(false)
   }
 
   const toggleDuty = async () => {
+    const prev = onDuty
     const newStatus = onDuty ? 'standby' : 'on_duty'
     setOnDuty(!onDuty)
     try {
       if (responderId) {
         await supabase.from('responders').update({ duty_status: newStatus }).eq('id', responderId)
       }
-    } catch {}
+    } catch {
+      setOnDuty(prev)
+    }
   }
 
   return (
@@ -135,6 +174,87 @@ export function ResponderHome() {
       </header>
 
       <main className="flex-1 p-4 space-y-4">
+        {/* Mesh SOS alert card */}
+        {meshAlert && (
+          <motion.div
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="glass rounded-2xl p-4 border-2 border-[rgba(239,68,68,0.6)] shadow-[0_0_24px_rgba(239,68,68,0.3)]"
+          >
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={18} className="text-[#ef4444] animate-pulse shrink-0" />
+                <p className="text-sm font-black text-[#ef4444]">CRITICAL SOS — RECEIVED VIA MESH</p>
+              </div>
+              <button
+                onClick={() => setMeshAlert(null)}
+                className="text-slate-500 hover:text-white text-xs leading-none"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-xs font-bold text-white mb-0.5">
+              Victim: {'VIC-' + (meshAlert.rawPacket?.originDeviceId ?? '00000').slice(-5).toUpperCase()}
+            </p>
+            <p className="text-xs text-slate-300 mb-0.5">
+              {meshAlert.data.barangay ?? 'Unknown Location'}
+              {meshAlert.data.municipality ? ` · ${meshAlert.data.municipality}` : ''}
+              {meshAlert.data.status ? ` — ${meshAlert.data.status.toUpperCase()}` : ''}
+            </p>
+            <p className="text-[11px] text-slate-500 mb-3">
+              {meshAlert.data.people_count ? `${meshAlert.data.people_count} person(s) · ` : ''}
+              📡 Received via Mesh · 🔗 {5 - (meshAlert.rawPacket?.hopCount ?? 5)} Hop{5 - (meshAlert.rawPacket?.hopCount ?? 5) !== 1 ? 's' : ''}
+            </p>
+            <NeonButton
+              size="sm"
+              variant="red"
+              onClick={() => navigate('/responder/queue')}
+              className="w-full"
+            >
+              VIEW INCIDENT QUEUE
+            </NeonButton>
+          </motion.div>
+        )}
+
+        {/* Persistent mesh SOS list — RC-3: survives banner dismissal and page navigation */}
+        {receivedMeshSOS.length > 0 && (
+          <div className="glass rounded-2xl border border-[rgba(239,68,68,0.35)] overflow-hidden">
+            <div className="px-4 py-2 flex items-center gap-2 border-b border-[rgba(239,68,68,0.2)]">
+              <AlertTriangle size={14} className="text-[#ef4444] shrink-0" />
+              <p className="text-[11px] font-black text-[#ef4444] uppercase tracking-wider">
+                Offline Mesh SOS ({receivedMeshSOS.length})
+              </p>
+            </div>
+            <div className="divide-y divide-[rgba(255,255,255,0.05)]">
+              {receivedMeshSOS.map((entry, i) => (
+                <div key={entry.rawPacket?.id ?? i} className="px-4 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-bold text-white truncate">
+                      {'VIC-' + (entry.rawPacket?.originDeviceId ?? '00000').slice(-5).toUpperCase()}
+                      {entry.data.status ? ` — ${entry.data.status.toUpperCase()}` : ''}
+                    </p>
+                    <span className="text-[10px] text-slate-500 shrink-0">
+                      📡 {5 - (entry.rawPacket?.hopCount ?? 5)} hop{5 - (entry.rawPacket?.hopCount ?? 5) !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    {entry.data.barangay ?? 'Unknown'}{entry.data.municipality ? ` · ${entry.data.municipality}` : ''}
+                    {entry.data.people_count ? ` · ${entry.data.people_count} person(s)` : ''}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <div className="px-4 py-2 border-t border-[rgba(239,68,68,0.2)]">
+              <button
+                onClick={() => navigate('/responder/relay')}
+                className="text-[11px] text-[#00d4ff] hover:underline"
+              >
+                View full relay log →
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Duty toggle */}
         <GlassCard>
           <div className="flex items-center justify-between">

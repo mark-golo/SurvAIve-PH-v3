@@ -144,7 +144,7 @@ export function GuestChallenge() {
                   onClick={() => setStep(1)}
                   disabled={locMethod === 'gps' ? gpsStatus !== 'found' : !barangay}
                   className="w-full">
-                  Confirm Location →
+                  Confirm Location
                 </NeonButton>
               </GlassCard>
             </motion.div>
@@ -172,7 +172,7 @@ export function GuestChallenge() {
                 </div>
                 {captchaError && <p className="text-xs text-[#ef4444] text-center">Incorrect. Please try again.</p>}
                 <NeonButton variant="orange" onClick={verifyCaptha} disabled={!selected} className="w-full">
-                  Confirm →
+                  Confirm
                 </NeonButton>
               </GlassCard>
             </motion.div>

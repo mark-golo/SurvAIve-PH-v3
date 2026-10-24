@@ -37,7 +37,7 @@ export function LandingAuth() {
             Surv<span className="text-[#00d4ff]">AI</span>ve PH
           </h1>
           <p className="text-xs text-slate-400 leading-relaxed text-center px-2">
-            AI-Powered Mesh-Based Disaster Response and Victim Rescue System for Typhoon-Prone Areas
+            An AI-Powered Offline Mesh Communication and Victim Rescue Coordination System for Disaster-Prone Communities
           </p>
           <div className="flex justify-center mt-3">
             <FeatureIcons />
@@ -51,13 +51,12 @@ export function LandingAuth() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
             onClick={() => navigate('/login')}
-            className="glass-bright rounded-2xl p-5 cursor-pointer group
-                       hover:border-[rgba(0,212,255,0.5)] transition-all duration-300
-                       hover:shadow-[0_0_30px_rgba(0,212,255,0.2)]"
+            className="glass rounded-2xl p-5 cursor-pointer group
+                       transition-all duration-300"
           >
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[rgba(0,212,255,0.2)] to-[rgba(14,165,233,0.2)]
-                              border border-[rgba(0,212,255,0.3)] flex items-center justify-center shrink-0">
+              <div className="w-12 h-12 rounded-xl bg-[rgba(0,212,255,0.15)]
+                              border border-[rgba(0,212,255,0.45)] flex items-center justify-center shrink-0">
                 <User size={22} className="text-[#00d4ff]" />
               </div>
               <div className="flex-1 min-w-0">
@@ -141,7 +140,7 @@ export function LandingAuth() {
             onClick={() => navigate('/staff-login')}
             className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors underline underline-offset-2"
           >
-            Responder / DRRM Officer / DOST? Staff Login →
+            Authorized Personnel Login
           </button>
         </div>
       </motion.div>

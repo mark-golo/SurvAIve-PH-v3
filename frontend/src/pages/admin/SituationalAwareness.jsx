@@ -9,9 +9,10 @@ import { AdminLayout } from './AdminLayout'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassCard } from '../../components/ui/GlassCard'
 import api from '../../lib/api'
-import { getNetworkOnline } from '../../lib/capacitor'
+import { getNetworkOnline, probeBackend, invalidateProbeCache, onNetworkChange } from '../../lib/capacitor'
 import { db } from '../../lib/db'
 import { useAuthStore } from '../../store/auth'
+import { supabase } from '../../lib/supabase'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AI Analysis Engine — pure JS, runs fully offline, no cloud calls needed
@@ -309,7 +310,7 @@ export function SituationalAwareness() {
   const [reports, setReports]       = useState([])
   const [loading, setLoading]       = useState(true)
   const [syncing, setSyncing]       = useState(false)
-  const [offlineMode, setOfflineMode] = useState(!getNetworkOnline())
+  const [offlineMode, setOfflineMode] = useState(false)
   const [snapshotAge, setSnapshotAge] = useState(null)
   const [expandedZone, setExpandedZone] = useState(null)
   const [activeTab, setActiveTab]   = useState('zones') // 'zones' | 'insights'
@@ -340,16 +341,49 @@ export function SituationalAwareness() {
   }
 
   useEffect(() => { load() }, [])
+
   useEffect(() => {
-    const goOnline  = () => { setOfflineMode(false); load() }
+    const channel = supabase
+      .channel('sa-sos-rescue')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sos_reports' }, () => load())
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [])
+
+  useEffect(() => {
+    const goOnline = async () => {
+      const reachable = await probeBackend()
+      if (reachable) { invalidateProbeCache(); setOfflineMode(false); load() }
+    }
     const goOffline = () => setOfflineMode(true)
     window.addEventListener('online',  goOnline)
     window.addEventListener('offline', goOffline)
+    let capacitorHandle = null
+    const capSub = onNetworkChange(async connected => {
+      if (connected) {
+        const reachable = await probeBackend()
+        if (reachable) { invalidateProbeCache(); setOfflineMode(false); load() }
+      } else {
+        setOfflineMode(true)
+      }
+    })
+    capSub.then(h => { capacitorHandle = h })
     return () => {
       window.removeEventListener('online',  goOnline)
       window.removeEventListener('offline', goOffline)
+      capacitorHandle?.remove()
     }
   }, [])
+
+  // Auto-recover every 30 s while offline
+  useEffect(() => {
+    if (!offlineMode) return
+    const id = setInterval(async () => {
+      const reachable = await probeBackend()
+      if (reachable) { invalidateProbeCache(); setOfflineMode(false); load() }
+    }, 30_000)
+    return () => clearInterval(id)
+  }, [offlineMode])
 
   const zones    = useMemo(() => analyzeZones(reports), [reports])
   const insights = useMemo(() => generateInsights(zones), [zones])

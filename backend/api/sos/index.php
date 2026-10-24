@@ -9,9 +9,10 @@ if ($method === 'GET') {
     $where  = [];
     $params = [];
 
-    if (!empty($_GET['municipality'])) { $where[] = 'municipality=?'; $params[] = $_GET['municipality']; }
-    if (!empty($_GET['province']))     { $where[] = 'province=?';     $params[] = $_GET['province']; }
-    if (!empty($_GET['barangay']))     { $where[] = 'barangay=?';     $params[] = $_GET['barangay']; }
+    if (!empty($_GET['municipality']))  { $where[] = 'municipality=?';  $params[] = $_GET['municipality']; }
+    if (!empty($_GET['province']))      { $where[] = 'province=?';      $params[] = $_GET['province']; }
+    if (!empty($_GET['barangay']))      { $where[] = 'barangay=?';      $params[] = $_GET['barangay']; }
+    if (!empty($_GET['service_type']))  { $where[] = "JSON_CONTAINS(service_type, JSON_QUOTE(?), '\$')";  $params[] = $_GET['service_type']; }
     if (!empty($_GET['assigned_to'])) {
         $auth = requireAuth('responder');
         $where[] = 'assigned_responder_id=?'; $params[] = $auth['id'];
@@ -29,6 +30,9 @@ if ($method === 'GET') {
 
     foreach ($rows as &$row) {
         $row['vulnerabilities'] = json_decode($row['vulnerabilities'] ?? '[]');
+        if (isset($row['service_type'])) {
+            $row['service_type'] = json_decode($row['service_type'] ?? 'null');
+        }
         $mins = (int)$row['minutes_ago'];
         $row['time_ago'] = $mins < 1 ? 'just now' : ($mins < 60 ? "{$mins}m ago" : floor($mins/60) . 'h ago');
         $score = (int)$row['ai_priority_score'];
@@ -43,6 +47,18 @@ if ($method === 'POST') {
     $userId = null;
     $isVerified = false;
     $trustScore = 'LOW';
+
+    // Idempotency: if mesh_packet_id was supplied and a record already exists, return it.
+    $meshPacketId = isset($body['mesh_packet_id']) ? substr(trim($body['mesh_packet_id']), 0, 36) : null;
+    if ($meshPacketId) {
+        $exists = $db->prepare("SELECT id, ai_priority_score FROM sos_reports WHERE mesh_packet_id = ? LIMIT 1");
+        $exists->execute([$meshPacketId]);
+        $existingRow = $exists->fetch(PDO::FETCH_ASSOC);
+        if ($existingRow) {
+            jsonResponse(['id' => $existingRow['id'], 'ai_priority_score' => $existingRow['ai_priority_score'], 'idempotent' => true], 200);
+            exit;
+        }
+    }
 
     if (str_starts_with($authHeader, 'Bearer ')) {
         $payload = verifyJWT(substr($authHeader, 7));
@@ -97,20 +113,28 @@ if ($method === 'POST') {
 
     $reporterName = isset($body['name']) ? substr(trim($body['name']), 0, 200) : null;
 
+    $rawTypes     = $body['service_type'] ?? [];
+    $validTypes   = ['mdrrmo','hospital','bfp','pnp','pcg'];
+    if (is_string($rawTypes)) $rawTypes = [$rawTypes];
+    $serviceTypes    = array_values(array_filter((array)$rawTypes, fn($t) => in_array($t, $validTypes, true)));
+    $serviceTypeJson = !empty($serviceTypes) ? json_encode($serviceTypes) : null;
+
+    $relaySource = isset($body['relay_source']) ? substr(trim($body['relay_source']), 0, 50) : null;
+
     $stmt = $db->prepare("
         INSERT INTO sos_reports
           (user_id, name, barangay, municipality, province, lat, lng, status, people_count,
            victim_age_group, special_conditions, notes,
            is_verified, trust_score, ai_priority_score, rescue_status,
            sos_mode, ai_scene_label, ai_scene_confidence, ai_detected_count,
-           timestamp)
-        VALUES (?,?,?,?,?,?,?,?,?, ?,?,?, ?,?,?,'pending', ?,?,?,?, NOW())
+           service_type, mesh_packet_id, relay_source, timestamp)
+        VALUES (?,?,?,?,?,?,?,?,?, ?,?,?, ?,?,?,'pending', ?,?,?,?, ?, ?,?, NOW())
     ");
     $stmt->execute([
         $userId,
         $reporterName,
         $body['barangay']     ?? null,
-        $body['municipality'] ?? null,
+        $body['municipality'] ?: null,
         $body['province']     ?? null,
         $body['lat']          ?? null,
         $body['lng']          ?? null,
@@ -126,6 +150,9 @@ if ($method === 'POST') {
         $aiLabel,
         $aiConf,
         $aiCount,
+        $serviceTypeJson,
+        $meshPacketId,
+        $relaySource,
     ]);
 
     if ($userId) {

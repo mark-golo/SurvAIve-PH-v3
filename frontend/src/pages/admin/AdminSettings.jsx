@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Bell, Volume2, Eye, Settings2, Zap, VolumeX, Sun } from 'lucide-react'
 
 import { GlassCard } from '../../components/ui/GlassCard'
+import { AccountSettings } from '../../components/AccountSettings'
 import { useAlertStore } from '../../store/alertStore'
 import { getAdminTheme } from '../../lib/victimTheme'
 
@@ -52,6 +53,9 @@ export function AdminSettings() {
 
   return (
     <div className="p-4 max-w-2xl mx-auto space-y-6">
+
+        {/* ── Account Settings ────────────────────────────────────────────── */}
+        <AccountSettings />
 
         {/* ── Emergency Alert Settings ────────────────────────────────────── */}
         <div>

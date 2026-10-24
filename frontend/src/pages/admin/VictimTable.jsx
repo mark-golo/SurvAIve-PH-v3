@@ -14,7 +14,7 @@ const RESCUE_LABEL = { pending: 'Pending', en_route: 'En Route', on_scene: 'On S
 
 export function VictimTable() {
   const navigate = useNavigate()
-  const { scope } = useAuthStore()
+  const { scope, user, role } = useAuthStore()
   const [data, setData] = useState([])
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
@@ -22,6 +22,7 @@ export function VictimTable() {
   const [sortBy, setSortBy] = useState('time')
   const [loading, setLoading] = useState(true)
   const [confirmRemoveId, setConfirmRemoveId] = useState(null)  // UI-only remove confirmation
+  const [rescueError, setRescueError] = useState(null)
 
   const muni = scope?.municipality
 
@@ -42,8 +43,11 @@ export function VictimTable() {
         ai_scene_label: r.ai_scene_label ?? null,
         lat:            r.lat ?? null,
         lng:            r.lng ?? null,
-        dismissed:      r.dismissed ?? false,
-        minutes_ago:    r.minutes_ago ?? 0,
+        dismissed:         r.dismissed ?? false,
+        minutes_ago:       r.minutes_ago ?? 0,
+        confirmed_by_name: r.confirmed_by_name ?? null,
+        confirmed_at:      r.confirmed_at ?? null,
+        confirmed_by_role: r.confirmed_by_role ?? null,
       }))))
       .catch(() => setData([]))
       .finally(() => setLoading(false))
@@ -57,14 +61,20 @@ export function VictimTable() {
         payload => {
           const r = payload.new
           if (muni && r.municipality !== muni) return
-          setData(d => d.map(x => x.id === r.id ? { ...x, rescue: r.rescue_status } : x))
+          setData(d => d.map(x => x.id === r.id
+            ? { ...x, rescue: r.rescue_status,
+                confirmed_by_name: r.confirmed_by_name ?? x.confirmed_by_name,
+                confirmed_at:      r.confirmed_at      ?? x.confirmed_at,
+                confirmed_by_role: r.confirmed_by_role ?? x.confirmed_by_role }
+            : x
+          ))
         }
       )
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'sos_reports' },
         payload => {
           const r = payload.new
-          if (muni && r.municipality !== muni) return
+          if (muni && r.municipality !== null && r.municipality !== muni) return
           load() // re-fetch to get RPC-computed name, priority, minutes_ago, is_verified
         }
       )
@@ -84,8 +94,9 @@ export function VictimTable() {
     { label: 'Time',     sortKey: 'time' },
     { label: 'AI Score', sortKey: 'score' },
     { label: 'Verified', sortKey: null },
-    { label: 'Rescue',   sortKey: null },
-    { label: 'Actions',  sortKey: null },
+    { label: 'Rescue',       sortKey: null },
+    { label: 'Confirmed By', sortKey: null },
+    { label: 'Actions',      sortKey: null },
   ]
 
   const displayed = data
@@ -106,8 +117,25 @@ export function VictimTable() {
     })
 
   const markRescued = async (id) => {
-    try { await api.put(`/sos/${id}`, { rescue_status: 'rescued' }) } catch {}
-    setData(d => d.map(r => r.id === id ? { ...r, rescue: 'rescued' } : r))
+    const confirmedAt   = new Date().toISOString()
+    const confirmedName = user?.name ?? null
+    const confirmedRole = role ?? null
+    setRescueError(null)
+    try {
+      await api.put(`/sos/${id}`, {
+        rescue_status:      'rescued',
+        confirmed_by_name:  confirmedName,
+        confirmed_at:       confirmedAt,
+        confirmed_by_role:  confirmedRole,
+      })
+      setData(d => d.map(r => r.id === id
+        ? { ...r, rescue: 'rescued', confirmed_by_name: confirmedName, confirmed_at: confirmedAt, confirmed_by_role: confirmedRole }
+        : r
+      ))
+    } catch (err) {
+      console.error('[markRescued]', err)
+      setRescueError(err?.message ?? 'Failed to save rescue status. Check your connection.')
+    }
   }
 
   const flagSuspicious = (id) => {
@@ -138,6 +166,11 @@ export function VictimTable() {
 
   return (
     <>
+      {rescueError && (
+        <div className="mx-4 mt-2 p-2 rounded-lg bg-[rgba(239,68,68,0.15)] border border-[rgba(239,68,68,0.3)] text-[#ef4444] text-xs">
+          {rescueError}
+        </div>
+      )}
     <div className="p-4 space-y-4">
         {/* Filters */}
         <div className="flex flex-wrap gap-3 items-center">
@@ -224,6 +257,27 @@ export function VictimTable() {
                         r.rescue === 'en_route' ? 'bg-[rgba(0,212,255,0.1)] border-[rgba(0,212,255,0.3)] text-[#00d4ff]' :
                         'bg-[rgba(107,114,128,0.1)] border-[rgba(107,114,128,0.3)] text-[#9ca3af]'
                       }`}>{RESCUE_LABEL[r.rescue]}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {r.confirmed_by_name
+                        ? <div>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-xs font-medium text-[#22c55e]">{r.confirmed_by_name}</p>
+                              {r.confirmed_by_role && (
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${
+                                  r.confirmed_by_role === 'response_agency'
+                                    ? 'bg-[rgba(245,158,11,0.15)] text-[#fbbf24]'
+                                    : 'bg-[rgba(59,130,246,0.15)] text-[#60a5fa]'
+                                }`}>
+                                  {r.confirmed_by_role === 'response_agency' ? 'Agency' : 'Admin'}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-500">
+                              {r.confirmed_at ? new Date(r.confirmed_at).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                            </p>
+                          </div>
+                        : <span className="text-xs text-slate-600">—</span>}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">

@@ -10,6 +10,7 @@ import {
 
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
+import api from '../../lib/api'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const todayStr = () => new Date().toISOString().slice(0, 10)
@@ -133,14 +134,12 @@ export function EmergencyReport() {
   const generate = useCallback(async () => {
     setLoading(true)
     try {
-      let sosQ = supabase
-        .from('sos_reports')
-        .select('id, barangay, rescue_status, ai_priority_score, people_count')
-        .gte('created_at', fromDate + 'T00:00:00')
-        .lte('created_at', toDate   + 'T23:59:59')
-
-      if (muni) sosQ = sosQ.eq('municipality', muni)
-      else if (prov) sosQ = sosQ.eq('province', prov)
+      // Use api.get (SECURITY DEFINER RPC + service_type auto-injected for agency role)
+      const sosEndpoint = muni
+        ? `/sos?municipality=${encodeURIComponent(muni)}`
+        : prov
+        ? `/sos?province=${encodeURIComponent(prov)}`
+        : '/sos'
 
       let respQ = supabase
         .from('responders')
@@ -149,9 +148,18 @@ export function EmergencyReport() {
 
       if (muni) respQ = respQ.eq('municipality', muni)
 
-      const [sosRes, respRes] = await Promise.all([sosQ, respQ])
+      const [allSos, respRes] = await Promise.all([
+        api.get(sosEndpoint),
+        respQ,
+      ])
 
-      const rows = sosRes.data ?? []
+      // Filter by date range client-side
+      const from = new Date(fromDate + 'T00:00:00')
+      const to   = new Date(toDate   + 'T23:59:59')
+      const rows = (allSos ?? []).filter(r => {
+        const ts = r.created_at ? new Date(r.created_at) : null
+        return ts && ts >= from && ts <= to
+      })
       const bMap   = {}
       const priMap = { CRITICAL: 0, HIGH: 0, MODERATE: 0, LOW: 0 }
 
@@ -181,6 +189,14 @@ export function EmergencyReport() {
   }, [muni, prov, fromDate, toDate])
 
   useEffect(() => { generate() }, [generate])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('er-sos-rescue')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sos_reports' }, () => generate())
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [generate])
 
   // ── Derived data ─────────────────────────────────────────────────────────────
   const bRows     = useMemo(() => data ? Object.entries(data.bMap).sort((a, b) => b[1].total - a[1].total) : [], [data])

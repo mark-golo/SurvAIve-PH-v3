@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, Search, UserCog, Shield, Radio, Eye, EyeOff } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, UserCog, ShieldCheck, Radio, Eye, EyeOff } from 'lucide-react'
 
 import { GlassCard } from '../../components/ui/GlassCard'
 import { GlassInput, GlassSelect } from '../../components/ui/GlassInput'
@@ -8,40 +8,53 @@ import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 import { PROVINCES, getMunicipalities, getBarangays } from '../../lib/philippineLocations'
 
-const BLANK_ADMIN = { name: '', contact_number: '', gmail: '', province: '', municipality: '', password: '', status: 'active' }
-const BLANK_RESP  = { name: '', contact_number: '', gmail: '', province: '', municipality: '', barangay: '', password: '', team_id: '', unit_name: '', assigned_zone: '', assigned_barangay: '', status: 'active' }
+const AGENCY_TYPES = [
+  { value: 'mdrrmo',   label: 'MDRRMO',             color: '#00d4ff' },
+  { value: 'hospital', label: 'Hospital / Medical',  color: '#22c55e' },
+  { value: 'bfp',      label: 'BFP',                color: '#ef4444' },
+  { value: 'pnp',      label: 'PNP',                color: '#8b5cf6' },
+  { value: 'pcg',      label: 'PCG',                color: '#0ea5e9' },
+]
+
+const BLANK_ADMIN  = { name: '', contact_number: '', gmail: '', province: '', municipality: '', password: '', status: 'active' }
+const BLANK_AGENCY = { name: '', contact_number: '', agency_type: 'mdrrmo', province: '', municipality: '', password: '', status: 'active' }
+const BLANK_RESP   = { name: '', contact_number: '', gmail: '', province: '', municipality: '', barangay: '', password: '', team_id: '', unit_name: '', assigned_zone: '', assigned_barangay: '', status: 'active' }
 
 export function StaffManagement() {
   const { scope } = useAuthStore()
   const muni = scope?.municipality
   const prov = scope?.province
 
-  const [tab, setTab]           = useState('admins')
-  const [admins, setAdmins]     = useState([])
-  const [resps, setResps]       = useState([])
-  const [loading, setLoading]   = useState(true)
-  const [search, setSearch]     = useState('')
-  const [showAdd, setShowAdd]   = useState(false)
-  const [editId, setEditId]     = useState(null)
-  const [form, setForm]         = useState(BLANK_ADMIN)
-  const [showPw, setShowPw]     = useState(false)
-  const [saving, setSaving]     = useState(false)
-  const [error, setError]       = useState('')
+  const [tab, setTab]             = useState('admins')
+  const [admins, setAdmins]       = useState([])
+  const [agencies, setAgencies]   = useState([])
+  const [resps, setResps]         = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [search, setSearch]       = useState('')
+  const [showAdd, setShowAdd]     = useState(false)
+  const [editId, setEditId]       = useState(null)
+  const [form, setForm]           = useState(BLANK_ADMIN)
+  const [showPw, setShowPw]       = useState(false)
+  const [saving, setSaving]       = useState(false)
+  const [error, setError]         = useState('')
 
   useEffect(() => {
-    const q = muni ? `?municipality=${encodeURIComponent(muni)}` : ''
+    const q     = muni ? `?municipality=${encodeURIComponent(muni)}` : ''
+    const qProv = prov ? `?province=${encodeURIComponent(prov)}` : ''
     Promise.all([
-      api.get(`/admins${q}`).catch(() => []),
+      api.get(`/admins${qProv}`).catch(() => []),
+      api.get(`/agencies${q}`).catch(() => []),
       api.get(`/responders${q}`).catch(() => []),
-    ]).then(([a, r]) => { setAdmins(a); setResps(r) })
+    ]).then(([a, ag, r]) => { setAdmins(a); setAgencies(ag); setResps(r) })
       .finally(() => setLoading(false))
   }, [])
 
-  const isAdminTab = tab === 'admins'
-  const data       = isAdminTab ? admins : resps
-  const blank      = isAdminTab ? BLANK_ADMIN : BLANK_RESP
-  const setData    = isAdminTab ? setAdmins : setResps
-  const apiPath    = isAdminTab ? '/admins' : '/responders'
+  const isAdminTab  = tab === 'admins'
+  const isAgencyTab = tab === 'agencies'
+  const data        = isAdminTab ? admins  : isAgencyTab ? agencies : resps
+  const blank       = isAdminTab ? BLANK_ADMIN : isAgencyTab ? BLANK_AGENCY : BLANK_RESP
+  const setData     = isAdminTab ? setAdmins  : isAgencyTab ? setAgencies : setResps
+  const apiPath     = isAdminTab ? '/admins'  : isAgencyTab ? '/agencies' : '/responders'
 
   const filtered = data.filter(r =>
     !search ||
@@ -54,7 +67,8 @@ export function StaffManagement() {
   }
 
   function openAdd() {
-    setEditId(null); setForm({ ...blank, province: prov ?? '', municipality: muni ?? '' })
+    setEditId(null)
+    setForm({ ...blank, province: prov ?? '', municipality: isAdminTab ? (muni ?? '') : (muni ?? '') })
     setError(''); setShowAdd(true)
   }
 
@@ -62,12 +76,17 @@ export function StaffManagement() {
     setShowAdd(false)
     setEditId(row.id)
     setForm({
-      name: row.name, contact_number: row.contact_number ?? '', gmail: row.gmail ?? '',
+      name: row.name, contact_number: row.contact_number ?? '',
       province: row.province ?? '', municipality: row.municipality ?? '',
-      ...(isAdminTab ? {} : {
-        barangay: row.barangay ?? '', team_id: row.team_id ?? '', unit_name: row.unit_name ?? '',
-        assigned_zone: row.assigned_zone ?? '', assigned_barangay: row.assigned_barangay ?? '',
-      }),
+      ...(isAdminTab
+        ? { gmail: row.gmail ?? '' }
+        : isAgencyTab
+          ? { agency_type: row.agency_type ?? 'mdrrmo' }
+          : {
+              gmail: row.gmail ?? '',
+              barangay: row.barangay ?? '', team_id: row.team_id ?? '', unit_name: row.unit_name ?? '',
+              assigned_zone: row.assigned_zone ?? '', assigned_barangay: row.assigned_barangay ?? '',
+            }),
       password: '', status: row.status ?? 'active',
     })
     setError('')
@@ -77,6 +96,8 @@ export function StaffManagement() {
 
   async function handleSave() {
     if (!form.name.trim()) { setError('Name is required'); return }
+    if (isAdminTab && !form.contact_number.trim()) { setError('Contact number is required'); return }
+    if (isAdminTab && !form.municipality) { setError('Municipality is required'); return }
     if (showAdd && !form.password) { setError('Password is required'); return }
     setSaving(true); setError('')
     try {
@@ -107,64 +128,81 @@ export function StaffManagement() {
     }
   }
 
+  const tabLabel = isAdminTab ? 'admin' : isAgencyTab ? 'agency' : 'responder'
+
   return (
     <div className="p-4 space-y-4">
-        {/* Tabs */}
-        <div className="flex gap-2">
-          <TabBtn active={isAdminTab}   icon={Shield} label="Admins"     onClick={() => switchTab('admins')} />
-          <TabBtn active={!isAdminTab}  icon={Radio}  label="Responders" onClick={() => switchTab('responders')} />
-        </div>
-
-        {/* Summary chips */}
-        <div className="grid grid-cols-3 gap-3">
-          <Chip label="Total"   value={data.length}                                  color="#00d4ff" />
-          <Chip label="Active"  value={data.filter(r => r.status === 'active').length}   color="#22c55e" />
-          <Chip label="Inactive" value={data.filter(r => r.status !== 'active').length} color="#9ca3af" />
-        </div>
-
-        {/* Controls */}
-        <div className="flex flex-wrap gap-3 items-center">
-          <div className="flex-1 min-w-[200px]">
-            <GlassInput placeholder={`Search ${isAdminTab ? 'admin' : 'responder'}…`} icon={Search} value={search} onChange={e => setSearch(e.target.value)} />
-          </div>
-          <NeonButton size="sm" onClick={openAdd}>
-            <Plus size={13} className="mr-1.5" />
-            Add {isAdminTab ? 'Admin' : 'Responder'}
-          </NeonButton>
-        </div>
-
-        {/* Add form */}
-        {showAdd && (
-          <StaffForm
-            isAdmin={isAdminTab} isEdit={false}
-            title={`New ${isAdminTab ? 'Admin' : 'Responder'}`}
-            form={form} setForm={setForm}
-            showPw={showPw} setShowPw={setShowPw}
-            error={error} saving={saving}
-            onSave={handleSave} onCancel={closeForm}
-          />
-        )}
-
-        {/* Table */}
-        <div className="glass rounded-2xl overflow-hidden">
-          <div className="overflow-x-auto">
-            {isAdminTab
-              ? <AdminTable rows={filtered} loading={loading} editId={editId} form={form} setForm={setForm} showPw={showPw} setShowPw={setShowPw} error={error} saving={saving} onEdit={openEdit} onDelete={handleDelete} onSave={handleSave} onCancel={closeForm} />
-              : <ResponderTable rows={filtered} loading={loading} editId={editId} form={form} setForm={setForm} showPw={showPw} setShowPw={setShowPw} error={error} saving={saving} onEdit={openEdit} onDelete={handleDelete} onSave={handleSave} onCancel={closeForm} />
-            }
-          </div>
-        </div>
-        <p className="text-xs text-slate-600 text-right">{filtered.length} of {data.length} {isAdminTab ? 'admins' : 'responders'}</p>
+      {/* Tabs */}
+      <div className="flex gap-2 flex-wrap">
+        <TabBtn active={isAdminTab}             icon={UserCog}    label="Admin"      onClick={() => switchTab('admins')} />
+        <TabBtn active={isAgencyTab}            icon={ShieldCheck} label="Agencies"  onClick={() => switchTab('agencies')} />
+        <TabBtn active={!isAdminTab && !isAgencyTab} icon={Radio} label="Responders" onClick={() => switchTab('responders')} />
       </div>
+
+      {/* Summary chips */}
+      <div className="grid grid-cols-3 gap-3">
+        <Chip label="Total"    value={data.length}                                    color="#00d4ff" />
+        <Chip label="Active"   value={data.filter(r => r.status === 'active').length} color="#22c55e" />
+        <Chip label="Inactive" value={data.filter(r => r.status !== 'active').length} color="#9ca3af" />
+      </div>
+
+      {/* Controls */}
+      <div className="flex flex-wrap gap-3 items-center">
+        <div className="flex-1 min-w-[200px]">
+          <GlassInput placeholder={`Search ${tabLabel}…`} icon={Search} value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <NeonButton size="sm" onClick={openAdd}>
+          <Plus size={13} className="mr-1.5" />
+          Add {isAdminTab ? 'Admin' : isAgencyTab ? 'Agency' : 'Responder'}
+        </NeonButton>
+      </div>
+
+      {/* Add form */}
+      {showAdd && (
+        <StaffForm
+          isAdmin={isAdminTab} isAgency={isAgencyTab} isEdit={false}
+          title={`New ${isAdminTab ? 'Admin Account' : isAgencyTab ? 'Agency' : 'Responder'}`}
+          form={form} setForm={setForm}
+          showPw={showPw} setShowPw={setShowPw}
+          error={error} saving={saving}
+          onSave={handleSave} onCancel={closeForm}
+          prov={prov}
+        />
+      )}
+
+      {/* Table */}
+      <div className="glass rounded-2xl overflow-hidden">
+        <div className="overflow-x-auto">
+          {isAdminTab
+            ? <AdminTable rows={filtered} loading={loading} editId={editId} form={form} setForm={setForm} showPw={showPw} setShowPw={setShowPw} error={error} saving={saving} onEdit={openEdit} onDelete={handleDelete} onSave={handleSave} onCancel={closeForm} prov={prov} />
+            : isAgencyTab
+              ? <AgencyTable rows={filtered} loading={loading} editId={editId} form={form} setForm={setForm} showPw={showPw} setShowPw={setShowPw} error={error} saving={saving} onEdit={openEdit} onDelete={handleDelete} onSave={handleSave} onCancel={closeForm} prov={prov} />
+              : <ResponderTable rows={filtered} loading={loading} editId={editId} form={form} setForm={setForm} showPw={showPw} setShowPw={setShowPw} error={error} saving={saving} onEdit={openEdit} onDelete={handleDelete} onSave={handleSave} onCancel={closeForm} prov={prov} />
+          }
+        </div>
+      </div>
+      <p className="text-xs text-slate-600 text-right">{filtered.length} of {data.length} {tabLabel}s</p>
+    </div>
   )
 }
 
-function AdminTable({ rows, loading, editId, form, setForm, showPw, setShowPw, error, saving, onEdit, onDelete, onSave, onCancel }) {
+function AgencyTypeBadge({ type }) {
+  const info = AGENCY_TYPES.find(t => t.value === type)
+  if (!info) return <span className="text-xs text-slate-500">{type ?? '—'}</span>
+  return (
+    <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
+          style={{ background: `${info.color}18`, color: info.color, border: `1px solid ${info.color}44` }}>
+      {info.label}
+    </span>
+  )
+}
+
+function AdminTable({ rows, loading, editId, form, setForm, showPw, setShowPw, error, saving, onEdit, onDelete, onSave, onCancel, prov }) {
   return (
     <table className="w-full">
       <thead>
         <tr className="border-b border-[rgba(255,255,255,0.06)]">
-          {['Name', 'Contact', 'Municipality', 'Status', 'Actions'].map(h => (
+          {['Name', 'Municipality', 'Contact', 'Status', 'Actions'].map(h => (
             <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
           ))}
         </tr>
@@ -173,22 +211,22 @@ function AdminTable({ rows, loading, editId, form, setForm, showPw, setShowPw, e
         {loading
           ? <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">Loading…</td></tr>
           : rows.length === 0
-            ? <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">No admins found</td></tr>
+            ? <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">No admin accounts found</td></tr>
             : rows.map(row => (
                 <>
                   <tr key={row.id} className="border-b border-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.02)]">
                     <td className="px-4 py-3 text-sm font-medium text-white">
-                      <div className="flex items-center gap-2"><Shield size={13} className="text-[#00d4ff]" />{row.name}</div>
+                      <div className="flex items-center gap-2"><UserCog size={13} className="text-[#00d4ff]" />{row.name}</div>
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">{row.contact_number ?? '—'}</td>
                     <td className="px-4 py-3 text-xs text-slate-300">{row.municipality ?? '—'}</td>
+                    <td className="px-4 py-3 text-xs text-slate-400">{row.contact_number ?? '—'}</td>
                     <td className="px-4 py-3"><StatusBadge status={row.status} /></td>
                     <td className="px-4 py-3"><RowActions onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} /></td>
                   </tr>
                   {editId === row.id && (
                     <tr key={`edit-${row.id}`} className="bg-[rgba(0,212,255,0.03)]">
                       <td colSpan={5} className="px-4 py-3">
-                        <StaffForm isAdmin isEdit title={`Edit — ${row.name}`} form={form} setForm={setForm} showPw={showPw} setShowPw={setShowPw} error={error} saving={saving} onSave={onSave} onCancel={onCancel} />
+                        <StaffForm isAdmin isAgency={false} isEdit title={`Edit — ${row.name}`} form={form} setForm={setForm} showPw={showPw} setShowPw={setShowPw} error={error} saving={saving} onSave={onSave} onCancel={onCancel} prov={prov} />
                       </td>
                     </tr>
                   )}
@@ -200,7 +238,48 @@ function AdminTable({ rows, loading, editId, form, setForm, showPw, setShowPw, e
   )
 }
 
-function ResponderTable({ rows, loading, editId, form, setForm, showPw, setShowPw, error, saving, onEdit, onDelete, onSave, onCancel }) {
+function AgencyTable({ rows, loading, editId, form, setForm, showPw, setShowPw, error, saving, onEdit, onDelete, onSave, onCancel, prov }) {
+  return (
+    <table className="w-full">
+      <thead>
+        <tr className="border-b border-[rgba(255,255,255,0.06)]">
+          {['Name', 'Agency Type', 'Municipality', 'Status', 'Actions'].map(h => (
+            <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {loading
+          ? <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">Loading…</td></tr>
+          : rows.length === 0
+            ? <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">No agencies found</td></tr>
+            : rows.map(row => (
+                <>
+                  <tr key={row.id} className="border-b border-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.02)]">
+                    <td className="px-4 py-3 text-sm font-medium text-white">
+                      <div className="flex items-center gap-2"><ShieldCheck size={13} className="text-[#22c55e]" />{row.name}</div>
+                    </td>
+                    <td className="px-4 py-3"><AgencyTypeBadge type={row.agency_type} /></td>
+                    <td className="px-4 py-3 text-xs text-slate-300">{row.municipality ?? '—'}</td>
+                    <td className="px-4 py-3"><StatusBadge status={row.status} /></td>
+                    <td className="px-4 py-3"><RowActions onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} /></td>
+                  </tr>
+                  {editId === row.id && (
+                    <tr key={`edit-${row.id}`} className="bg-[rgba(34,197,94,0.03)]">
+                      <td colSpan={5} className="px-4 py-3">
+                        <StaffForm isAdmin={false} isAgency isEdit title={`Edit — ${row.name}`} form={form} setForm={setForm} showPw={showPw} setShowPw={setShowPw} error={error} saving={saving} onSave={onSave} onCancel={onCancel} prov={prov} />
+                      </td>
+                    </tr>
+                  )}
+                </>
+              ))
+        }
+      </tbody>
+    </table>
+  )
+}
+
+function ResponderTable({ rows, loading, editId, form, setForm, showPw, setShowPw, error, saving, onEdit, onDelete, onSave, onCancel, prov }) {
   return (
     <table className="w-full">
       <thead>
@@ -239,7 +318,7 @@ function ResponderTable({ rows, loading, editId, form, setForm, showPw, setShowP
                   {editId === row.id && (
                     <tr key={`edit-${row.id}`} className="bg-[rgba(34,197,94,0.03)]">
                       <td colSpan={7} className="px-4 py-3">
-                        <StaffForm isAdmin={false} isEdit title={`Edit — ${row.name}`} form={form} setForm={setForm} showPw={showPw} setShowPw={setShowPw} error={error} saving={saving} onSave={onSave} onCancel={onCancel} />
+                        <StaffForm isAdmin={false} isAgency={false} isEdit title={`Edit — ${row.name}`} form={form} setForm={setForm} showPw={showPw} setShowPw={setShowPw} error={error} saving={saving} onSave={onSave} onCancel={onCancel} prov={prov} />
                       </td>
                     </tr>
                   )}
@@ -251,31 +330,38 @@ function ResponderTable({ rows, loading, editId, form, setForm, showPw, setShowP
   )
 }
 
-function StaffForm({ isAdmin, isEdit, title, form, setForm, showPw, setShowPw, error, saving, onSave, onCancel }) {
+function StaffForm({ isAdmin, isAgency, isEdit, title, form, setForm, showPw, setShowPw, error, saving, onSave, onCancel, prov }) {
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
   return (
     <GlassCard>
       <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-3">{title}</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        <GlassInput label="Full Name *"    value={form.name}           onChange={e => set('name', e.target.value)}           placeholder="Juan dela Cruz" />
-        <GlassInput label="Contact Number" value={form.contact_number} onChange={e => set('contact_number', e.target.value)} placeholder="09XXXXXXXXX" />
-        <GlassInput label="Gmail"          value={form.gmail}          onChange={e => set('gmail', e.target.value)}           placeholder="user@gmail.com" />
+        <GlassInput label="Full Name *"    value={form.name}           onChange={e => set('name', e.target.value)}           placeholder="Full Name" />
+        <GlassInput label={`Contact Number${isAdmin ? ' *' : ''}`} value={form.contact_number} onChange={e => set('contact_number', e.target.value)} placeholder="09XXXXXXXXX" />
+        {isAgency && (
+          <GlassSelect label="Agency Type *" value={form.agency_type ?? 'mdrrmo'} onChange={e => set('agency_type', e.target.value)}>
+            {AGENCY_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </GlassSelect>
+        )}
+        {(isAdmin || !isAgency) && (
+          <GlassInput label="Gmail" value={form.gmail ?? ''} onChange={e => set('gmail', e.target.value)} placeholder="user@gmail.com" />
+        )}
         <GlassSelect label="Province" value={form.province} onChange={e => set('province', e.target.value)} disabled>
           <option value="">Select Province</option>
           {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
         </GlassSelect>
-        <GlassSelect label="Municipality" value={form.municipality} onChange={e => set('municipality', e.target.value)} disabled>
+        <GlassSelect label={`Municipality${isAdmin ? ' *' : ''}`} value={form.municipality} onChange={e => set('municipality', e.target.value)} disabled={!isAdmin}>
           <option value="">Select Municipality</option>
-          {getMunicipalities(form.province).map(m => <option key={m} value={m}>{m}</option>)}
+          {getMunicipalities(form.province || prov || '').map(m => <option key={m} value={m}>{m}</option>)}
         </GlassSelect>
-        {!isAdmin && <>
+        {!isAgency && !isAdmin && <>
           <GlassSelect label="Barangay" value={form.barangay ?? ''} onChange={e => set('barangay', e.target.value)}>
             <option value="">Select Barangay</option>
             {getBarangays(form.municipality).map(b => <option key={b} value={b}>{b}</option>)}
           </GlassSelect>
-          <GlassInput label="Team ID"          value={form.team_id ?? ''}          onChange={e => set('team_id', e.target.value)}          placeholder="TEAM-A" />
-          <GlassInput label="Unit Name"        value={form.unit_name ?? ''}        onChange={e => set('unit_name', e.target.value)}        placeholder="Alpha Unit" />
-          <GlassInput label="Assigned Zone"    value={form.assigned_zone ?? ''}    onChange={e => set('assigned_zone', e.target.value)}    placeholder="Zone 1 – Lipata" />
+          <GlassInput label="Team ID"           value={form.team_id ?? ''}          onChange={e => set('team_id', e.target.value)}          placeholder="TEAM-A" />
+          <GlassInput label="Unit Name"         value={form.unit_name ?? ''}        onChange={e => set('unit_name', e.target.value)}        placeholder="Alpha Unit" />
+          <GlassInput label="Assigned Zone"     value={form.assigned_zone ?? ''}    onChange={e => set('assigned_zone', e.target.value)}    placeholder="Zone 1 – Lipata" />
           <GlassInput label="Assigned Barangay" value={form.assigned_barangay ?? ''} onChange={e => set('assigned_barangay', e.target.value)} placeholder="Lipata" />
         </>}
         <div className="relative">

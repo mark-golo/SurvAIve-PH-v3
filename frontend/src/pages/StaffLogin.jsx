@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Phone, Lock, Eye, EyeOff, ChevronRight,
-         Radio, Building2, Globe, MapPin } from 'lucide-react'
+         Radio, Building2, MapPin, ShieldCheck } from 'lucide-react'
 import { GlassInput, GlassSelect } from '../components/ui/GlassInput'
 import { NeonButton } from '../components/ui/NeonButton'
 import { useAuthStore } from '../store/auth'
@@ -23,9 +23,20 @@ const ROLES = [
     needsMunicipality: true,
   },
   {
+    key:   'response_agency',
+    label: 'Response Agency',
+    sub:   'MDRRMO · Hospital · BFP · PNP · PCG · Emergency services',
+    icon:  ShieldCheck,
+    color: '#00d4ff',
+    bg:    'rgba(0,212,255,0.1)',
+    border:'rgba(0,212,255,0.25)',
+    glow:  'rgba(0,212,255,0.15)',
+    needsMunicipality: true,
+  },
+  {
     key:   'admin',
-    label: 'Admin — Municipality Level',
-    sub:   'DRRM command · Victim registry · Resource coordination',
+    label: 'Admin',
+    sub:   'Command center · Victim registry · Resource coordination',
     icon:  Building2,
     color: '#8b5cf6',
     bg:    'rgba(139,92,246,0.1)',
@@ -33,24 +44,13 @@ const ROLES = [
     glow:  'rgba(139,92,246,0.15)',
     needsMunicipality: true,
   },
-  {
-    key:   'superadmin',
-    label: 'Super Admin — Provincial Level',
-    sub:   'Provincial oversight · Escalation feed · Analytics',
-    icon:  Globe,
-    color: '#f97316',
-    bg:    'rgba(249,115,22,0.1)',
-    border:'rgba(249,115,22,0.25)',
-    glow:  'rgba(249,115,22,0.15)',
-    needsMunicipality: false,
-  },
 ]
 
 const ROLE_PATHS = {
-  responder:  '/responder',
-  admin:      '/admin',
-  superadmin: '/superadmin',
-  victim:     '/home',
+  responder:       '/responder',
+  admin:           '/admin',
+  victim:          '/home',
+  response_agency: '/agency',
 }
 
 const slide = (dir) => ({
@@ -178,17 +178,10 @@ export function StaffLogin() {
                       key={r.key}
                       whileTap={{ scale: 0.97 }}
                       onClick={() => pickRole(r)}
-                      className="w-full glass-bright rounded-2xl p-4 flex items-center gap-4
+                      className="w-full glass rounded-2xl p-4 flex items-center gap-4
                                  cursor-pointer text-left transition-all duration-300 group
                                  border border-[rgba(255,255,255,0.08)]"
-                      onMouseEnter={e => {
-                        e.currentTarget.style.borderColor = r.border
-                        e.currentTarget.style.boxShadow = `0 0 20px ${r.glow}`
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'
-                        e.currentTarget.style.boxShadow = ''
-                      }}
+
                     >
                       <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
                            style={{ background: r.bg, border: `1px solid ${r.border}` }}>

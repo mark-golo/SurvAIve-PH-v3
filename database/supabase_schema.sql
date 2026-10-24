@@ -7,12 +7,13 @@
 -- Maps auth.users UUID → role + jurisdiction scope
 CREATE TABLE IF NOT EXISTS profiles (
   id             UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  role           TEXT NOT NULL CHECK (role IN ('superadmin','admin','responder','victim')),
+  role           TEXT NOT NULL CHECK (role IN ('superadmin','admin','responder','victim','response_agency')),
   name           TEXT NOT NULL,
   contact_number TEXT UNIQUE,
   province       TEXT,
   municipality   TEXT,
   barangay       TEXT,
+  agency_type    TEXT,
   status         TEXT NOT NULL DEFAULT 'active',
   created_at     TIMESTAMPTZ DEFAULT NOW()
 );
@@ -27,6 +28,19 @@ CREATE TABLE IF NOT EXISTS superadmins (
   status         TEXT NOT NULL DEFAULT 'active',
   is_verified    BOOLEAN NOT NULL DEFAULT TRUE,
   trust_score    TEXT DEFAULT 'HIGH',
+  created_at     TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ── response_agencies ────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS response_agencies (
+  id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name           TEXT NOT NULL,
+  contact_number TEXT UNIQUE NOT NULL,
+  password_hash  TEXT NOT NULL,
+  agency_type    TEXT NOT NULL CHECK (agency_type IN ('mdrrmo','hospital','bfp','pnp','pcg')),
+  province       TEXT,
+  municipality   TEXT NOT NULL,
+  status         TEXT NOT NULL DEFAULT 'active',
   created_at     TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -130,7 +144,14 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   ai_detected_count     SMALLINT DEFAULT NULL,
   created_at            TIMESTAMPTZ DEFAULT NOW(),
   synced_at             TIMESTAMPTZ,
-  dismissed             BOOLEAN NOT NULL DEFAULT FALSE
+  confirmed_by_name     TEXT DEFAULT NULL,
+  confirmed_at          TIMESTAMPTZ DEFAULT NULL,
+  confirmed_by_role     TEXT DEFAULT NULL,
+  dismissed             BOOLEAN NOT NULL DEFAULT FALSE,
+  service_type          TEXT[],
+  mesh_packet_id        TEXT DEFAULT NULL,
+  relay_source          TEXT DEFAULT NULL,
+  UNIQUE (mesh_packet_id)
 );
 
 -- ── welfare_checks ────────────────────────────────────────────
@@ -249,7 +270,7 @@ CREATE POLICY "own profile read"
   ON profiles FOR SELECT
   USING (
     id = auth.uid() OR
-    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('superadmin','admin')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('superadmin','admin','response_agency')
   );
 
 CREATE POLICY "own profile update"
@@ -293,16 +314,19 @@ CREATE POLICY "anyone submit sos"
   ON sos_reports FOR INSERT WITH CHECK (true);
 
 -- Staff can read SOS in their jurisdiction; anon can read their own (by user_id)
+-- Accepts role from both app_metadata (set by service-role trigger) and user_metadata
+-- (set at sign-up) so realtime subscriptions work even if the trigger was not applied.
 CREATE POLICY "staff read sos"
   ON sos_reports FOR SELECT
   USING (
-    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin','responder')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin','responder','response_agency')
+    OR (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin','responder','response_agency')
   );
 
 CREATE POLICY "staff update sos"
   ON sos_reports FOR UPDATE
   USING (
-    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin','responder')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin','responder','response_agency')
   );
 
 -- ── victims policies ──────────────────────────────────────────
@@ -340,7 +364,7 @@ CREATE POLICY "authenticated can manage welfare checks"
 CREATE POLICY "staff read responders"
   ON responders FOR SELECT
   USING (
-    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin','responder')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin','responder','response_agency')
   );
 
 CREATE POLICY "admin mutate responders"
@@ -391,7 +415,7 @@ CREATE POLICY "auth insert mesh"
 CREATE POLICY "staff read mesh"
   ON mesh_events FOR SELECT
   USING (
-    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin','responder')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin','responder','response_agency')
   );
 
 -- ── activity_logs policies ────────────────────────────────────
@@ -399,7 +423,7 @@ CREATE POLICY "staff read mesh"
 CREATE POLICY "staff read activity logs"
   ON activity_logs FOR SELECT
   USING (
-    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin','response_agency')
   );
 
 CREATE POLICY "service insert activity logs"
@@ -423,9 +447,13 @@ CREATE POLICY "service insert notifications"
 -- Returns SOS list joined with victim name + computed priority label
 -- SECURITY DEFINER bypasses RLS on victims so responders can see names
 -- ============================================================
+DROP FUNCTION IF EXISTS get_sos_with_priority(text, text, text);
+DROP FUNCTION IF EXISTS get_sos_with_priority(text, text);
+
 CREATE OR REPLACE FUNCTION get_sos_with_priority(
   p_municipality TEXT DEFAULT NULL,
-  p_province     TEXT DEFAULT NULL
+  p_province     TEXT DEFAULT NULL,
+  p_service_type TEXT DEFAULT NULL
 )
 RETURNS TABLE (
   id                    BIGINT,
@@ -447,13 +475,17 @@ RETURNS TABLE (
   rescue_status         TEXT,
   field_notes           TEXT,
   created_at            TIMESTAMPTZ,
+  service_type          TEXT[],
   name                  TEXT,
   contact_number        TEXT,
   vulnerabilities       JSONB,
   household_count       SMALLINT,
   priority              TEXT,
   minutes_ago           NUMERIC,
-  dismissed             BOOLEAN
+  dismissed             BOOLEAN,
+  confirmed_by_name     TEXT,
+  confirmed_at          TIMESTAMPTZ,
+  confirmed_by_role     TEXT
 )
 LANGUAGE sql SECURITY DEFINER AS $$
   SELECT
@@ -461,6 +493,7 @@ LANGUAGE sql SECURITY DEFINER AS $$
     r.lat, r.lng, r.status, r.people_count, r.victim_age_group, r.special_conditions, r.notes,
     r.is_verified, r.trust_score, r.ai_priority_score,
     r.assigned_responder_id, r.rescue_status, r.field_notes, r.created_at,
+    r.service_type,
     COALESCE(v.name, r.name) AS name,
     v.contact_number,
     v.vulnerabilities,
@@ -472,14 +505,65 @@ LANGUAGE sql SECURITY DEFINER AS $$
       ELSE 'LOW'
     END AS priority,
     ROUND(EXTRACT(EPOCH FROM NOW() - r.created_at) / 60, 0)::NUMERIC AS minutes_ago,
-    r.dismissed
+    r.dismissed,
+    r.confirmed_by_name,
+    r.confirmed_at,
+    r.confirmed_by_role
   FROM sos_reports r
   LEFT JOIN victims v ON r.user_id = v.id
   WHERE
     (p_municipality IS NULL OR r.municipality = p_municipality OR r.municipality IS NULL) AND
-    (p_province     IS NULL OR r.province     = p_province     OR r.province     IS NULL)
+    (p_province     IS NULL OR r.province     = p_province     OR r.province     IS NULL) AND
+    (p_service_type IS NULL OR p_service_type = ANY(r.service_type))
   ORDER BY r.ai_priority_score DESC, r.created_at DESC
   LIMIT 500;
+$$;
+
+-- ============================================================
+-- RPC: update_sos_by_id
+-- SECURITY DEFINER: bypasses RLS so all staff roles (admin, responder,
+-- response_agency) can update SOS records even though they authenticate via
+-- PHP JWT and have no Supabase session (anon key only).
+-- COALESCE semantics: only non-null arguments overwrite the existing column
+-- value, so callers only need to pass the fields they intend to change.
+-- DROP first: required when changing the return type (void → TEXT).
+-- ============================================================
+DROP FUNCTION IF EXISTS update_sos_by_id(bigint,text,text,timestamp with time zone,text,bigint,boolean,text);
+DROP FUNCTION IF EXISTS update_sos_by_id(bigint,text,text,timestamp with time zone,text,bigint,boolean,text,text);
+CREATE OR REPLACE FUNCTION update_sos_by_id(
+  p_id                    BIGINT,
+  p_rescue_status         TEXT        DEFAULT NULL,
+  p_confirmed_by_name     TEXT        DEFAULT NULL,
+  p_confirmed_at          TIMESTAMPTZ DEFAULT NULL,
+  p_notes                 TEXT        DEFAULT NULL,
+  p_assigned_responder_id BIGINT      DEFAULT NULL,
+  p_dismissed             BOOLEAN     DEFAULT NULL,
+  p_status                TEXT        DEFAULT NULL,
+  p_confirmed_by_role     TEXT        DEFAULT NULL
+)
+RETURNS TEXT   -- returns the old rescue_status (for audit trail)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  old_rescue TEXT;
+BEGIN
+  SELECT rescue_status INTO old_rescue FROM sos_reports WHERE id = p_id;
+
+  UPDATE sos_reports SET
+    rescue_status         = COALESCE(p_rescue_status,         rescue_status),
+    confirmed_by_name     = COALESCE(p_confirmed_by_name,     confirmed_by_name),
+    confirmed_at          = COALESCE(p_confirmed_at,          confirmed_at),
+    confirmed_by_role     = COALESCE(p_confirmed_by_role,     confirmed_by_role),
+    notes                 = COALESCE(p_notes,                 notes),
+    assigned_responder_id = COALESCE(p_assigned_responder_id, assigned_responder_id),
+    dismissed             = COALESCE(p_dismissed,             dismissed),
+    status                = COALESCE(p_status,                status)
+  WHERE id = p_id;
+
+  RETURN old_rescue;
+END;
 $$;
 
 -- ============================================================
@@ -581,6 +665,52 @@ ON CONFLICT (contact_number) DO NOTHING;
 -- VALUES ('<uuid-superadmin>', 'superadmin', '<Your Name>', '09170000001', '<Your Province>');
 --
 -- All other accounts (admins, responders) are created through the app UI.
+
+-- ── response_agencies RLS ─────────────────────────────────────
+ALTER TABLE response_agencies ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "admin manage agencies"
+  ON response_agencies FOR ALL
+  USING (
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin')
+  );
+
+CREATE POLICY "agency read own"
+  ON response_agencies FOR SELECT
+  USING (
+    (auth.jwt() -> 'app_metadata' ->> 'role') = 'response_agency'
+    AND contact_number = (auth.jwt() -> 'app_metadata' ->> 'contact_number')
+  );
+
+-- ============================================================
+-- MIGRATION: Apply these to an existing database that was
+-- initialized before the Response Agency feature was added.
+-- These statements use IF NOT EXISTS / DO blocks so they are
+-- safe to run multiple times.
+-- ============================================================
+
+-- Drop old profiles.role constraint and add the new one
+DO $$
+BEGIN
+  ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+DO $$
+BEGIN
+  ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
+    CHECK (role IN ('superadmin','admin','responder','victim','response_agency'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+ALTER TABLE profiles     ADD COLUMN IF NOT EXISTS agency_type  TEXT;
+-- Multi-select service_type: drop old TEXT column, replace with TEXT[] array
+ALTER TABLE sos_reports  DROP COLUMN IF EXISTS service_type;
+ALTER TABLE sos_reports  ADD COLUMN IF NOT EXISTS service_type TEXT[];
+-- Mesh relay tracking columns
+ALTER TABLE sos_reports  ADD COLUMN IF NOT EXISTS mesh_packet_id TEXT DEFAULT NULL;
+ALTER TABLE sos_reports  ADD COLUMN IF NOT EXISTS relay_source   TEXT DEFAULT NULL;
+ALTER TABLE sos_reports  DROP CONSTRAINT IF EXISTS sos_reports_mesh_packet_id_key;
+ALTER TABLE sos_reports  ADD CONSTRAINT sos_reports_mesh_packet_id_key UNIQUE (mesh_packet_id);
 
 -- ── Realtime publications ─────────────────────────────────────────────────────
 -- Required for Supabase .on('postgres_changes', ...) subscriptions to fire.

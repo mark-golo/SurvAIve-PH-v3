@@ -1,15 +1,18 @@
 package ph.survaive.app
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.content.ContextCompat
 import com.getcapacitor.JSObject
@@ -19,6 +22,7 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
 import com.getcapacitor.annotation.PermissionCallback
+import com.getcapacitor.PermissionState
 import java.util.UUID
 
 /**
@@ -64,6 +68,13 @@ import java.util.UUID
             strings  = ["android.permission.NEARBY_WIFI_DEVICES"],
             alias    = "nearbyWifi",
         ),
+        // API 33+ (Android 13): POST_NOTIFICATIONS is a runtime-dangerous permission.
+        // Without it the foreground service notification is suppressed, and on Samsung/
+        // Xiaomi OEM the service is killed as if it were a background-restricted process.
+        Permission(
+            strings  = ["android.permission.POST_NOTIFICATIONS"],
+            alias    = "postNotifications",
+        ),
     ],
 )
 class MeshNetworkPlugin : Plugin() {
@@ -86,12 +97,56 @@ class MeshNetworkPlugin : Plugin() {
                 }
                 notifyListeners("meshPacketReceived", data)
             }
+            // Wire BLE broadcast-status callback so JS receives advertising_started /
+            // advertising_failed / awaiting_peers events via addListener("meshBroadcastStatus").
+            service.getBLEStrategy()?.onBroadcastStatus = { status, errorCode ->
+                val data = JSObject().apply {
+                    put("status", status)
+                    if (errorCode != 0) put("errorCode", errorCode)
+                }
+                notifyListeners("meshBroadcastStatus", data)
+            }
+            // Wire generic low-level event callback → JS "meshEvent" listener.
+            service.getBLEStrategy()?.onMeshEvent = { type, data ->
+                val jsData = JSObject().apply {
+                    put("eventType", type)
+                    data.forEach { (k, v) ->
+                        when (v) {
+                            null    -> {}
+                            is Int  -> put(k, v)
+                            is Long -> put(k, v)
+                            is Boolean -> put(k, v)
+                            else    -> put(k, v.toString())
+                        }
+                    }
+                }
+                notifyListeners("meshEvent", jsData)
+            }
+            // Wire relay event → JS "meshEvent" listener.
+            service.onRelayedPacket = { packet ->
+                notifyListeners("meshEvent", JSObject().apply {
+                    put("eventType", "sos_relayed")
+                    put("packetId", packet.id)
+                    put("hopCount", packet.hopCount)
+                    put("originDeviceId", packet.originDeviceId)
+                })
+            }
             pendingStartCall?.resolve(JSObject().put("success", true))
             pendingStartCall = null
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
             meshService = null
+            pendingStartCall?.reject("Mesh service disconnected unexpectedly")
+            pendingStartCall = null
+            // Android killed the service — it will be START_STICKY restarted. Rebind
+            // immediately so meshService is restored as soon as the service re-creates.
+            // Without this, JS _isStarted stays true but all broadcast() calls return
+            // {success:false, transport:"not started"} silently.
+            val rebindIntent = Intent(context, MeshNetworkService::class.java).apply {
+                action = MeshNetworkService.ACTION_START
+            }
+            try { context.bindService(rebindIntent, this, Context.BIND_AUTO_CREATE) } catch (_: Exception) {}
         }
     }
 
@@ -104,12 +159,40 @@ class MeshNetworkPlugin : Plugin() {
 
     @PermissionCallback
     private fun startMeshAfterPermissions(call: PluginCall) {
+        // Verify that all critical permissions were actually granted
+        val requiredAliases = mutableListOf("bluetoothScan", "bluetoothAdvertise", "bluetoothConnect")
+        // On API ≤ 30 (Android 11), BLE scan requires ACCESS_FINE_LOCATION even when
+        // BLUETOOTH_SCAN is granted, because the pre-31 BT stack enforces it.
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) requiredAliases.add("location")
+        val deniedAliases = requiredAliases.filter { getPermissionState(it) != PermissionState.GRANTED }
+        if (deniedAliases.isNotEmpty()) {
+            call.reject("Mesh requires Bluetooth permissions. Denied: $deniedAliases")
+            return
+        }
+
         pendingStartCall = call
         val intent = Intent(context, MeshNetworkService::class.java).apply {
             action = MeshNetworkService.ACTION_START
         }
         ContextCompat.startForegroundService(context, intent)
         context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+
+        // Request battery optimization exemption so OEM battery managers (Samsung, Xiaomi,
+        // Huawei) cannot restrict or kill BLE scanning while the app is in the background.
+        // The foreground service + connectedDevice type provide Doze exemption, but OEM
+        // custom battery managers can still kill a service that lacks this exemption.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+            if (pm != null && !pm.isIgnoringBatteryOptimizations(context.packageName)) {
+                try {
+                    activity?.startActivity(
+                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                            data = Uri.parse("package:${context.packageName}")
+                        }
+                    )
+                } catch (_: Exception) {}
+            }
+        }
     }
 
     // ── @PluginMethod: stopMesh ───────────────────────────────────────────────────
@@ -138,7 +221,7 @@ class MeshNetworkPlugin : Plugin() {
         val payload = call.getString("payload") ?: "{}"
 
         val packet = MeshPacket(
-            id             = UUID.randomUUID().toString(),
+            id             = call.getString("id") ?: UUID.randomUUID().toString(),
             type           = type,
             payload        = payload,
             originDeviceId = deviceId(),
@@ -149,8 +232,32 @@ class MeshNetworkPlugin : Plugin() {
         call.resolve(
             JSObject()
                 .put("success",   success)
-                .put("transport", transport),
+                .put("transport", transport)
+                .put("packetId",  packet.id),
         )
+    }
+
+    // ── @PluginMethod: getPeers ───────────────────────────────────────────────────
+
+    @PluginMethod
+    fun getPeers(call: PluginCall) {
+        val service = meshService
+        if (service == null) {
+            call.resolve(JSObject().put("peers", com.getcapacitor.JSArray()))
+            return
+        }
+        val arr = com.getcapacitor.JSArray()
+        service.getPeers().forEach { peer ->
+            arr.put(JSObject().apply {
+                put("id",           peer["id"])
+                put("transport",    peer["transport"])
+                put("lastSeen",     peer["lastSeen"])
+                put("isRelaying",   peer["isRelaying"]   as? Boolean ?: false)
+                put("relayEnabled", peer["relayEnabled"] as? Boolean ?: true)
+                put("signal",       peer["signal"]       ?: 2)
+            })
+        }
+        call.resolve(JSObject().put("peers", arr))
     }
 
     // ── @PluginMethod: getStats ───────────────────────────────────────────────────
@@ -184,6 +291,7 @@ class MeshNetworkPlugin : Plugin() {
     // ── @PluginMethod: enableRadios ───────────────────────────────────────────────
 
     @PluginMethod
+    @SuppressLint("MissingPermission")
     fun enableRadios(call: PluginCall) {
         // Bluetooth — prompt or silently enable based on API level
         val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
@@ -212,6 +320,18 @@ class MeshNetworkPlugin : Plugin() {
             }
         }
 
+        call.resolve()
+    }
+
+    // ── @PluginMethod: setUserRole ────────────────────────────────────────────────
+
+    @PluginMethod
+    fun setUserRole(call: PluginCall) {
+        val role = call.getString("role", "device") ?: "device"
+        activity.getSharedPreferences("survaive_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putString("user_role", role)
+            .apply()
         call.resolve()
     }
 

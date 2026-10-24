@@ -8,7 +8,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { StatCard } from '../../components/ui/StatCard'
 import { NeonButton } from '../../components/ui/NeonButton'
 import api, { localFetch } from '../../lib/api'
-import { getNetworkOnline } from '../../lib/capacitor'
+import { getNetworkOnline, probeBackend, invalidateProbeCache, onNetworkChange } from '../../lib/capacitor'
 import { db } from '../../lib/db'
 import { useAuthStore } from '../../store/auth'
 import { supabase } from '../../lib/supabase'
@@ -121,7 +121,7 @@ export function CommandCenter() {
   const [selectedSOS, setSelectedSOS] = useState(null)
   const [weather, setWeather] = useState(null)
   const [weatherError, setWeatherError] = useState(false)
-  const [offlineMode, setOfflineMode] = useState(!getNetworkOnline())
+  const [offlineMode, setOfflineMode] = useState(false)
   const [snapshotAge, setSnapshotAge] = useState(null)
   const [showHistory,  setShowHistory]  = useState(false)
   const [dailyHistory, setDailyHistory] = useState(() => loadDailyHistory())
@@ -246,7 +246,7 @@ export function CommandCenter() {
         payload => {
           // New SOS submitted — re-sync to get RPC-computed fields (priority, name, minutes_ago)
           const r = payload.new
-          if (muni && r.municipality !== muni) return
+          if (muni && r.municipality !== null && r.municipality !== muni) return
           sync()
         }
       )
@@ -269,15 +269,39 @@ export function CommandCenter() {
 
   // Track online/offline transitions and auto-sync when connectivity returns
   useEffect(() => {
-    const goOnline  = () => { setOfflineMode(false); sync() }
+    const goOnline = async () => {
+      const reachable = await probeBackend()
+      if (reachable) { invalidateProbeCache(); setOfflineMode(false); sync() }
+    }
     const goOffline = () => setOfflineMode(true)
     window.addEventListener('online',  goOnline)
     window.addEventListener('offline', goOffline)
+    let capacitorHandle = null
+    const capSub = onNetworkChange(async connected => {
+      if (connected) {
+        const reachable = await probeBackend()
+        if (reachable) { invalidateProbeCache(); setOfflineMode(false); sync() }
+      } else {
+        setOfflineMode(true)
+      }
+    })
+    capSub.then(h => { capacitorHandle = h })
     return () => {
       window.removeEventListener('online',  goOnline)
       window.removeEventListener('offline', goOffline)
+      capacitorHandle?.remove()
     }
   }, [])
+
+  // Auto-recover every 30 s while offline
+  useEffect(() => {
+    if (!offlineMode) return
+    const id = setInterval(async () => {
+      const reachable = await probeBackend()
+      if (reachable) { invalidateProbeCache(); setOfflineMode(false); sync() }
+    }, 30_000)
+    return () => clearInterval(id)
+  }, [offlineMode])
 
   const sync = async () => {
     setSyncing(true)

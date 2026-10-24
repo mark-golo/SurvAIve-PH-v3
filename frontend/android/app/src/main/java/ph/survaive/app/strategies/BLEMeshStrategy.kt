@@ -1,5 +1,6 @@
 package ph.survaive.app.strategies
 
+import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.bluetooth.le.*
 import android.content.BroadcastReceiver
@@ -10,10 +11,13 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
-import android.provider.Settings
+import android.util.Log
+import org.json.JSONObject
 import ph.survaive.app.MeshPacket
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * BLEMeshStrategy — BLE GATT-based transport for the SurvAIve offline mesh.
@@ -27,25 +31,37 @@ import java.util.concurrent.CopyOnWriteArrayList
  *                   Cached devices are used as outbound write targets in [broadcast].
  *
  * ── Broadcast path ─────────────────────────────────────────────────────────────
- *  broadcast(packet) → for each cached peer → connect GATT → write to char → disconnect
+ *  broadcast(packet) → for each cached peer → connectAndWrite → requestMtu(512)
+ *                      → discoverServices → writeCharacteristic → disconnect
  *
- * ── Permissions required (declared in AndroidManifest.xml) ────────────────────
- *  Android 12+: BLUETOOTH_ADVERTISE, BLUETOOTH_CONNECT, BLUETOOTH_SCAN
- *  Android 11-: BLUETOOTH, BLUETOOTH_ADMIN
- *  Always:      ACCESS_FINE_LOCATION (required for BLE scan on all API levels)
+ * ── Key robustness invariants ──────────────────────────────────────────────────
+ *  1. Every GATT connection path that cannot complete a write calls gatt.disconnect()
+ *     so the connection slot is freed and the retry loop can attempt a fresh connect.
+ *  2. The 3s MTU timeout and onMtuChanged use getAndSet(true) so exactly one path
+ *     calls discoverServices() — no double-discovery race.
+ *  3. A 30s write-response watchdog disconnects and clears inFlightPacketIds if
+ *     onCharacteristicWrite never fires (e.g. server's sendResponse was skipped).
+ *  4. inFlightPacketIds prevents duplicate simultaneous GATT connections for the
+ *     same packet; auto-expires after 12s to unblock hung connections.
  */
+@SuppressLint("MissingPermission")
 class BLEMeshStrategy : MeshStrategy {
 
     override val name = "BLE"
 
     companion object {
-        // Randomly generated UUIDs unique to SurvAIve PH — do not change after deploy
         val SERVICE_UUID: UUID = UUID.fromString("12345678-0000-1000-8000-00805f9b34fb")
         val CHAR_UUID: UUID    = UUID.fromString("12345678-0001-1000-8000-00805f9b34fb")
         private const val MAX_CACHED_PEERS = 20
+        private const val TAG = "BLEMesh"
+        private const val COMPANY_ID = 0x1234
+        private val STATUS_TO_CODE = mapOf("trapped" to 1, "injured" to 2, "rescue" to 3)
+        private val CODE_TO_STATUS = mapOf(1 to "trapped", 2 to "injured", 3 to "rescue")
+        // XOR mask applied to lat/lng before encoding into the BLE beacon payload.
+        // Prevents passive decoding of GPS coordinates by commodity BLE scanners (obfuscation, not encryption).
+        private const val GEO_XOR = 0x4B4E4750.toInt()  // "KNGP" as 32-bit mask
     }
 
-    // Peers discovered by the BLE scanner — used as outbound write targets
     private val discoveredPeers = CopyOnWriteArrayList<BluetoothDevice>()
 
     private var gattServer: BluetoothGattServer? = null
@@ -56,6 +72,119 @@ class BLEMeshStrategy : MeshStrategy {
     private var onPacketReceived: ((MeshPacket) -> Unit)? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    // Prevents duplicate simultaneous GATT connections for the same packet.
+    // Auto-expires after 12s so a hung connection never permanently blocks retries.
+    private val inFlightPacketIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    // Deduplicates passive beacon receives: onScanResult fires every ~100–500ms for
+    // the same in-range beacon; only the first seen ID is forwarded to onPacketReceived.
+    // FIFO-bounded: evicts the oldest insertion once capacity exceeds 256.
+    private val seenBeaconIds: MutableSet<String> = java.util.Collections.synchronizedSet(
+        java.util.Collections.newSetFromMap(
+            object : java.util.LinkedHashMap<String, Boolean>(256 + 1, 0.75f, false) {
+                override fun removeEldestEntry(e: Map.Entry<String, Boolean>) = size > 256
+            }
+        )
+    )
+
+    // Buffers ATT Prepare Write chunks per device for long-write reassembly in onExecuteWrite.
+    // Key = device address, value = ordered map of byteOffset → chunk bytes.
+    private val preparedWriteBuffers = ConcurrentHashMap<String, java.util.TreeMap<Int, ByteArray>>()
+
+    // Records the timestamp (ms) when each peer was last seen in a scan result.
+    private val peerLastSeen = ConcurrentHashMap<String, Long>()
+
+    // Maps BLE MAC address → originDeviceId (6-char hex) so getPeers() can look
+    // up forwardedCount by the same key used in handleIncomingPacket.
+    private val addressToOriginId = ConcurrentHashMap<String, String>()
+
+    // Called by MeshNetworkService to remove the packet from pendingPackets when
+    // onCharacteristicWrite(GATT_SUCCESS) confirms the write actually landed.
+    var onWriteConfirmed: ((packetId: String) -> Unit)? = null
+
+    // Stores the packet ID of the beacon being advertised; consumed by onStartSuccess.
+    // null means no beacon-confirmed-write is pending (idle or GATT-only path).
+
+    // Tracks whether BLE advertising is currently active.
+    // Guards startAdvertising() against re-entrancy: onServiceAdded and updateBeacon()
+    // both post startAdvertising() to the main thread; without this flag the second
+    // call creates a NEW advertiseCallback, gets ADVERTISE_FAILED_ALREADY_STARTED,
+    // and leaves advertiseCallback pointing at the dead callback so stopAdvertising()
+    // can never cancel the running slot.
+    private var _isAdvertising = false
+
+    // Status callback — notifies JS of advertising_started / advertising_failed / awaiting_peers.
+    // Set from MeshNetworkPlugin after binding; null in tests / before bind.
+    var onBroadcastStatus: ((status: String, errorCode: Int) -> Unit)? = null
+
+    // Buffer for mesh events fired before onMeshEvent is wired (service starts before plugin binds).
+    // Drained immediately when onMeshEvent is first assigned. Cap at 10 to avoid OOM.
+    private val pendingMeshEvents = ArrayDeque<Pair<String, Map<String, Any?>>>()
+
+    // Generic low-level event callback — notifies JS of peer_discovered,
+    // connection_established, peer_disconnected, sos_transmitted, transmission_failed, retry_attempted.
+    var onMeshEvent: ((type: String, data: Map<String, Any?>) -> Unit)? = null
+        set(value) {
+            field = value
+            if (value != null) {
+                // Post drain with 300ms delay so call.resolve() fires first (MeshNetworkPlugin line 117),
+                // giving the JS .then() handler time to call addListener('meshEvent') before events arrive.
+                mainHandler.postDelayed({
+                    val cb = field ?: return@postDelayed
+                    val buffered = synchronized(pendingMeshEvents) { pendingMeshEvents.toList().also { pendingMeshEvents.clear() } }
+                    buffered.forEach { (type, data) -> cb.invoke(type, data) }
+                }, 300L)
+            }
+        }
+
+    // Fires when a genuinely new BLE peer is added to discoveredPeers.
+    // Wired in MeshNetworkService to trigger an immediate flushPending() instead of waiting 3s.
+    var onNewPeerDiscovered: ((android.bluetooth.BluetoothDevice) -> Unit)? = null
+
+    private fun fireMeshEvent(type: String, data: Map<String, Any?> = emptyMap()) {
+        val cb = onMeshEvent
+        if (cb != null) {
+            cb.invoke(type, data)
+        } else {
+            synchronized(pendingMeshEvents) {
+                if (pendingMeshEvents.size < 10) pendingMeshEvents.addLast(Pair(type, data))
+            }
+        }
+    }
+
+    // Current SOS/ACK beacon payload (20 bytes) broadcast in the main ADV_IND (connectable) packet.
+    // Passively received by all nearby scanners — no SCAN_REQ or GATT connection needed.
+    private var currentBeacon: ByteArray? = null
+
+    // Exponential backoff delay for scan retries (5 s → 10 s → 20 s → 30 s cap).
+    private var scanRetryDelayMs = 5_000L
+
+    // Periodic scan restart every 30s to counteract Android BLE scan throttling.
+    // Android 7+ shrinks SCAN_MODE_LOW_LATENCY windows after ~30s of low activity;
+    // restarting the scan forces a fresh full-window cycle so new beacons are detected.
+    private val _scanRestartHandler = Handler(Looper.getMainLooper())
+    private val _scanRestartRunnable = object : Runnable {
+        override fun run() {
+            val ctx = _context ?: return
+            if (isAvailable) {
+                Log.d(TAG, "Periodic BLE scan restart (8s)")
+                val cutoff = System.currentTimeMillis() - 60_000L
+                val expired = discoveredPeers.filter { (peerLastSeen[it.address] ?: 0L) < cutoff }
+                if (expired.isNotEmpty()) {
+                    discoveredPeers.removeAll(expired)
+                    expired.forEach { peer ->
+                        peerLastSeen.remove(peer.address)
+                        addressToOriginId.remove(peer.address)
+                    }
+                    Log.d(TAG, "Evicted ${expired.size} stale peer(s)")
+                }
+                try { scanner?.stopScan(scanCallback) } catch (_: Exception) {}
+                startScanning(ctx)
+            }
+            _scanRestartHandler.postDelayed(this, 8_000L)
+        }
+    }
+
     override val isAvailable: Boolean
         get() {
             val bm = _context?.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
@@ -63,6 +192,12 @@ class BLEMeshStrategy : MeshStrategy {
         }
 
     override val peerCount: Int get() = discoveredPeers.size
+
+    fun getDiscoveredPeers(): List<BluetoothDevice> = discoveredPeers.toList()
+
+    fun getPeerLastSeen(address: String): Long = peerLastSeen[address] ?: System.currentTimeMillis()
+
+    fun getOriginIdForAddress(mac: String): String? = addressToOriginId[mac]
 
     private var _context: Context? = null
 
@@ -77,13 +212,22 @@ class BLEMeshStrategy : MeshStrategy {
                 val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1)
                 val c = _context ?: return
                 if (state == BluetoothAdapter.STATE_ON) {
-                    startGattServer(c); startAdvertising(c); startScanning(c)
+                    startGattServer(c); startScanning(c)
+                    // Reschedule the periodic scan-restart runnable that fights OEM BLE scan
+                    // throttling (Samsung/Xiaomi shrink LOW_LATENCY windows after ~30s of inactivity).
+                    // Without this the runnable is permanently dead after the first BT cycle.
+                    _scanRestartHandler.postDelayed(_scanRestartRunnable, 8_000L)
                 } else if (state == BluetoothAdapter.STATE_OFF) {
+                    _isAdvertising = false
+                    _scanRestartHandler.removeCallbacks(_scanRestartRunnable)
                     scanner?.stopScan(scanCallback)
                     advertiser?.stopAdvertising(advertiseCallback)
                     gattServer?.close()
                     gattServer = null; scanner = null; advertiser = null
                     discoveredPeers.clear()
+                    // Notify JS that the radio is down so _isStarted can be reset and the
+                    // next broadcast() call can re-invoke ensureStarted() after BT is re-enabled.
+                    fireMeshEvent("bt_disabled", emptyMap())
                 }
             }
         }
@@ -91,13 +235,15 @@ class BLEMeshStrategy : MeshStrategy {
             btReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
         )
 
-        if (!isAvailable) return  // BT off — receiver handles startup when BT turns on
+        if (!isAvailable) return
         startGattServer(context)
-        startAdvertising(context)
         startScanning(context)
+        _scanRestartHandler.postDelayed(_scanRestartRunnable, 8_000L)
     }
 
     override fun stop() {
+        _isAdvertising = false
+        _scanRestartHandler.removeCallbacks(_scanRestartRunnable)
         scanner?.stopScan(scanCallback)
         advertiser?.stopAdvertising(advertiseCallback)
         gattServer?.close()
@@ -105,6 +251,7 @@ class BLEMeshStrategy : MeshStrategy {
         scanner    = null
         advertiser = null
         discoveredPeers.clear()
+        seenBeaconIds.clear()
         try { _context?.unregisterReceiver(btReceiver) } catch (_: Exception) {}
         btReceiver = null
     }
@@ -114,145 +261,747 @@ class BLEMeshStrategy : MeshStrategy {
     private fun startGattServer(context: Context) {
         val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
 
-        gattServer = bm.openGattServer(context, object : BluetoothGattServerCallback() {
+        // Fix 2: close any existing server before opening a new one.
+        // Without this, retries (onServiceAdded failure) and BT-state-change restarts
+        // accumulate ghost BluetoothGattServer instances. A ghost server can intercept
+        // the sender's GATT connection before the active server's service is registered,
+        // causing getService(SERVICE_UUID) to return null on the sender → write fails.
+        gattServer?.close()
+        gattServer = null
 
-            override fun onCharacteristicWriteRequest(
-                device: BluetoothDevice,
-                requestId: Int,
-                characteristic: BluetoothGattCharacteristic,
-                preparedWrite: Boolean,
-                responseNeeded: Boolean,
-                offset: Int,
-                value: ByteArray,
-            ) {
-                if (responseNeeded) {
-                    gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
-                }
-                // Parse packet on the calling thread (already off main thread)
-                val json = value.toString(Charsets.UTF_8)
-                try {
-                    val packet = MeshPacket.fromJson(json)
-                    onPacketReceived?.invoke(packet)
-                } catch (_: Exception) {
-                    // Malformed packet — discard
-                }
-            }
-        })
+        try {
+            gattServer = bm.openGattServer(context, object : BluetoothGattServerCallback() {
 
-        // Register the SurvAIve primary service + writable characteristic
+                override fun onServiceAdded(status: Int, service: BluetoothGattService) {
+                    if (status == BluetoothGatt.GATT_SUCCESS) {
+                        Log.d(TAG, "GATT service registered — starting advertising")
+                        // startAdvertising must be called from the main thread on many OEM stacks.
+                        // Guard: if an SOS beacon is already being advertised (e.g. updateBeacon()
+                        // fired before onServiceAdded), skip — we must not clobber the running ad.
+                        mainHandler.post { if (!_isAdvertising) startAdvertising(context) }
+                    } else {
+                        Log.e(TAG, "GATT addService failed: $status — retrying in 2s")
+                        mainHandler.postDelayed({ startGattServer(context) }, 2000L)
+                    }
+                }
+
+                override fun onCharacteristicWriteRequest(
+                    device: BluetoothDevice,
+                    requestId: Int,
+                    characteristic: BluetoothGattCharacteristic,
+                    preparedWrite: Boolean,
+                    responseNeeded: Boolean,
+                    offset: Int,
+                    value: ByteArray,
+                ) {
+                    val srv = gattServer
+                    if (preparedWrite) {
+                        val buf = preparedWriteBuffers.getOrPut(device.address) { java.util.TreeMap() }
+                        synchronized(buf) {
+                            if (buf.size >= 50) {
+                                Log.w(TAG, "Prepared write buffer overflow from ${device.address} — discarding")
+                                preparedWriteBuffers.remove(device.address)
+                                if (responseNeeded && srv != null)
+                                    srv.sendResponse(device, requestId, BluetoothGatt.GATT_INVALID_ATTRIBUTE_LENGTH, offset, null)
+                                return
+                            }
+                            if (responseNeeded && srv != null) {
+                                srv.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+                            }
+                            // Buffer this chunk at its byte offset; full payload assembled in onExecuteWrite.
+                            // synchronized(buf): TreeMap is not thread-safe; on OEM BT stacks (Samsung Exynos)
+                            // concurrent prepare-write callbacks from the same device may race here.
+                            buf[offset] = value
+                        }
+                    } else {
+                        if (responseNeeded && srv != null) {
+                            srv.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+                        }
+                        processIncomingPayload(value, device.address)
+                    }
+                }
+
+                override fun onExecuteWrite(device: BluetoothDevice, requestId: Int, execute: Boolean) {
+                    val srv = gattServer
+                    srv?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
+                    val chunks = preparedWriteBuffers.remove(device.address)
+                    if (execute && chunks != null && chunks.isNotEmpty()) {
+                        val assembled: ByteArray
+                        synchronized(chunks) {
+                            val lastEntry = chunks.entries.last()
+                            val totalSize = lastEntry.key + lastEntry.value.size
+                            assembled = ByteArray(totalSize)
+                            for ((offset, bytes) in chunks) {
+                                bytes.copyInto(assembled, offset)
+                            }
+                        }
+                        processIncomingPayload(assembled, device.address)
+                    }
+                }
+
+                override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
+                    // Clean up stale prepare-write buffer when client drops before onExecuteWrite.
+                    if (newState == android.bluetooth.BluetoothProfile.STATE_DISCONNECTED) {
+                        preparedWriteBuffers.remove(device.address)
+                    }
+                }
+            })
+        } catch (e: SecurityException) {
+            Log.e(TAG, "openGattServer denied — BLUETOOTH_CONNECT not granted: ${e.message}")
+            // Fire a status event so the JS layer can surface this failure rather than
+            // silently believing the mesh started successfully.
+            onBroadcastStatus?.invoke("gatt_server_failed", -1)
+            return
+        }
+
         val service = BluetoothGattService(
             SERVICE_UUID,
             BluetoothGattService.SERVICE_TYPE_PRIMARY,
         )
         val char = BluetoothGattCharacteristic(
             CHAR_UUID,
-            BluetoothGattCharacteristic.PROPERTY_WRITE or
-                    BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE,
+            BluetoothGattCharacteristic.PROPERTY_WRITE,
             BluetoothGattCharacteristic.PERMISSION_WRITE,
         )
         service.addCharacteristic(char)
         gattServer?.addService(service)
+        Log.d(TAG, "GATT server open — waiting for onServiceAdded before advertising")
     }
 
-    // ── BLE Advertising — makes this device discoverable ─────────────────────────
+    // ── BLE Advertising ───────────────────────────────────────────────────────────
 
     private fun startAdvertising(context: Context) {
-        val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        advertiser = bm.adapter.bluetoothLeAdvertiser ?: return
-
-        val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-            .setConnectable(true)
-            .setTimeout(0)
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
-            .build()
-
-        val data = AdvertiseData.Builder()
-            .setIncludeDeviceName(false)
-            .addServiceUuid(ParcelUuid(SERVICE_UUID))
-            .build()
-
-        advertiseCallback = object : AdvertiseCallback() {
-            override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {}
-            override fun onStartFailure(errorCode: Int) {}
+        // Race guard: if BT stack is already advertising, a second startAdvertising() call
+        // would get ADVERTISE_FAILED_ALREADY_STARTED (3), create a NEW dead callback, and
+        // leave advertiseCallback pointing at the dead one so stopAdvertising() stops nothing.
+        if (_isAdvertising) {
+            Log.d(TAG, "startAdvertising skipped — already advertising")
+            return
         }
+
+        val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        advertiser = bm.adapter.bluetoothLeAdvertiser
+        if (advertiser == null) {
+            Log.e(TAG, "bluetoothLeAdvertiser is null — BLUETOOTH_ADVERTISE may not be granted")
+            return
+        }
+
+        // Create the callback only once and reuse it. Recreating it on every call means
+        // advertiseCallback can point at a dead object if a second concurrent call fails,
+        // permanently breaking stopAdvertising().
+        if (advertiseCallback == null) {
+            advertiseCallback = object : AdvertiseCallback() {
+                override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
+                    _isAdvertising = true
+                    Log.d(TAG, "BLE advertising started")
+                    onBroadcastStatus?.invoke("advertising_started", 0)
+                }
+                override fun onStartFailure(errorCode: Int) {
+                    _isAdvertising = false
+                    Log.e(TAG, "BLE advertise failed: $errorCode")
+                    if (errorCode == ADVERTISE_FAILED_ALREADY_STARTED || errorCode == ADVERTISE_FAILED_TOO_MANY_ADVERTISERS) {
+                        val delay = if (errorCode == ADVERTISE_FAILED_ALREADY_STARTED) 600L else 2000L
+                        Log.w(TAG, "Advertise error $errorCode — retrying in ${delay}ms")
+                        mainHandler.postDelayed({ _context?.let { startAdvertising(it) } }, delay)
+                        return
+                    }
+                    onBroadcastStatus?.invoke("advertising_failed", errorCode)
+                }
+            }
+        }
+
+        val beacon = currentBeacon
         try {
-            advertiser?.startAdvertising(settings, data, advertiseCallback!!)
-        } catch (_: SecurityException) {}
+            if (beacon != null) {
+                // SOS/ACK active: beacon delivery via manufacturer data + connectable advertising.
+                // The 20-byte beacon is embedded in manufacturer-specific AD type 0xFF so that
+                // ALL nearby BLE scanners receive the SOS/ACK directly from the advertisement
+                // without any GATT connection — onScanResult decodes it via decodeBeacon().
+                //
+                // PDU budget (BLE 4.2 AdvData = 31 bytes max):
+                //   20-byte beacon: ManufData overhead (4) + beacon (20) = 24 bytes.
+                //   FLAGS mandatory for connectable (3 bytes) → total 27 bytes.
+                //   OEM firmware may append TX-Power-Level (3 bytes) → 30 bytes, still fits.
+                //   setIncludeTxPowerLevel(false) is explicit so we never request TxPwr ourselves.
+                //
+                // Connectable is required so Device B can GATT-write ACKs back to Device A.
+                // Without connectable, ACKs can only arrive via Device B's own beacon path,
+                // but the relay SOS beacon on Device B takes priority — ACKs would be lost.
+                //
+                // Fix 1: Move 20-byte SOS beacon to MAIN ADV (not SCAN_RSP).
+                //
+                // Problem: On Samsung/Qualcomm/Xiaomi OEM stacks, scanRecord
+                // .getManufacturerSpecificData(COMPANY_ID) returns null for manufacturer data
+                // that is in the SCAN_RSP rather than the main ADV_IND. This means the receiver's
+                // onScanResult beacon-decode block is never entered (mfgData == null check fails)
+                // and the SOS is silently lost even though the peer is discovered.
+                //
+                // PDU budget with beacon in main ADV:
+                //   FLAGS(3) + ManufData overhead(4) + beacon(20) = 27 B ≤ 31 B limit.
+                //   With OEM TX-Power append(3): 30 B ≤ 31 B — still safe.
+                //
+                // SERVICE_UUID moves to SCAN_RSP (18 B), used as an enhanced secondary filter
+                // on OEM stacks that DO aggregate scan responses correctly.
+                val settings = AdvertiseSettings.Builder()
+                    .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+                    .setConnectable(true)       // connectable: allows GATT ACK writes back to this device
+                    .setTimeout(0)
+                    .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+                    .build()
+                val data = AdvertiseData.Builder()
+                    .setIncludeDeviceName(false)
+                    .setIncludeTxPowerLevel(false)
+                    .addManufacturerData(COMPANY_ID, beacon)    // beacon in main ADV — received on ALL OEM stacks
+                    .build()
+                // Scan response requires API 26 (Android 8.0); minSdk = 24 so guard it.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val scanResponse = AdvertiseData.Builder()
+                        .setIncludeDeviceName(false)
+                        .addServiceUuid(ParcelUuid(SERVICE_UUID))   // UUID in SCAN_RSP — enhanced filter bonus
+                        .build()
+                    advertiser?.startAdvertising(settings, data, scanResponse, advertiseCallback!!)
+                } else {
+                    // API 24–25: no SCAN_RSP; beacon already in main ADV above.
+                    advertiser?.startAdvertising(settings, data, advertiseCallback!!)
+                }
+                Log.d(TAG, "BLE advertising started (SOS/ACK connectable beacon in main ADV, ${beacon.size}B manuf data)")
+            } else {
+                // Idle: connectable advertising for GATT discovery.
+                // A 1-byte alive marker ensures our manufacturer-data ScanFilter matches
+                // this device even before any SOS is sent.
+                val settings = AdvertiseSettings.Builder()
+                    .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+                    .setConnectable(true)
+                    .setTimeout(0)
+                    .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
+                    .build()
+                val data = AdvertiseData.Builder()
+                    .setIncludeDeviceName(false)
+                    .setIncludeTxPowerLevel(false)
+                    .addServiceUuid(ParcelUuid(SERVICE_UUID))
+                    .addManufacturerData(COMPANY_ID, byteArrayOf(0x00))
+                    .build()
+                advertiser?.startAdvertising(settings, data, advertiseCallback!!)
+                Log.d(TAG, "BLE advertising started (idle, connectable, SERVICE_UUID + alive marker)")
+            }
+        } catch (e: SecurityException) {
+            Log.e(TAG, "startAdvertising denied — BLUETOOTH_ADVERTISE not granted: ${e.message}")
+        }
     }
 
-    // ── BLE Scanner — discovers nearby SurvAIve devices ──────────────────────────
+    // ── BLE Scanner ───────────────────────────────────────────────────────────────
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
-            // Software UUID filter — avoids broken HW filter on many chipsets (MediaTek, older Qualcomm)
-            val uuids = result.scanRecord?.serviceUuids
-            if (uuids == null || uuids.none { it.uuid == SERVICE_UUID }) return
             val device = result.device
+            // Software filter: accept only SurvAIve devices — those advertising SERVICE_UUID or
+            // company ID 0x1234. Both idle (UUID+mfgData) and SOS (UUID-only) advertising include
+            // SERVICE_UUID in the main ADV. Hardware filter dropped: SERVICE_UUID filter caused
+            // silent scan failures on some OEM BLE chips; emptyList() + software check is reliable.
+            val scanRecord = result.scanRecord
+            val serviceUuids = scanRecord?.serviceUuids
+            val mfgData = scanRecord?.getManufacturerSpecificData(COMPANY_ID)
+            if ((serviceUuids == null || serviceUuids.none { it.uuid == SERVICE_UUID }) && mfgData == null) return
+            peerLastSeen[device.address] = System.currentTimeMillis()
             if (discoveredPeers.none { it.address == device.address }) {
                 if (discoveredPeers.size >= MAX_CACHED_PEERS) discoveredPeers.removeAt(0)
                 discoveredPeers.add(device)
+                Log.d(TAG, "New peer discovered: ${device.address} (total: ${discoveredPeers.size})")
+                onNewPeerDiscovered?.invoke(device)
+                fireMeshEvent("peer_discovered", mapOf("deviceAddress" to device.address, "peerCount" to discoveredPeers.size))
+            }
+            // Passive beacon decode: accept >= 18 bytes (all critical fields present; barangay
+            // bytes 18–23 may be absent if OEM firmware truncated the PDU).
+            if (mfgData != null && mfgData.size >= 18) {
+                val packet = decodeBeacon(mfgData, device.address)
+                if (packet != null) {
+                    addressToOriginId[device.address] = packet.originDeviceId
+                    // seenBeaconIds dedup: onScanResult fires every ~100–500ms for the same
+                    // in-range beacon. Only the first decoded ID is forwarded to onPacketReceived;
+                    // subsequent identical beacons are silently dropped at this layer.
+                    if (seenBeaconIds.add(packet.id)) {
+                        // Cap seenBeaconIds to prevent unbounded growth on long-running sessions.
+                        if (seenBeaconIds.size > 200) {
+                            val it = seenBeaconIds.iterator()
+                            var pruned = 0
+                            while (it.hasNext() && pruned < 50) { it.next(); it.remove(); pruned++ }
+                        }
+                        Log.d(TAG, "Beacon received from ${device.address}: type=${packet.type} hops=${packet.hopCount}")
+                        fireMeshEvent("beacon_decoded", mapOf(
+                            "deviceAddress" to device.address,
+                            "packetType"    to packet.type,
+                            "packetId"      to packet.id,
+                            "hopCount"      to packet.hopCount,
+                            "originId"      to packet.originDeviceId,
+                        ))
+                        onPacketReceived?.invoke(packet)
+                    }
+                }
             }
         }
-        override fun onScanFailed(errorCode: Int) {}
+        override fun onScanFailed(errorCode: Int) {
+            Log.e(TAG, "BLE scan failed (code=$errorCode)")
+            fireMeshEvent("scan_failed", mapOf("errorCode" to errorCode))
+            if (errorCode == SCAN_FAILED_ALREADY_STARTED) return  // scanner is still running
+            val ctx = _context ?: return
+            mainHandler.postDelayed({
+                Log.d(TAG, "BLE scan retry after failure (code=$errorCode, backoff=${scanRetryDelayMs}ms)")
+                startScanning(ctx)
+                scanRetryDelayMs = (scanRetryDelayMs * 2).coerceAtMost(30_000L)
+            }, scanRetryDelayMs)
+        }
     }
 
     private fun startScanning(context: Context) {
         val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        scanner = bm.adapter.bluetoothLeScanner ?: return
+        scanner = bm.adapter.bluetoothLeScanner
+        if (scanner == null) {
+            // BT adapter not fully initialised yet (common when startMesh() races STATE_ON).
+            // Fire a diagnostic event and retry in 3s — do NOT give up permanently.
+            Log.e(TAG, "bluetoothLeScanner is null — BLUETOOTH_SCAN may not be granted; retrying in 3s")
+            fireMeshEvent("scanner_null", emptyMap())
+            mainHandler.postDelayed({ _context?.let { startScanning(it) } }, 3000L)
+            return
+        }
 
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
             .build()
 
         try {
-            scanner?.startScan(null, settings, scanCallback)  // null = no HW filter, check UUID in software
-        } catch (_: SecurityException) {}
+            // No hardware filter: SERVICE_UUID and manufacturer-data hardware filters both cause
+            // silent scan failures on some Samsung/Qualcomm OEM BLE chips. emptyList() (no
+            // hardware filter) is universally reliable. SERVICE_UUID software check in onScanResult
+            // isolates SurvAIve devices. Periodic restart every 30s counteracts Samsung/Xiaomi
+            // background scan throttle that reduces no-filter scans to OPPORTUNISTIC.
+            scanner?.startScan(emptyList(), settings, scanCallback)
+            scanRetryDelayMs = 5_000L
+            Log.d(TAG, "BLE scan started (no-filter, SERVICE_UUID software check)")
+            fireMeshEvent("scan_started", mapOf("mode" to "LOW_LATENCY", "filter" to "software-UUID"))
+        } catch (e: SecurityException) {
+            Log.e(TAG, "startScan denied — BLUETOOTH_SCAN not granted: ${e.message}")
+        }
     }
 
-    // ── Broadcast — write packet to each known peer ───────────────────────────────
+    // ── Broadcast ─────────────────────────────────────────────────────────────────
 
     override fun broadcast(packet: MeshPacket): Boolean {
-        if (discoveredPeers.isEmpty()) return false
-
-        val payload  = packet.toJson().toByteArray(Charsets.UTF_8)
-        var anySent  = false
-
-        // Connect to each cached peer and write the characteristic.
-        // This is fire-and-forget — we don't wait for GATT callbacks here.
-        for (peer in discoveredPeers.toList()) {
-            try {
-                peer.connectGatt(_context, false, object : BluetoothGattCallback() {
-                    override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-                        if (newState == BluetoothProfile.STATE_CONNECTED) {
-                            gatt.discoverServices()
-                        } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                            gatt.close()
-                        }
-                    }
-
-                    override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-                        val service = gatt.getService(SERVICE_UUID) ?: return gatt.disconnect()
-                        val char    = service.getCharacteristic(CHAR_UUID) ?: return gatt.disconnect()
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            gatt.writeCharacteristic(char, payload, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE)
-                        } else {
-                            @Suppress("DEPRECATION")
-                            char.value = payload
-                            @Suppress("DEPRECATION")
-                            gatt.writeCharacteristic(char)
-                        }
-                    }
-
-                    override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
-                        gatt.disconnect()
-                    }
-                })
-                anySent = true
-            } catch (_: Exception) {
-                // Skip this peer and continue
+        // Primary transport: advertisement beacon in main ADV_IND packet.
+        // Passively broadcast every ~100ms; all nearby scanners receive it without
+        // sending SCAN_REQ — no scan-response caching issues.
+        if (packet.type == "sos" || packet.type == "ack") {
+            // Both SOS and ACK beacons always update the advertising data.
+            // The prior "isSosRelay" guard blocked ACK beacons when a relay SOS was active,
+            // pushing ACKs to GATT-only (unreliable: STATUS_133, 2–5s delay). This kept
+            // ackLevel at 1 on the victim forever. The guard was unnecessary: Device C already
+            // deduplicated the relay SOS in seenBeaconIds, so briefly switching to an ACK
+            // beacon has no practical impact on Device C's ability to receive the relay.
+            updateBeacon(packet)
+            if (packet.type == "sos") {
+                fireMeshEvent("sos_transmitted", mapOf(
+                    "packetId" to packet.id,
+                    "hopCount" to packet.hopCount,
+                ))
             }
+            if (discoveredPeers.isEmpty()) {
+                onBroadcastStatus?.invoke("awaiting_peers", 0)
+                return true
+            }
+        } else {
+            if (discoveredPeers.isEmpty()) return false
         }
-        return anySent
+
+        // Belt-and-suspenders: also attempt a GATT write to discovered peers
+        if (inFlightPacketIds.contains(packet.id)) {
+            Log.d(TAG, "Packet ${packet.id.take(8)} already in-flight — skipping duplicate connect")
+            return true
+        }
+        inFlightPacketIds.add(packet.id)
+        mainHandler.postDelayed({ inFlightPacketIds.remove(packet.id) }, 12000L)
+
+        // Limit to 3 concurrent GATT connects — Android BLE supports 4-7 max.
+        // Beacon advertising already delivers to all nearby scanners passively.
+        for (peer in discoveredPeers.take(3)) {
+            mainHandler.post { connectAndWrite(peer, packet) }
+        }
+        return true
+    }
+
+    /**
+     * Full GATT client write flow with four layers of robustness:
+     *
+     *  Layer 1 — Connection retry: 2 retries at 1000ms for STATUS_133.
+     *  Layer 2 — MTU negotiation fallback: if requestMtu() returns false, proceed immediately.
+     *            3s timeout guards against onMtuChanged never firing. getAndSet ensures
+     *            exactly one of (timeout, callback) calls discoverServices().
+     *  Layer 3 — Write failure cleanup: any non-SUCCESS writeCharacteristic result calls
+     *            gatt.disconnect() so the connection slot is freed for the next retry.
+     *  Layer 4 — Write response watchdog: 30s timeout disconnects if onCharacteristicWrite
+     *            never fires (e.g. server's sendResponse skipped due to gattServer==null).
+     */
+    private fun connectAndWrite(peer: BluetoothDevice, packet: MeshPacket, retriesLeft: Int = 2) {
+        val ctx = _context ?: return
+        val payload = packet.toJson().toByteArray(Charsets.UTF_8)
+        Log.d(TAG, "connectAndWrite: payload=${payload.size}B to ${peer.address} (retries=$retriesLeft)")
+        onBroadcastStatus?.invoke("connecting", 0)
+
+        val mtuCallbackFired   = AtomicBoolean(false)
+        val writeCallbackFired = AtomicBoolean(false)
+
+        try {
+            peer.connectGatt(ctx, false, object : BluetoothGattCallback() {
+
+                override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+                    if (status != BluetoothGatt.GATT_SUCCESS) {
+                        Log.e(TAG, "GATT connect error: status=$status addr=${gatt.device.address}")
+                        // disconnect() before close() frees the connection slot on OEM stacks;
+                        // skipping it leaks phantom connections on Samsung/Qualcomm firmware.
+                        try { gatt.disconnect() } catch (_: Exception) {}
+                        gatt.close()
+                        if (retriesLeft > 0) {
+                            Log.d(TAG, "Retrying GATT connect to ${gatt.device.address} ($retriesLeft left)")
+                            fireMeshEvent("retry_attempted", mapOf("deviceAddress" to gatt.device.address, "packetId" to packet.id, "retriesLeft" to retriesLeft))
+                            mainHandler.postDelayed({ connectAndWrite(peer, packet, retriesLeft - 1) }, 1000L)
+                        } else {
+                            Log.e(TAG, "All retries exhausted for ${gatt.device.address}")
+                            fireMeshEvent("gatt_all_retries_failed", mapOf(
+                                "deviceAddress" to gatt.device.address,
+                                "packetId"      to packet.id,
+                                "status"        to status,
+                            ))
+                            inFlightPacketIds.remove(packet.id)
+                        }
+                        return
+                    }
+                    if (newState == BluetoothProfile.STATE_CONNECTED) {
+                        Log.d(TAG, "GATT connected to ${gatt.device.address} — requesting MTU 512")
+                        fireMeshEvent("connection_established", mapOf("deviceAddress" to gatt.device.address, "packetId" to packet.id))
+                        val mtuRequested = try { gatt.requestMtu(512) } catch (e: SecurityException) { false }
+                        if (!mtuRequested) {
+                            Log.w(TAG, "requestMtu returned false for ${gatt.device.address} — proceeding to discoverServices")
+                            mtuCallbackFired.set(true)
+                            gatt.discoverServices()
+                        } else {
+                            mainHandler.postDelayed({
+                                if (!mtuCallbackFired.getAndSet(true)) {
+                                    Log.w(TAG, "onMtuChanged timeout for ${gatt.device.address} — proceeding to discoverServices")
+                                    gatt.discoverServices()
+                                }
+                            }, 3000L)
+                        }
+                    } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                        fireMeshEvent("peer_disconnected", mapOf("deviceAddress" to gatt.device.address))
+                        gatt.close()
+                    }
+                }
+
+                override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+                    // getAndSet: if timeout already fired, this is a no-op (avoids double discoverServices)
+                    if (mtuCallbackFired.getAndSet(true)) return
+                    if (status == BluetoothGatt.GATT_SUCCESS) {
+                        Log.d(TAG, "MTU set to $mtu for ${gatt.device.address} (payload=${payload.size}B, max=${mtu - 3}B)")
+                        if (payload.size > mtu - 3) {
+                            // The write would be silently truncated or fail with GATT_ERROR on
+                            // devices that negotiate the BLE 4.x default 23-byte MTU. Abort here
+                            // and leave the packet in pendingPackets for the 3s retry cycle — by
+                            // then Android may have negotiated a larger MTU with a fresh connect.
+                            Log.e(TAG, "PAYLOAD TOO LARGE: ${payload.size}B > ${mtu - 3}B max write — aborting write, will retry")
+                            inFlightPacketIds.remove(packet.id)
+                            try { gatt.disconnect() } catch (_: Exception) {}
+                            gatt.close()
+                            return
+                        }
+                    } else {
+                        Log.w(TAG, "MTU negotiation failed (status=$status) for ${gatt.device.address} — using default 23B MTU")
+                        // Proceed; if payload exceeds 20B the write will fail, but discoverServices
+                        // must still be called to clean up the connection path.
+                    }
+                    gatt.discoverServices()
+                }
+
+                override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+                    if (status != BluetoothGatt.GATT_SUCCESS) {
+                        Log.e(TAG, "onServicesDiscovered failed: status=$status for ${gatt.device.address}")
+                        inFlightPacketIds.remove(packet.id)
+                        gatt.disconnect(); return
+                    }
+                    val service = gatt.getService(SERVICE_UUID)
+                    if (service == null) {
+                        Log.e(TAG, "Remote GATT service not found on ${gatt.device.address}")
+                        fireMeshEvent("transmission_failed", mapOf(
+                            "deviceAddress" to gatt.device.address,
+                            "packetId"      to packet.id,
+                            "errorCode"     to -1,
+                            "reason"        to "gatt_service_not_found",
+                            "transport"     to "BLE_GATT",
+                        ))
+                        inFlightPacketIds.remove(packet.id)
+                        gatt.disconnect(); return
+                    }
+                    val char = service.getCharacteristic(CHAR_UUID)
+                    if (char == null) {
+                        Log.e(TAG, "Remote GATT characteristic not found on ${gatt.device.address}")
+                        fireMeshEvent("transmission_failed", mapOf(
+                            "deviceAddress" to gatt.device.address,
+                            "packetId"      to packet.id,
+                            "errorCode"     to -2,
+                            "reason"        to "gatt_char_not_found",
+                            "transport"     to "BLE_GATT",
+                        ))
+                        inFlightPacketIds.remove(packet.id)
+                        gatt.disconnect(); return
+                    }
+
+                    // WRITE_TYPE_DEFAULT: server must call sendResponse; onCharacteristicWrite fires
+                    // only after server confirms receipt — ensures data was actually received.
+                    var writeStarted = false
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        val result = gatt.writeCharacteristic(char, payload, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+                        if (result != BluetoothStatusCodes.SUCCESS) {
+                            Log.e(TAG, "writeCharacteristic returned $result for ${gatt.device.address}")
+                            inFlightPacketIds.remove(packet.id)
+                            gatt.disconnect()   // free slot so retry can make a fresh connection
+                            return
+                        }
+                        writeStarted = true
+                    } else {
+                        @Suppress("DEPRECATION")
+                        char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                        @Suppress("DEPRECATION")
+                        char.value = payload
+                        @Suppress("DEPRECATION")
+                        val ok = gatt.writeCharacteristic(char)
+                        if (!ok) {
+                            Log.e(TAG, "writeCharacteristic returned false for ${gatt.device.address}")
+                            inFlightPacketIds.remove(packet.id)
+                            gatt.disconnect()   // free slot so retry can make a fresh connection
+                            return
+                        }
+                        writeStarted = true
+                    }
+
+                    // 30s watchdog: if onCharacteristicWrite never fires (server missed sendResponse),
+                    // force-disconnect so inFlightPacketIds is cleared and the retry loop can proceed.
+                    if (writeStarted) {
+                        mainHandler.postDelayed({
+                            if (!writeCallbackFired.getAndSet(true)) {
+                                Log.e(TAG, "GATT write response timeout for ${peer.address} — forcing disconnect")
+                                inFlightPacketIds.remove(packet.id)
+                                gatt.disconnect()
+                            }
+                        }, 30_000L)
+                    }
+                }
+
+                override fun onCharacteristicWrite(
+                    gatt: BluetoothGatt,
+                    characteristic: BluetoothGattCharacteristic,
+                    status: Int,
+                ) {
+                    writeCallbackFired.set(true)   // cancel the 30s watchdog
+                    if (status == BluetoothGatt.GATT_SUCCESS) {
+                        Log.d(TAG, "Write confirmed to ${gatt.device.address} — packet ${packet.id.take(8)} delivered")
+                        inFlightPacketIds.remove(packet.id)
+                        onWriteConfirmed?.invoke(packet.id)
+                        onBroadcastStatus?.invoke("sos_transmitted", 0)
+                        fireMeshEvent("sos_transmitted", mapOf("deviceAddress" to gatt.device.address, "packetId" to packet.id, "transport" to "BLE_GATT"))
+                    } else {
+                        Log.e(TAG, "Write failed: status=$status to ${gatt.device.address} — retry loop will re-send")
+                        inFlightPacketIds.remove(packet.id)
+                        fireMeshEvent("transmission_failed", mapOf("deviceAddress" to gatt.device.address, "packetId" to packet.id, "errorCode" to status, "transport" to "BLE_GATT"))
+                    }
+                    gatt.disconnect()
+                }
+            }, BluetoothDevice.TRANSPORT_LE)
+        } catch (e: SecurityException) {
+            Log.e(TAG, "connectGatt denied — BLUETOOTH_CONNECT not granted: ${e.message}")
+            inFlightPacketIds.remove(packet.id)
+        }
+    }
+
+    // ── BLE Advertisement Beacon encode/decode ────────────────────────────────────
+    //
+    // 20-byte binary format in the main ADV_IND (connectable) advertising packet
+    // (manufacturer-specific AD type 0xFF, company ID COMPANY_ID).
+    // Passively received by ALL nearby scanners — no SCAN_REQ, no GATT connection.
+    // Total PDU: FLAGS(3) + ManufData overhead(4) + 20-byte payload = 27 bytes.
+    // OEM TX-Power-Level append (3 bytes) → 30 bytes max — fits within 31-byte BLE limit.
+    //
+    // [0]    packet_type: 0x01=SOS, 0x02=ACK
+    // [1]    hop_count
+    // [2–5]  lat_int32 big-endian (lat×1e6)  [SOS] / zero [ACK]
+    // [6–9]  lng_int32 big-endian (lng×1e6)  [SOS] / zero [ACK]
+    // [10]   status_code [SOS: 0=sos,1=trapped,2=injured,3=rescue] / role [ACK: 0=device,1=responder,2=admin]
+    // [11]   people_count [SOS] / reserved=0 [ACK]
+    // [12–14] packet_id_3bytes: first 6 hex chars of packet UUID → 3 bytes
+    // [15–17] origin_id_3bytes: first 6 hex chars of ANDROID_ID → 3 bytes
+    // (barangay dropped from beacon to stay within PDU budget; still present in GATT payload)
+
+    private fun encodeSosBeacon(packet: MeshPacket): ByteArray? = try {
+        val inner = JSONObject(packet.payload)
+        val lat = ((inner.optDouble("la", inner.optDouble("lat", 0.0))) * 1e6).toInt()
+        val lng = ((inner.optDouble("lo", inner.optDouble("lng", 0.0))) * 1e6).toInt()
+        val statusStr = inner.optString("s", inner.optString("status", "")).lowercase()
+        val statusCode = (STATUS_TO_CODE[statusStr] ?: 0).toByte()
+        val people = inner.optInt("n", inner.optInt("people_count", 0)).coerceIn(0, 255).toByte()
+        val barangay = inner.optString("b", inner.optString("barangay", ""))
+            .take(6).toByteArray(Charsets.UTF_8).copyOf(6)
+        val idHex = when {
+            packet.id.startsWith("beacon-") -> packet.id.removePrefix("beacon-")
+            packet.id.startsWith("ack-")    -> packet.id.removePrefix("ack-")
+            else -> packet.id.replace("-", "")
+        }.take(6)
+        val idBytes = try { idHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray() } catch (_: Exception) { ByteArray(3) }
+        val originHex = packet.originDeviceId.replace("-", "").take(6)
+        val originBytes = try { originHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray() } catch (_: Exception) { ByteArray(3) }
+        // 20-byte beacon: drops 6-byte barangay field (bytes 18–23) to stay within BLE PDU.
+        // Barangay is still present in the GATT payload (no size limit) — only the passive
+        // advertisement beacon is trimmed. PDU = FLAGS(3) + ManufData(4+20) = 27 bytes, leaving
+        // 4 bytes headroom for OEM TX-Power-Level appends (3 bytes → 30 bytes total, fits 31B max).
+        val xLat = lat xor GEO_XOR
+        val xLng = lng xor GEO_XOR
+        ByteArray(20).also { b ->
+            b[0] = 0x01; b[1] = packet.hopCount.coerceIn(0, 255).toByte()
+            b[2] = (xLat shr 24 and 0xFF).toByte(); b[3] = (xLat shr 16 and 0xFF).toByte()
+            b[4] = (xLat shr  8 and 0xFF).toByte(); b[5] = (xLat        and 0xFF).toByte()
+            b[6] = (xLng shr 24 and 0xFF).toByte(); b[7] = (xLng shr 16 and 0xFF).toByte()
+            b[8] = (xLng shr  8 and 0xFF).toByte(); b[9] = (xLng        and 0xFF).toByte()
+            b[10] = statusCode; b[11] = people
+            idBytes.copyInto(b, 12, 0, minOf(idBytes.size, 3))
+            originBytes.copyInto(b, 15, 0, minOf(originBytes.size, 3))
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "encodeSosBeacon failed: ${e.message}")
+        null
+    }
+
+    private fun encodeAckBeacon(packet: MeshPacket): ByteArray? = try {
+        val inner = JSONObject(packet.payload)
+        val roleStr = inner.optString("rr", inner.optString("receiver_role", "device"))
+        val role: Byte = when (roleStr) { "responder" -> 1; "admin" -> 2; else -> 0 }
+        // Embed the SOS ID being ACKed (si field) so the victim can match it
+        val sosId = inner.optString("si", "").replace("beacon-", "").replace("-", "")
+        val idHex = if (sosId.length >= 6) sosId.take(6) else packet.id.replace("-", "").take(6)
+        val idBytes = try { idHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray() } catch (_: Exception) { ByteArray(3) }
+        val originHex = packet.originDeviceId.replace("-", "").take(6)
+        val originBytes = try { originHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray() } catch (_: Exception) { ByteArray(3) }
+        ByteArray(20).also { b ->
+            b[0] = 0x02; b[1] = packet.hopCount.coerceIn(0, 255).toByte()
+            b[10] = role
+            idBytes.copyInto(b, 12, 0, minOf(idBytes.size, 3))
+            originBytes.copyInto(b, 15, 0, minOf(originBytes.size, 3))
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "encodeAckBeacon failed: ${e.message}")
+        null
+    }
+
+    private fun decodeBeacon(bytes: ByteArray, sourceAddress: String): MeshPacket? {
+        if (bytes.size < 18) return null   // minimum: type+hop+lat+lng+status+people+id3+origin3
+        return try {
+            val type     = bytes[0]
+            val hopCount = bytes[1].toInt() and 0xFF
+            // and 0xFF: Kotlin Byte is signed; without the mask, values >= 0x80 are
+            // sign-extended to 8 hex chars ("ffffff84") instead of 2 ("84"), producing IDs
+            // like "beacon-550effffff84" that defeat both the dedup check and the self-origin
+            // check, causing the victim device to relay its own SOS and inflate forwardedCount.
+            val idHex    = bytes.slice(12..14).joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+            val packetId = "beacon-$idHex"
+            val originId = bytes.slice(15..17).joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+                .ifEmpty { sourceAddress.replace(":", "").take(6) }
+            when (type) {
+                0x01.toByte() -> {
+                    val lat = (((bytes[2].toInt() and 0xFF) shl 24) or
+                               ((bytes[3].toInt() and 0xFF) shl 16) or
+                               ((bytes[4].toInt() and 0xFF) shl  8) or
+                                (bytes[5].toInt() and 0xFF)) xor GEO_XOR
+                    val lng = (((bytes[6].toInt() and 0xFF) shl 24) or
+                               ((bytes[7].toInt() and 0xFF) shl 16) or
+                               ((bytes[8].toInt() and 0xFF) shl  8) or
+                                (bytes[9].toInt() and 0xFF)) xor GEO_XOR
+                    val statusCode = bytes[10].toInt() and 0xFF
+                    val people     = bytes[11].toInt() and 0xFF
+                    // barangay only in bytes 18–23; omit gracefully if OEM truncated the PDU
+                    val barangay   = if (bytes.size >= 24)
+                        bytes.slice(18..23).toByteArray().toString(Charsets.UTF_8).trimEnd('\u0000')
+                    else ""
+                    val statusStr  = CODE_TO_STATUS[statusCode] ?: "sos"
+                    val payload = JSONObject().apply {
+                        put("t", "sos")
+                        put("la", lat / 1e6)
+                        put("lo", lng / 1e6)
+                        put("s", statusStr)
+                        if (people > 0) put("n", people)
+                        if (barangay.isNotEmpty()) put("b", barangay)
+                    }.toString()
+                    MeshPacket(id = packetId, type = "sos", payload = payload,
+                               originDeviceId = originId, hopCount = hopCount)
+                }
+                0x02.toByte() -> {
+                    val roleCode = bytes[10].toInt() and 0xFF
+                    val role     = when (roleCode) { 1 -> "responder"; 2 -> "admin"; else -> "device" }
+                    val payload = JSONObject().apply {
+                        put("t", "ack")
+                        put("si", packetId)
+                        put("hcr", hopCount)
+                        put("rr", role)
+                    }.toString()
+                    MeshPacket(id = "ack-$idHex", type = "ack", payload = payload,
+                               originDeviceId = originId, hopCount = hopCount)
+                }
+                else -> null
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "decodeBeacon failed: ${e.message}")
+            null
+        }
+    }
+
+    fun updateBeacon(packet: MeshPacket) {
+        val ctx = _context ?: return
+        val beacon = when (packet.type) {
+            "sos" -> encodeSosBeacon(packet)
+            "ack" -> encodeAckBeacon(packet)
+            else  -> return
+        } ?: return
+        // Idempotency guard: skip the stop/restart cycle if we're already advertising
+        // the exact same beacon bytes. The flushPending() retry loop calls this every 3s,
+        // and constant stop/restart causes Samsung/Xiaomi BLE firmware to silently stop
+        // transmitting despite reporting onStartSuccess ("phantom success").
+        if (_isAdvertising && currentBeacon != null && currentBeacon!!.contentEquals(beacon)) {
+            Log.d(TAG, "updateBeacon: beacon unchanged and already advertising — skipping restart")
+            return
+        }
+        currentBeacon = beacon
+        Log.d(TAG, "updateBeacon: type=${packet.type} hopCount=${packet.hopCount} — restarting advertising")
+        mainHandler.post {
+            // Clear the flag BEFORE stopAdvertising so startAdvertising() in the postDelayed
+            // below isn't blocked by the guard. stopAdvertising is async; the 300ms gap lets
+            // the BT chip finish before the new startAdvertising call arrives.
+            _isAdvertising = false
+            try { advertiser?.stopAdvertising(advertiseCallback) } catch (_: Exception) {}
+            mainHandler.postDelayed({ startAdvertising(ctx) }, 500L)
+        }
+    }
+
+    private fun processIncomingPayload(value: ByteArray, senderAddress: String? = null) {
+        val json = value.toString(Charsets.UTF_8)
+        fireMeshEvent("gatt_packet_received", mapOf("size" to value.size, "sender" to (senderAddress ?: "unknown")))
+        try {
+            val packet = MeshPacket.fromJson(json)
+            if (packet == null) {
+                fireMeshEvent("gatt_packet_parse_failed", mapOf("size" to value.size))
+                Log.w(TAG, "processIncomingPayload: malformed/incomplete packet (${value.size}B) — discarded")
+                return
+            }
+            // Populate address→originId mapping so getPeers() relay counter resolves correctly.
+            // This is the only reliable path since SOS advertising carries no manufacturer data.
+            if (senderAddress != null) addressToOriginId[senderAddress] = packet.originDeviceId
+            onPacketReceived?.invoke(packet)
+        } catch (_: Exception) {
+            fireMeshEvent("gatt_packet_parse_failed", mapOf("size" to value.size))
+            Log.w(TAG, "processIncomingPayload: unexpected error parsing packet (${value.size}B) — discarded")
+        }
     }
 }

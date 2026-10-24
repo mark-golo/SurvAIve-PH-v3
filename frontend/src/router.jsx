@@ -19,7 +19,7 @@ import { ResponderHome }     from './pages/responder/ResponderHome'
 import { VictimQueue }       from './pages/responder/VictimQueue'
 import { RescueDetail }      from './pages/responder/RescueDetail'
 import { FieldMap }          from './pages/responder/FieldMap'
-import { MeshRelay }         from './pages/responder/MeshRelay'
+import { MeshCenter }        from './pages/responder/MeshCenter'
 import { ResponderSettings } from './pages/responder/ResponderSettings'
 
 // Admin pages
@@ -35,14 +35,17 @@ import { EvacuationCenters } from './pages/admin/EvacuationCenters'
 import { SITREP }                 from './pages/admin/SITREP'
 import { EmergencyReport }        from './pages/admin/EmergencyReport'
 import { AdminSettings }          from './pages/admin/AdminSettings'
+import AuditLogs                  from './pages/admin/AuditLogs'
 import { BarangaysComparison }    from './pages/admin/BarangaysComparison'
 
-// Super admin pages
-import { ProvincialDashboard }  from './pages/superadmin/ProvincialDashboard'
-import { StaffManagement as SuperAdminStaffManagement } from './pages/superadmin/StaffManagement'
-import { ProvincialSITREP } from './pages/superadmin/ProvincialSITREP'
-import { MunicipalityComparison } from './pages/superadmin/MunicipalityComparison'
-import { SuperAdminSettings }     from './pages/superadmin/SuperAdminSettings'
+// Agency pages
+import { AgencyLayout }           from './pages/agency/AgencyLayout'
+import { AgencyCommandCenter }    from './pages/agency/AgencyCommandCenter'
+import { AgencyVictimTable }      from './pages/agency/AgencyVictimTable'
+import { AgencyEmergencyReport }  from './pages/agency/AgencyEmergencyReport'
+import { AgencyAnalytics }        from './pages/agency/AgencyAnalytics'
+import { AgencySettings }         from './pages/agency/AgencySettings'
+
 
 function RoleGuard({ allowed }) {
   const { role, isAuthenticated } = useAuthStore()
@@ -79,7 +82,8 @@ export const router = createHashRouter([
       { path: '/responder/queue',        element: <VictimQueue /> },
       { path: '/responder/rescue/:id',   element: <RescueDetail /> },
       { path: '/responder/map',          element: <FieldMap /> },
-      { path: '/responder/relay',        element: <MeshRelay /> },
+      { path: '/responder/relay',        element: <MeshCenter /> },
+      { path: '/responder/mesh',         element: <MeshCenter /> },
       { path: '/responder/settings',     element: <ResponderSettings /> },
     ],
   },
@@ -103,22 +107,28 @@ export const router = createHashRouter([
           { path: '/admin/emergency-report',        element: <EmergencyReport /> },
           { path: '/admin/barangays-comparison', element: <BarangaysComparison /> },
           { path: '/admin/settings',             element: <AdminSettings /> },
+          { path: '/admin/audit-logs',           element: <AuditLogs /> },
         ],
       },
     ],
   },
 
-  // Super admin routes
+  // Response Agency routes
   {
-    element: <RoleGuard allowed={['superadmin']} />,
+    element: <RoleGuard allowed={['response_agency']} />,
     children: [
-      { path: '/superadmin',                          element: <ProvincialDashboard />       },
-      { path: '/superadmin/staff',                    element: <SuperAdminStaffManagement /> },
-      { path: '/superadmin/sitrep',                   element: <ProvincialSITREP />          },
-      { path: '/superadmin/municipality-comparison',  element: <MunicipalityComparison />    },
-      { path: '/superadmin/settings',                element: <SuperAdminSettings />        },
+      {
+        element: <AgencyLayout />,
+        children: [
+          { path: '/agency',            element: <AgencyCommandCenter />   },
+          { path: '/agency/victims',    element: <AgencyVictimTable />     },
+          { path: '/agency/reports',    element: <AgencyEmergencyReport /> },
+          { path: '/agency/analytics',  element: <AgencyAnalytics />       },
+          { path: '/agency/settings',   element: <AgencySettings />        },
+        ],
+      },
     ],
   },
 
-  { path: '*', element: <Navigate to="/" replace /> },
+{ path: '*', element: <Navigate to="/" replace /> },
 ])

@@ -46,28 +46,44 @@ data class MeshPacket(
 
         /**
          * Deserialise a JSON string back into a MeshPacket.
-         * Throws [org.json.JSONException] if the JSON is malformed.
+         * Supports both compact wire keys (i/t/p/o/h) and legacy verbose keys for
+         * backward-compat with older app versions still on the full-name format.
          */
-        fun fromJson(json: String): MeshPacket {
+        /**
+         * Returns null if [json] is malformed or missing required fields, rather than
+         * throwing JSONException. Callers must null-check before processing.
+         */
+        fun fromJson(json: String): MeshPacket? = try {
             val obj = JSONObject(json)
-            return MeshPacket(
-                id             = obj.getString("id"),
-                type           = obj.getString("type"),
-                payload        = obj.getString("payload"),
-                originDeviceId = obj.getString("originDeviceId"),
-                hopCount       = obj.optInt("hopCount", MAX_HOPS),
-                timestamp      = obj.optLong("timestamp", System.currentTimeMillis()),
+            val id             = obj.optString("i").ifEmpty { obj.optString("id") }
+            val type           = obj.optString("t").ifEmpty { obj.optString("type") }
+            val payload        = obj.optString("p").ifEmpty { obj.optString("payload") }
+            val originDeviceId = obj.optString("o").ifEmpty { obj.optString("originDeviceId") }
+            if (id.isEmpty() || type.isEmpty()) null   // required fields missing — drop
+            else MeshPacket(
+                id             = id,
+                type           = type,
+                payload        = payload.ifEmpty { "{}" },
+                originDeviceId = originDeviceId.ifEmpty { "unknown" },
+                hopCount       = obj.optInt("h", obj.optInt("hopCount", MAX_HOPS)).coerceIn(0, MAX_HOPS),
+                timestamp      = obj.optLong("ts", obj.optLong("timestamp", System.currentTimeMillis())),
             )
-        }
+        } catch (_: Exception) { null }
     }
 
-    /** Serialise this packet to a JSON string for BLE/Wi-Fi transmission. */
+    /**
+     * Serialise to a compact JSON string for BLE/Wi-Fi transmission.
+     *
+     * Uses 1–2 character field names and omits the timestamp to stay well under
+     * the 244-byte write limit for MTU-247 connections (the common Android BLE MTU).
+     * Total wire size: SOS ~220 B, ACK ~150 B — both fit in a single ATT packet.
+     */
     fun toJson(): String = JSONObject().apply {
-        put("id",             id)
-        put("type",           type)
-        put("payload",        payload)
-        put("originDeviceId", originDeviceId)
-        put("hopCount",       hopCount)
-        put("timestamp",      timestamp)
+        put("i", id)
+        put("t", type)
+        put("p", payload)
+        put("o", originDeviceId)
+        put("h", hopCount)
+        put("ts", timestamp)
     }.toString()
 }

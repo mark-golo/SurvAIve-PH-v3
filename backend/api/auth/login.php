@@ -14,12 +14,12 @@ $db = getDB();
 $reqRole = $body['role'] ?? '';
 
 $allCandidates = [
-  'superadmin' => ['superadmin', "SELECT id, name, password_hash, status, province, NULL AS municipality
-                                  FROM superadmins WHERE (contact_number=? OR gmail=?) AND status='active' LIMIT 1"],
-  'admin'      => ['admin',      "SELECT id, name, password_hash, status, province, municipality
-                                  FROM admins WHERE (contact_number=? OR gmail=?) AND status='active' LIMIT 1"],
-  'responder'  => ['responder',  "SELECT id, name, password_hash, status, province, municipality
-                                  FROM responders WHERE (contact_number=? OR gmail=?) AND status='active' LIMIT 1"],
+  'admin'           => ['admin',           "SELECT id, name, password_hash, status, province, municipality, NULL AS agency_type
+                                            FROM admins WHERE (contact_number=? OR gmail=?) AND status='active' LIMIT 1"],
+  'responder'       => ['responder',       "SELECT id, name, password_hash, status, province, municipality, NULL AS agency_type
+                                            FROM responders WHERE (contact_number=? OR gmail=?) AND status='active' LIMIT 1"],
+  'response_agency' => ['response_agency', "SELECT id, name, password_hash, status, province, municipality, agency_type
+                                            FROM response_agencies WHERE (contact_number=? OR contact_number=?) AND status='active' LIMIT 1"],
 ];
 
 $candidates = isset($allCandidates[$reqRole])
@@ -41,11 +41,16 @@ foreach ($candidates as [$r, $sql]) {
 
 if (!$user) errorResponse('Invalid credentials', 401);
 
-$token = createJWT(['id' => $user['id'], 'role' => $role, 'name' => $user['name']]);
+$jwtPayload = ['id' => $user['id'], 'role' => $role, 'name' => $user['name']];
+if ($role === 'response_agency' && !empty($user['agency_type'])) {
+    $jwtPayload['agency_type'] = $user['agency_type'];
+}
+$token = createJWT($jwtPayload);
 jsonResponse(['token' => $token, 'user' => [
     'id'           => $user['id'],
     'name'         => $user['name'],
     'role'         => $role,
     'province'     => $user['province'],
     'municipality' => $user['municipality'],
+    'agency_type'  => $user['agency_type'] ?? null,
 ]]);

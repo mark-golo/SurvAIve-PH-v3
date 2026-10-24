@@ -129,6 +129,8 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   assigned_responder_id INT DEFAULT NULL,
   rescue_status         ENUM('pending','en_route','on_scene','rescued','cannot_reach') NOT NULL DEFAULT 'pending',
   field_notes           TEXT DEFAULT NULL,
+  confirmed_by_name     VARCHAR(200) DEFAULT NULL,
+  confirmed_at          TIMESTAMP NULL DEFAULT NULL,
   timestamp             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   synced_at             TIMESTAMP NULL DEFAULT NULL,
   INDEX idx_municipality (municipality),
@@ -148,6 +150,23 @@ CREATE TABLE IF NOT EXISTS mesh_events (
   data       JSON DEFAULT NULL,
   timestamp  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_device (device_id)
+);
+
+-- ============================================================
+-- Audit / Activity Logs
+-- ============================================================
+CREATE TABLE IF NOT EXISTS activity_logs (
+  id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+  actor_id     VARCHAR(100) DEFAULT NULL,
+  actor_role   VARCHAR(50)  DEFAULT NULL,
+  action       TEXT         NOT NULL,
+  target_table VARCHAR(100) DEFAULT NULL,
+  target_id    VARCHAR(50)  DEFAULT NULL,
+  details      JSON         DEFAULT NULL,
+  created_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_actor   (actor_id),
+  INDEX idx_table   (target_table),
+  INDEX idx_created (created_at)
 );
 
 -- ============================================================
@@ -201,41 +220,6 @@ VALUES
    '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'active', 1, 'HIGH'),
   ('DRRM Officer - Dapa', '09170000003', 'drrm.dapa@survAIve.ph', 'Surigao del Norte', 'Dapa',
    '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'active', 1, 'HIGH');
-
--- Responders  (password: "password")
-INSERT IGNORE INTO responders (name, contact_number, province, municipality, barangay, password_hash, status, is_verified, trust_score, team_id, unit_name, assigned_zone, assigned_barangay, duty_status, active_mesh_relay)
-VALUES
-  ('Responder Alpha-1',   '09180000001', 'Surigao del Norte', 'Del Carmen', 'Del Carmen Poblacion',
-   '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'active', 1, 'HIGH',
-   'TEAM-A', 'Alpha Unit',   'Zone 1 – Del Carmen Poblacion', 'Del Carmen Poblacion', 'on_duty',  1),
-  ('Responder Bravo-2',   '09180000002', 'Surigao del Norte', 'Del Carmen', 'Bitoon',
-   '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'active', 1, 'HIGH',
-   'TEAM-B', 'Bravo Unit',   'Zone 2 – Bitoon',    'Bitoon',    'on_duty',  0),
-  ('Responder Charlie-3', '09180000003', 'Surigao del Norte', 'Del Carmen', 'San Jose',
-   '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'active', 1, 'HIGH',
-   'TEAM-C', 'Charlie Unit', 'Zone 3 – San Jose',     'San Jose',     'standby',  1);
-
--- Victims (all Del Carmen, Siargao Island)
-INSERT IGNORE INTO victims (name, contact_number, province, municipality, barangay, sitio, household_count, vulnerabilities, status, is_verified, trust_score)
-VALUES
-  ('Maria Santos',    '09200000001', 'Surigao del Norte', 'Del Carmen', 'Del Carmen Poblacion', 'Purok 1', 4, '["Elderly (60+)","Infant (0-2 years old)"]', 'sos_sent', 1, 'HIGH'),
-  ('Juan Dela Cruz',  '09200000002', 'Surigao del Norte', 'Del Carmen', 'Bitoon',    'Purok 2', 2, '["None"]',                                   'sos_sent', 1, 'HIGH'),
-  ('Rosa Villanueva', '09200000003', 'Surigao del Norte', 'Del Carmen', 'Caub',      'Purok 1', 6, '["Pregnant","Person with Disability (PWD)"]', 'sos_sent', 1, 'HIGH'),
-  ('Pedro Ramos',     '09200000004', 'Surigao del Norte', 'Del Carmen', 'Domoyog',   'Purok 3', 1, '["None"]',                                   'active',   1, 'HIGH'),
-  ('Ana Reyes',       '09200000005', 'Surigao del Norte', 'Del Carmen', 'Esperanza', NULL,      3, '["Elderly (60+)"]',                           'rescued',  1, 'HIGH');
-
--- SOS reports linked to victims (Siargao coords)
-INSERT IGNORE INTO sos_reports (user_id, barangay, municipality, province, lat, lng, status, people_count, notes, is_verified, trust_score, ai_priority_score, rescue_status)
-SELECT id, barangay, municipality, province, 9.8527, 126.0736, 'trapped', 4, 'Floodwater rising fast, second floor', 1, 'HIGH', 92, 'pending'
-FROM victims WHERE contact_number='09200000001';
-
-INSERT IGNORE INTO sos_reports (user_id, barangay, municipality, province, lat, lng, status, people_count, notes, is_verified, trust_score, ai_priority_score, rescue_status)
-SELECT id, barangay, municipality, province, 9.8720, 126.0690, 'injured', 2, 'Roof collapsed, leg injury', 1, 'HIGH', 78, 'en_route'
-FROM victims WHERE contact_number='09200000002';
-
-INSERT IGNORE INTO sos_reports (user_id, barangay, municipality, province, lat, lng, status, people_count, notes, is_verified, trust_score, ai_priority_score, rescue_status)
-SELECT id, barangay, municipality, province, 9.8610, 126.0780, 'trapped', 6, 'Pregnant woman, need urgent help', 1, 'HIGH', 95, 'pending'
-FROM victims WHERE contact_number='09200000003';
 
 -- Guest SOS (anonymous reports, Del Carmen barangays)
 INSERT IGNORE INTO sos_reports (barangay, municipality, province, lat, lng, status, people_count, notes, is_verified, trust_score, ai_priority_score, rescue_status)

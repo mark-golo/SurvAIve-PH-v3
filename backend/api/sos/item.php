@@ -18,7 +18,7 @@ if ($method === 'PUT') {
     $auth = requireAuth();
     $body = json_decode(file_get_contents('php://input'), true) ?? [];
 
-    $allowed = ['rescue_status', 'assigned_responder_id', 'notes', 'status'];
+    $allowed = ['rescue_status', 'assigned_responder_id', 'notes', 'status', 'confirmed_by_name', 'confirmed_at'];
     $sets    = [];
     $params  = [];
     foreach ($allowed as $f) {

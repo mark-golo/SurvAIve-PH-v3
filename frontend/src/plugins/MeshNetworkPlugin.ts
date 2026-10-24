@@ -60,7 +60,7 @@ export interface MeshNetworkPlugin {
   broadcast(options: {
     type: string
     payload: string
-  }): Promise<{ success: boolean; transport: string }>
+  }): Promise<{ success: boolean; transport: string; packetId: string }>
 
   /** Return current mesh statistics (peer count, active transport, relay flag). */
   getStats(): Promise<{
@@ -82,6 +82,16 @@ export interface MeshNetworkPlugin {
    * On Android 10+: opens system WiFi panel. No-op on web.
    */
   enableRadios(): Promise<void>
+
+  /** Return the list of currently discovered BLE peers with their device addresses. */
+  getPeers(): Promise<{ peers: Array<{ id: string; transport: string; lastSeen: number }> }>
+
+  /**
+   * Store the current user's role in native SharedPreferences so that
+   * MeshNetworkService can embed receiver_role in outgoing ACK packets.
+   * Call this after every login and on app startup when a session is restored.
+   */
+  setUserRole(options: { role: string }): Promise<void>
 
   /**
    * Register a listener for packets received from nearby mesh peers.

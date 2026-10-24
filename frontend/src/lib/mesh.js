@@ -22,6 +22,23 @@ let _msgHandlers     = []       // registered onMessage() callbacks
 let _listenerHandle  = null     // Capacitor PluginListenerHandle for cleanup
 let _lastStats       = null     // cached result of the last getStats() call
 
+// Packets received before any onMessage() handler is registered are buffered here
+// and replayed when the first handler registers. This closes the race where
+// onServiceConnected drains the Kotlin startupBuffer (firing notifyListeners) before
+// startMeshSync() has called mesh.onMessage() — without this, early SOSes are lost.
+const _preHandlerBuffer = []
+const MAX_PRE_BUFFER = 20
+
+// meshEvent pre-handler buffer (same race-free pattern as _preHandlerBuffer above)
+let _meshEventHandlers = []
+const _meshEventPreBuffer = []
+const MAX_MESH_EVENT_BUFFER = 50
+
+// meshBroadcastStatus pre-handler buffer
+let _broadcastStatusHandlers = []
+const _broadcastStatusPreBuffer = []
+const MAX_BROADCAST_STATUS_BUFFER = 20
+
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 /**
@@ -33,16 +50,67 @@ async function ensureStarted() {
   if (_isStarted) return
   if (!_startPromise) {
     _startPromise = (async () => {
-      await MeshNetwork.startMesh()
-      _isStarted = true
+      // Register listener FIRST — Capacitor does not buffer events, so any packet
+      // that arrives between startMesh() resolving and addListener() being called
+      // would otherwise be silently dropped.
       _listenerHandle = await MeshNetwork.addListener('meshPacketReceived', (packet) => {
+        // Beacon packets carry a 20-byte binary payload that decodes to an empty or
+        // minimal JSON string. Rather than discarding them, fall through with {} so
+        // the handler can still route by rawPacket.type and log the SOS detection.
+        let data = {}
         try {
-          const data = JSON.parse(packet.payload)
+          const raw = packet?.payload
+          if (raw && raw !== 'null') data = JSON.parse(raw)
+        } catch {
+          console.warn('[mesh] payload parse failed — delivering with {}:', packet?.id)
+        }
+        if (_msgHandlers.length > 0) {
           _msgHandlers.forEach((fn) => fn(data, packet))
-        } catch {}
+        } else {
+          // No handlers yet — buffer for replay when first handler registers.
+          if (_preHandlerBuffer.length >= MAX_PRE_BUFFER) _preHandlerBuffer.shift()
+          _preHandlerBuffer.push({ data, packet })
+        }
       })
-    })().catch(() => {
-      _startPromise = null  // reset on failure so next call can retry
+      // Register meshEvent listener BEFORE startMesh() for the same reason as above:
+      // peer_discovered and other events fire during BLE scan init inside startMesh().
+      await MeshNetwork.addListener('meshEvent', (evt) => {
+        if (evt?.eventType === 'bt_disabled') { _isStarted = false; _startPromise = null }
+        if (_meshEventHandlers.length > 0) {
+          _meshEventHandlers.forEach(fn => { try { fn(evt) } catch {} })
+        } else {
+          if (_meshEventPreBuffer.length >= MAX_MESH_EVENT_BUFFER) _meshEventPreBuffer.shift()
+          _meshEventPreBuffer.push(evt)
+        }
+      })
+      // Register meshBroadcastStatus listener BEFORE startMesh() — advertising_started
+      // fires during BLEMeshStrategy.startAdvertising() inside startMesh().
+      await MeshNetwork.addListener('meshBroadcastStatus', (evt) => {
+        if (_broadcastStatusHandlers.length > 0) {
+          _broadcastStatusHandlers.forEach(fn => { try { fn(evt) } catch {} })
+        } else {
+          if (_broadcastStatusPreBuffer.length >= MAX_BROADCAST_STATUS_BUFFER)
+            _broadcastStatusPreBuffer.shift()
+          _broadcastStatusPreBuffer.push(evt)
+        }
+      })
+      // Race against a 12s timeout — if the service hangs (crash, permission stuck),
+      // the catch block resets _startPromise so the next call can retry.
+      const startTimeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('startMesh timeout')), 12000)
+      )
+      await Promise.race([MeshNetwork.startMesh(), startTimeout])
+      _isStarted = true
+    })().catch((err) => {
+      // RC-4: remove the dangling listener before resetting so the next retry
+      // doesn't register a second meshPacketReceived listener.
+      if (_listenerHandle) {
+        _listenerHandle.remove().catch(() => {})
+        _listenerHandle = null
+      }
+      _isStarted = false
+      _startPromise = null
+      throw err  // H4 fix: propagate so callers know the engine didn't start
     })
   }
   await _startPromise
@@ -57,17 +125,38 @@ export const mesh = {
    * On success:  returns { success: true, transport: 'BLE' | 'WiFiDirect' | 'wifi-http' }
    * On failure:  queues the payload to IndexedDB and returns { success: false, transport: 'none' }
    *
+   * BLE ATT write limit: 244 bytes (MTU-247 minus 3-byte ATT header).
+   * Payloads exceeding this are rejected before reaching the native layer.
+   *
    * @param {object} data - The payload to send (SOS body, ack, status update, etc.)
    */
   async broadcast(data) {
     await ensureStarted()
+    const serialised = typeof data === 'string' ? data : JSON.stringify(data)
+    const pktType = data.t ?? data.type
+    if (serialised.length > 240) {
+      console.warn('[mesh] broadcast rejected: payload', serialised.length, 'bytes exceeds 240-byte BLE ATT limit')
+      if (pktType === 'sos' || !pktType) {
+        try { await db.queueSOS(data) } catch { /* db may not be open yet */ }
+      }
+      return { success: false, transport: 'none' }
+    }
+    // Pre-persist SOS before transmission so a process kill between send and
+    // GATT confirmation leaves a local record on the sender side.
+    let _localSosId = null
+    if (pktType === 'sos' || (!pktType && !serialised.includes('"t":"ack"'))) {
+      try { _localSosId = await db.queueSOS(data) } catch { /* db may not be open yet */ }
+    }
     const result = await MeshNetwork.broadcast({
-      type:    data.type ?? 'sos',
-      payload: typeof data === 'string' ? data : JSON.stringify(data),
+      type:    data.t ?? data.type ?? 'sos',
+      payload: serialised,
+      ...(data._id ? { id: data._id } : {}),
     })
-    if (!result.success) {
-      // Both native transports failed — persist to IndexedDB for later drain-queue sync
-      try { await db.queueSOS(data) } catch { /* db may not be open yet */ }
+    if (!result.success && !_localSosId) {
+      // Both native transports failed and pre-persist also failed — last attempt.
+      if (pktType === 'sos' || serialised.includes('"t":"sos"')) {
+        try { await db.queueSOS(data) } catch { /* db may not be open yet */ }
+      }
     }
     return result
   },
@@ -81,6 +170,15 @@ export const mesh = {
    */
   onMessage(fn) {
     _msgHandlers.push(fn)
+    if (_preHandlerBuffer.length > 0) {
+      const toReplay = _preHandlerBuffer.splice(0)
+      // Defer by one microtask so the caller finishes its own synchronous setup first.
+      Promise.resolve().then(() => {
+        toReplay.forEach(({ data, packet }) => {
+          try { fn(data, packet) } catch {}
+        })
+      })
+    }
     return () => {
       _msgHandlers = _msgHandlers.filter((h) => h !== fn)
     }
@@ -96,6 +194,14 @@ export const mesh = {
     if (!_isStarted) return { peersNearby: 0, transport: 'not started', relayEnabled: false }
     try {
       _lastStats = await MeshNetwork.getStats()
+      // Detect service restart (Android START_STICKY): if the Kotlin side reports
+      // "not started" while JS thinks it is, the service was killed and restarted but
+      // the plugin's meshService ref is null. Reset so the next broadcast() triggers
+      // ensureStarted() → startMesh() → rebind.
+      if (_lastStats?.transport === 'not started') {
+        _isStarted = false
+        _startPromise = null
+      }
     } catch {
       _lastStats = _lastStats ?? { peersNearby: 0, transport: 'error', relayEnabled: false }
     }
@@ -123,11 +229,16 @@ export const mesh = {
   },
 
   /**
-   * Returns an empty array for API compatibility with code that called
-   * the old mesh.getPeers(). Use getStats().peersNearby for the count.
+   * Returns the list of currently discovered BLE peers from the native layer.
    */
-  getPeers() {
-    return []
+  async getPeers() {
+    try {
+      await ensureStarted()
+      const result = await MeshNetwork.getPeers()
+      return result?.peers ?? []
+    } catch {
+      return []
+    }
   },
 
   /** Alias kept for legacy callers from deviceSettings.js */
@@ -151,4 +262,47 @@ export const mesh = {
     }
     _msgHandlers = []
   },
+}
+
+// bt_disabled handling is now inside the single meshEvent listener registered in
+// ensureStarted() (before startMesh()), so no separate IIFE listener is needed.
+
+/**
+ * Subscribe to native BLE advertising status events.
+ * Fires on: advertising_started, advertising_failed, awaiting_peers.
+ * Returns an unsubscribe function (safe to call multiple times).
+ *
+ * @param {function({status: string, errorCode?: number}): void} fn
+ * @returns {function(): void} unsubscribe
+ */
+export function onBroadcastStatus(fn) {
+  _broadcastStatusHandlers.push(fn)
+  if (_broadcastStatusPreBuffer.length > 0) {
+    const toReplay = _broadcastStatusPreBuffer.splice(0)
+    Promise.resolve().then(() => {
+      toReplay.forEach(evt => { try { fn(evt) } catch {} })
+    })
+  }
+  return () => { _broadcastStatusHandlers = _broadcastStatusHandlers.filter(h => h !== fn) }
+}
+
+/**
+ * Subscribe to low-level native mesh events forwarded from the Android layer.
+ * Each event includes an `eventType` field plus event-specific metadata.
+ * Event types: peer_discovered, connection_established, peer_disconnected,
+ *              sos_transmitted, transmission_failed, retry_attempted, sos_relayed.
+ *
+ * @param {function({eventType: string, [key: string]: any}): void} fn
+ * @returns {function(): void} unsubscribe
+ */
+export function onNativeMeshEvent(fn) {
+  _meshEventHandlers.push(fn)
+  // Replay any events that arrived before this handler registered
+  if (_meshEventPreBuffer.length > 0) {
+    const toReplay = _meshEventPreBuffer.splice(0)
+    Promise.resolve().then(() => {
+      toReplay.forEach(evt => { try { fn(evt) } catch {} })
+    })
+  }
+  return () => { _meshEventHandlers = _meshEventHandlers.filter(h => h !== fn) }
 }

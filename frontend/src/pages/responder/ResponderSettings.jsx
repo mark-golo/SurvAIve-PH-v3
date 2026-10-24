@@ -8,6 +8,7 @@ import { useAuthStore } from '../../store/auth'
 import { supabase } from '../../lib/supabase'
 import { setXamppHost } from '../../lib/api'
 import { getResponderTheme, saveResponderTheme } from '../../lib/victimTheme'
+import { AccountSettings } from '../../components/AccountSettings'
 
 const NAV = [
   { icon: Home,     label: 'Home',     path: '/responder'          },
@@ -89,6 +90,9 @@ export function ResponderSettings() {
       <TopBar title="Responder Settings" onBack />
 
       <main className="flex-1 p-4 space-y-4">
+        {/* Account Settings */}
+        <AccountSettings />
+
         {/* Profile */}
         <GlassCard>
           <div className="flex items-center gap-3 mb-3">

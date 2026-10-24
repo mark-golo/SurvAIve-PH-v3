@@ -1,6 +1,6 @@
 // Supabase compatibility wrapper — maps old PHP URL patterns to Supabase calls
 import { supabase, signupClient } from './supabase'
-import { hashPIN, createOfflineToken } from './deviceAuth'
+import { hashPIN, createOfflineToken, storeStaffOfflineCredentials, verifyStaffOffline } from './deviceAuth'
 import { getNetworkOnline } from './capacitor'
 
 // ── Local PHP backend (XAMPP) ── used in offline / Wi-Fi hotspot mode ─────────
@@ -94,9 +94,10 @@ const TABLE = {
   evacuation_centers: 'evacuation_centers',
   sos:                'sos_reports',
   victims:            'victims',
-  constituents:       'victims',   // alias used by ConstituentRegistry
+  constituents:       'victims',        // alias used by ConstituentRegistry
   responders:         'responders',
   admins:             'admins',
+  agencies:           'response_agencies',
   superadmins:        'superadmins',
   escalations:        'escalations',
 }
@@ -196,9 +197,25 @@ function sbThrow(error) {
   throwErr(error?.message ?? 'Database error')
 }
 
+// Read auth role/scope from localStorage without importing the Zustand store
+function _getAuthState() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('survAIve-auth') ?? '{}')
+    return stored?.state ?? {}
+  } catch { return {} }
+}
+
 // ── GET ────────────────────────────────────────────────────────────────────────
 async function get(path) {
   const { resource, id, table, params } = parsePath(path)
+
+  // Auto-inject service_type for response_agency role on every SOS fetch
+  if (resource === 'sos' && !params.has('service_type')) {
+    const authState = _getAuthState()
+    if (authState.role === 'response_agency' && authState.scope?.agency_type) {
+      params.set('service_type', authState.scope.agency_type)
+    }
+  }
 
   // ── Province reports — always served from local XAMPP MySQL ─────────────────
   if (resource === 'province_reports') {
@@ -237,8 +254,9 @@ async function get(path) {
 
   // ── SOS ──
   if (resource === 'sos') {
-    const muni = params.get('municipality') || null
-    const prov = params.get('province')     || null
+    const muni    = params.get('municipality') || null
+    const prov    = params.get('province')     || null
+    const svcType = params.get('service_type') || null
 
     if (id) {
       const { data, error } = await supabase
@@ -250,10 +268,12 @@ async function get(path) {
       return normalizeSos(data)
     }
 
-    // List via RPC — computes priority label + time_ago server-side
+    // Always pass all 3 params — PostgREST resolves by named-param set.
+    // null means no filter (admin/responder); agency gets their service_type.
     const { data, error } = await supabase.rpc('get_sos_with_priority', {
       p_municipality: muni,
       p_province:     prov,
+      p_service_type: svcType,
     })
     if (error) sbThrow(error)
     return (data ?? []).map(normalizeSos)
@@ -329,15 +349,28 @@ async function post(path, body = {}) {
     if (action === 'login') {
       // ── Offline login: authenticate against local XAMPP MySQL ──
       if (!getNetworkOnline()) {
-        const data = await localFetch('auth/login', {
-          method: 'POST',
-          body: JSON.stringify({
-            contact_number: body.contact_number,
-            password:       body.password,
-            role:           body.role,
-          }),
-        })
-        return { token: data.token, user: { ...data.user, role: data.user.role } }
+        try {
+          const data = await localFetch('auth/login', {
+            method: 'POST',
+            body: JSON.stringify({
+              contact_number: body.contact_number,
+              password:       body.password,
+              role:           body.role,
+            }),
+          })
+          return { token: data.token, user: { ...data.user, role: data.user.role } }
+        } catch {
+          // XAMPP unreachable — fall back to on-device PBKDF2 credential cache
+          const user = await verifyStaffOffline(body.contact_number, body.password)
+          if (user) {
+            console.log('[api] offline staff login via cached credentials for', body.contact_number)
+            return { token: createOfflineToken(user), user }
+          }
+          throw Object.assign(
+            new Error('Login requires internet or the admin hotspot. Connect and try again.'),
+            { status: 503 },
+          )
+        }
       }
 
       const email = body.role === 'victim'
@@ -383,6 +416,9 @@ async function post(path, body = {}) {
           password:       body.password,
         }),
       }).catch(() => {}) // fire-and-forget — XAMPP may not be running
+
+      // Cache PBKDF2 hash on-device so the offline fallback can verify without XAMPP
+      storeStaffOfflineCredentials(body.contact_number, body.password, userInfo.role, userInfo).catch(() => {})
 
       return { token: data.session.access_token, user: userInfo }
     }
@@ -583,9 +619,15 @@ async function post(path, body = {}) {
 
   // ── SOS submit ──
   if (resource === 'sos') {
-    // Offline: POST directly to local XAMPP (victim on admin's Wi-Fi hotspot)
+    // Offline: POST directly to local XAMPP (victim on admin's Wi-Fi hotspot).
+    // If XAMPP is also unreachable (no hotspot), throw a clean 'offline' error
+    // so the caller's catch block can queue to IndexedDB without leaking raw network errors.
     if (!getNetworkOnline()) {
-      return localFetch('sos', { method: 'POST', body: JSON.stringify(body) })
+      try {
+        return await localFetch('sos', { method: 'POST', body: JSON.stringify(body) })
+      } catch {
+        throw new Error('offline')
+      }
     }
 
     const score = calcPriorityScore(body)
@@ -632,6 +674,10 @@ async function post(path, body = {}) {
         ai_scene_label:      body.ai_scene_label      ?? null,
         ai_scene_confidence: body.ai_scene_confidence ?? null,
         ai_detected_count:   body.ai_detected_count   ?? null,
+        service_type:        Array.isArray(body.service_type)
+                               ? body.service_type
+                               : (body.service_type ? [body.service_type] : null),
+        relay_source:        body.relay_source ?? null,
       })
     if (error) sbThrow(error)
     return { ai_priority_score: score }
@@ -679,6 +725,58 @@ async function post(path, body = {}) {
       .from('responders').insert(respData).select().single()
     if (respErr) sbThrow(respErr)
     return respRow
+  }
+
+  // ── Response Agency creation: create Supabase Auth account + profiles row ──
+  if (table === 'response_agencies') {
+    const { password, ...agencyData } = body
+    if (!password) throwErr('Password is required to create an agency account.', 400)
+
+    const email = `${agencyData.contact_number}@survaive.ph`
+    const userMeta = {
+      role:           'response_agency',
+      name:           agencyData.name,
+      contact_number: agencyData.contact_number,
+      agency_type:    agencyData.agency_type,
+      province:       agencyData.province,
+      municipality:   agencyData.municipality,
+    }
+
+    const { data: authData, error: authError } = await signupClient.auth.signUp({
+      email,
+      password,
+      options: { data: userMeta },
+    })
+
+    if (authError) {
+      if (authError.message?.toLowerCase().includes('already')) {
+        throwErr(`Contact number ${agencyData.contact_number} already has an account.`, 409)
+      }
+      throwErr(authError.message || 'Failed to create agency auth account.', 500)
+    }
+
+    const uid = authData.user?.id
+    if (!uid) throwErr('Auth account created but no user ID returned.', 500)
+
+    const { error: profileErr } = await supabase.from('profiles').upsert({
+      id: uid, role: 'response_agency', name: agencyData.name,
+      contact_number: agencyData.contact_number,
+      agency_type:    agencyData.agency_type,
+      province:       agencyData.province,
+      municipality:   agencyData.municipality,
+    })
+    if (profileErr) throwErr(profileErr.message, 500)
+
+    // Also persist to local MySQL so offline login works
+    localFetch('agencies', {
+      method: 'POST',
+      body: JSON.stringify({ ...agencyData, password }),
+    }).catch(() => {})
+
+    const { data: agencyRow, error: agencyErr } = await supabase
+      .from('response_agencies').insert(agencyData).select().single()
+    if (agencyErr) sbThrow(agencyErr)
+    return agencyRow
   }
 
   // ── Admin creation: create Supabase Auth account + profiles row ──
@@ -765,6 +863,29 @@ async function put(path, body = {}) {
     return data
   }
 
+  // ── SOS UPDATE: SECURITY DEFINER RPC to bypass RLS ──────────────────────────
+  // Staff log in via PHP JWT only — Supabase sees them as anon, so the RLS UPDATE
+  // policy would silently reject supabase.from('sos_reports').update(...). Mirror
+  // the GET pattern which already uses get_sos_with_priority (SECURITY DEFINER).
+  if (resource === 'sos' && id) {
+    if (!getNetworkOnline()) {
+      return await localFetch(`sos/${id}`, { method: 'PUT', body: JSON.stringify(body) })
+    }
+    const { data: oldRescueStatus, error } = await supabase.rpc('update_sos_by_id', {
+      p_id:                     Number(id),
+      p_rescue_status:          body.rescue_status           ?? null,
+      p_confirmed_by_name:      body.confirmed_by_name       ?? null,
+      p_confirmed_at:           body.confirmed_at            ?? null,
+      p_notes:                  body.notes                   ?? null,
+      p_assigned_responder_id:  body.assigned_responder_id   ?? null,
+      p_dismissed:              typeof body.dismissed === 'boolean' ? body.dismissed : null,
+      p_status:                 body.status                  ?? null,
+      p_confirmed_by_role:      body.confirmed_by_role       ?? null,
+    })
+    if (error) sbThrow(error)
+    return { id: Number(id), _old_rescue_status: oldRescueStatus ?? null }
+  }
+
   if (!id) throwErr('ID required for update')
   const { password: _pw, ...updateData } = body
   const { data, error } = await supabase.from(table).update(updateData).eq('id', id).select().single()
@@ -795,5 +916,55 @@ async function del(path) {
   return {}
 }
 
-const api = { get, post, put, delete: del }
+// ── Audit logging ─────────────────────────────────────────────────────────────
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function isUUID(v) { return typeof v === 'string' && UUID_RE.test(v) }
+
+const ACTION_LABELS = {
+  POST:   { sos_reports: 'Submitted SOS report', responders: 'Created responder', admins: 'Created admin account', agencies: 'Created agency account', evacuation_centers: 'Created evacuation center', constituents: 'Registered constituent', province_reports: 'Submitted province report', escalations: 'Created escalation' },
+  PUT:    { sos_reports: 'Updated SOS report', responders: 'Updated responder record', admins: 'Updated admin account', agencies: 'Updated agency account', evacuation_centers: 'Updated evacuation center', constituents: 'Updated constituent', escalations: 'Acknowledged/updated escalation', superadmins: 'Updated superadmin' },
+  DELETE: { sos_reports: 'Deleted SOS report', responders: 'Deleted responder', admins: 'Deleted admin account', agencies: 'Deleted agency account', evacuation_centers: 'Deleted evacuation center', constituents: 'Removed constituent', superadmins: 'Deleted superadmin' },
+}
+
+function logActivity(method, resource, table, id, extra = {}) {
+  const { user, role } = _getAuthState()
+  if (!user || role === 'victim' || !role) return
+  const label = ACTION_LABELS[method]?.[table] ?? `${method} ${resource}`
+  supabase.from('activity_logs').insert({
+    actor_id:     isUUID(user.id) ? user.id : null,
+    actor_role:   role,
+    action:       label,
+    target_table: table      ?? null,
+    target_id:    id != null ? String(id) : null,
+    details:      { actor_name: user.name ?? null, municipality: user.municipality ?? null, agency_type: user.agency_type ?? null, ...extra },
+  }).then(() => {}).catch(() => {})
+}
+
+const api = {
+  get,
+  async post(path, body = {}) {
+    const res = await post(path, body)
+    const { resource, table } = parsePath(path)
+    logActivity('POST', resource, table, res?.id)
+    return res
+  },
+  async put(path, body = {}) {
+    const res = await put(path, body)
+    const { resource, id, table } = parsePath(path)
+    const extra = {}
+    if (resource === 'sos' && body.rescue_status) {
+      if (res?._old_rescue_status) extra.old_rescue_status = res._old_rescue_status
+      extra.new_rescue_status = body.rescue_status
+      if (body.confirmed_by_name) extra.confirmed_by = body.confirmed_by_name
+    }
+    logActivity('PUT', resource, table, id, extra)
+    return res
+  },
+  async delete(path) {
+    const res = await del(path)
+    const { resource, id, table } = parsePath(path)
+    logActivity('DELETE', resource, table, id)
+    return res
+  },
+}
 export default api

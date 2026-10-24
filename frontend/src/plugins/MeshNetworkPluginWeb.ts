@@ -32,7 +32,8 @@ export class MeshNetworkPluginWeb extends WebPlugin implements MeshNetworkPlugin
    * This mirrors what the native Kotlin plugin does as a last resort when
    * BLE and Wi-Fi Direct both fail (internet-connected path).
    */
-  async broadcast(options: { type: string; payload: string }): Promise<{ success: boolean; transport: string }> {
+  async broadcast(options: { type: string; payload: string }): Promise<{ success: boolean; transport: string; packetId: string }> {
+    const packetId = 'web-' + Date.now()
     try {
       const { hostname, protocol } = window.location
       const url = `${protocol}//${hostname}/SurvAIve%20PH%20v3/backend/api/router.php?path=sos`
@@ -41,9 +42,9 @@ export class MeshNetworkPluginWeb extends WebPlugin implements MeshNetworkPlugin
         headers: { 'Content-Type': 'application/json' },
         body: options.payload,
       })
-      return { success: res.ok, transport: 'wifi-http' }
+      return { success: res.ok, transport: 'wifi-http', packetId }
     } catch {
-      return { success: false, transport: 'none' }
+      return { success: false, transport: 'none', packetId }
     }
   }
 
@@ -63,6 +64,18 @@ export class MeshNetworkPluginWeb extends WebPlugin implements MeshNetworkPlugin
 
   async enableRadios(): Promise<void> {
     // no-op: BT/WiFi radios don't exist in the browser
+  }
+
+  // ── Peers ────────────────────────────────────────────────────────────────────
+
+  async getPeers(): Promise<{ peers: Array<{ id: string; transport: string; lastSeen: number }> }> {
+    return { peers: [] }
+  }
+
+  // ── Role sync ────────────────────────────────────────────────────────────────
+
+  async setUserRole(_options: { role: string }): Promise<void> {
+    // no-op on web — role is handled entirely in JS
   }
 
   // ── Event listener (typed override) ─────────────────────────────────────────
