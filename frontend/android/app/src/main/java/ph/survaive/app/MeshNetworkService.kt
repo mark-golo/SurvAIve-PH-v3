@@ -193,8 +193,12 @@ class MeshNetworkService : Service() {
             strategies.filterIsInstance<BLEMeshStrategy>().firstOrNull()?.onWriteConfirmed = { packetId ->
                 synchronized(pendingPackets) { pendingPackets.removeIf { it.id == packetId } }
                 persistPending()
-                // Gap 5 fix: fire onRelayedPacket on confirmed GATT delivery, not queue acceptance.
-                pendingRelayNotify.remove(packetId)?.let { onRelayedPacket?.invoke(it) }
+                // Increment relay counter and fire event on confirmed GATT delivery.
+                pendingRelayNotify.remove(packetId)?.let { relayed ->
+                    forwardedCount[relayed.originDeviceId] =
+                        (forwardedCount[relayed.originDeviceId] ?: 0) + 1
+                    onRelayedPacket?.invoke(relayed)
+                }
             }
             strategies.filterIsInstance<BLEMeshStrategy>().firstOrNull()?.onNewPeerDiscovered = { _ ->
                 // New BLE peer just appeared — flush pending packets immediately instead of waiting 3s retry.
@@ -344,13 +348,12 @@ class MeshNetworkService : Service() {
             // Only count and notify when a transport actually accepted the relay.
             // Counting before broadcast() returned caused "1 relayed, 0 received."
             if (relaySuccess) {
-                forwardedCount[packet.originDeviceId] =
-                    (forwardedCount[packet.originDeviceId] ?: 0) + 1
-                // Gap 5 fix: BLE delivers optimistically — defer event until GATT confirms.
-                // Non-BLE delivers synchronously so fire immediately.
                 if (strategyName == "BLE") {
+                    // Defer counter AND event to onWriteConfirmed — broadcast() is optimistic for BLE.
                     pendingRelayNotify[relayed.id] = relayed
                 } else {
+                    forwardedCount[packet.originDeviceId] =
+                        (forwardedCount[packet.originDeviceId] ?: 0) + 1
                     onRelayedPacket?.invoke(relayed)
                 }
             }
