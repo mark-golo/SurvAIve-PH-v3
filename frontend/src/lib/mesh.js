@@ -197,7 +197,10 @@ export const mesh = {
    * the async call is in flight.
    */
   async getStats() {
-    try { await ensureStarted() } catch {}  // self-heal: try to start if not started
+    try { await ensureStarted() } catch (e) {
+      _lastStats = { peersNearby: 0, transport: 'start_failed', relayEnabled: false, startError: String(e) }
+      return _lastStats
+    }
     if (!_isStarted) return { peersNearby: 0, transport: 'not started', relayEnabled: false }
     try {
       _lastStats = await MeshNetwork.getStats()

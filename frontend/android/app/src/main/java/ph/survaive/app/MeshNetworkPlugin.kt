@@ -165,10 +165,8 @@ class MeshNetworkPlugin : Plugin() {
     @PermissionCallback
     private fun startMeshAfterPermissions(call: PluginCall) {
         // Verify that all critical permissions were actually granted
-        val requiredAliases = mutableListOf("bluetoothScan", "bluetoothAdvertise", "bluetoothConnect")
-        // On API ≤ 30 (Android 11), BLE scan requires ACCESS_FINE_LOCATION even when
-        // BLUETOOTH_SCAN is granted, because the pre-31 BT stack enforces it.
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) requiredAliases.add("location")
+        val requiredAliases = mutableListOf("bluetoothScan", "bluetoothAdvertise", "bluetoothConnect",
+            "location")  // ACCESS_FINE_LOCATION required on all API levels to receive manufacturer-data beacons
         val deniedAliases = requiredAliases.filter { getPermissionState(it) != PermissionState.GRANTED }
         if (deniedAliases.isNotEmpty()) {
             call.reject("Mesh requires Bluetooth permissions. Denied: $deniedAliases")

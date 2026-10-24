@@ -41,21 +41,28 @@ const EVENT_META = {
   peer_discovered:        { label: 'Peer Discovered',             color: '#00d4ff', Icon: Wifi           },
   connection_established: { label: 'GATT Connection',             color: '#22c55e', Icon: Wifi           },
   peer_disconnected:      { label: 'Peer Disconnected',           color: '#8b5cf6', Icon: Wifi           },
-  sos_transmitted:        { label: 'SOS Transmitted',             color: '#22c55e', Icon: CheckCircle2   },
+  sos_transmitted:        { label: 'SOS Transmitted (GATT)',      color: '#22c55e', Icon: CheckCircle2   },
+  sos_beacon_queued:      { label: 'SOS Beacon Queued',           color: '#3b82f6', Icon: Radio          },
   sos_received:           { label: 'SOS Received via Mesh',       color: '#ef4444', Icon: AlertTriangle  },
-  sos_stored_locally:     { label: 'SOS Stored Offline',          color: '#8b5cf6', Icon: Archive        },
+  sos_stored_locally:     { label: 'SOS Stored Locally',          color: '#8b5cf6', Icon: Archive        },
+  sos_persisted:          { label: 'SOS Synced to Server',        color: '#22c55e', Icon: Archive        },
+  backend_sync_pending:   { label: 'Backend Sync Pending',        color: '#f59e0b', Icon: Archive        },
   sos_acknowledged:       { label: 'SOS Acknowledged',            color: '#22c55e', Icon: CheckCircle2   },
   sos_relayed:            { label: 'SOS Relayed',                 color: '#00d4ff', Icon: ArrowRightLeft  },
   ack_sent:               { label: 'ACK Sent',                    color: '#22c55e', Icon: CheckCircle2   },
   ack_received:           { label: 'ACK Received',                color: '#22c55e', Icon: CheckCircle2   },
+  ack_transmitted:        { label: 'ACK Transmitted (GATT)',      color: '#22c55e', Icon: CheckCircle2   },
   duplicate_detected:     { label: 'Duplicate Suppressed',        color: '#6b7280', Icon: XCircle        },
   transmission_failed:    { label: 'Transmission Failed',         color: '#ef4444', Icon: XCircle        },
   retry_attempted:        { label: 'Retry Attempted',             color: '#f59e0b', Icon: RefreshCw      },
   sync_completed:         { label: 'Offline Queue Synced',        color: '#22c55e', Icon: Archive        },
   scan_started:           { label: 'BLE Scan Started',            color: '#00d4ff', Icon: Radio          },
   scan_failed:            { label: 'BLE Scan Failed',             color: '#ef4444', Icon: ZapOff         },
+  scan_permission_denied: { label: 'Scan Permission Denied',      color: '#ef4444', Icon: ZapOff         },
   scanner_null:           { label: 'Scanner Null (retrying)',      color: '#f59e0b', Icon: ZapOff         },
   beacon_decoded:         { label: 'Beacon Decoded',              color: '#00d4ff', Icon: Radio          },
+  sos_beacon_encode_failed: { label: 'Beacon Encode Failed',      color: '#ef4444', Icon: ZapOff         },
+  gatt_service_add_failed:  { label: 'GATT Service Add Failed',   color: '#ef4444', Icon: ZapOff         },
 }
 
 function ago(ms) {
@@ -89,7 +96,7 @@ function getEventSubtext(e) {
 // ── Tab: Overview ─────────────────────────────────────────────────────────────
 
 function OverviewTab({ stats, peers, receivedSOS, eventLog, relayOn, setRelayOn }) {
-  const acksSent = eventLog.filter(e => e.type === 'ack_sent').length
+  const acksSent = eventLog.filter(e => e.type === 'ack_transmitted').length
   const relayed  = eventLog.filter(e => e.type === 'sos_relayed').length
   const synced   = eventLog.filter(e => e.type === 'sync_completed').reduce((a, e) => a + (e.data?.count ?? 0), 0)
   const errors   = eventLog.filter(e => e.type === 'transmission_failed').length
@@ -257,10 +264,12 @@ function ActivityTab({ eventLog }) {
 
   const filterKeys = ['all', 'sos', 'ack', 'peer', 'error']
   const filterMap = {
-    sos:   ['sos_received', 'sos_transmitted', 'sos_relayed', 'sos_broadcast', 'sos_stored_locally'],
-    ack:   ['ack_sent', 'ack_received', 'sos_acknowledged'],
+    sos:   ['sos_received', 'sos_transmitted', 'sos_beacon_queued', 'sos_relayed', 'sos_broadcast',
+            'sos_stored_locally', 'sos_persisted', 'backend_sync_pending'],
+    ack:   ['ack_sent', 'ack_received', 'ack_transmitted', 'sos_acknowledged'],
     peer:  ['peer_discovered', 'connection_established', 'peer_disconnected'],
-    error: ['transmission_failed', 'broadcast_failed', 'scan_failed', 'scanner_null'],
+    error: ['transmission_failed', 'broadcast_failed', 'scan_failed', 'scan_permission_denied',
+            'scanner_null', 'sos_beacon_encode_failed', 'gatt_service_add_failed'],
   }
 
   const filtered = filter === 'all' ? eventLog : eventLog.filter(e => (filterMap[filter] ?? []).includes(e.type))

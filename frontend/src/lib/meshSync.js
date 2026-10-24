@@ -173,64 +173,27 @@ export function startMeshSync() {
       console.log('[meshSync] SOS alert emitted to UI subscribers', rawPacket.id)
       emitMeshSOSAlert(expanded, rawPacket)
 
-      // ── Backend/offline persistence (runs after UI, so delay is invisible) ────
-      // RC-6: avoid double-insert — only queue to IndexedDB when the Supabase POST
-      // fails or the device is offline; a successful POST is the authoritative record.
-      if (getNetworkOnline()) {
-        try {
-          const serverResponse = await api.post('/sos', {
-            ...expanded,
-            relay_source:    rawPacket.originDeviceId,
-            mesh_packet_id:  rawPacket.id,
-          })
-          console.log('[meshSync] SOS relayed to Supabase', rawPacket.id)
-          // Queue locally with synced=true so it survives drain dedup
-          try {
-            const localId = await db.queueSOS({
-              ...expanded,
-              receivedViaMesh: true,
-              meshOriginId: rawPacket.originDeviceId,
-              meshPacketId: rawPacket.id,
-              timestamp: rawPacket.timestamp ?? Date.now(),
-            })
-            await db.markSOSSynced(localId, serverResponse?.id)
-          } catch {}
-        } catch (e) {
-          console.warn('[meshSync] backend relay failed — queuing locally:', e.message)
-          try {
-            await db.queueSOS({
-              ...expanded,
-              receivedViaMesh: true,
-              meshOriginId: rawPacket.originDeviceId,
-              meshPacketId: rawPacket.id,
-              timestamp: rawPacket.timestamp ?? Date.now(),
-            })
-            console.log('[meshSync] SOS saved to IndexedDB', expanded.barangay, expanded.municipality)
-            logMeshEvent('sos_stored_locally', { packetId: rawPacket.id, barangay: expanded.barangay })
-          } catch (dbErr) {
-            console.warn('[meshSync] IndexedDB write also failed:', dbErr.message)
-          }
-        }
-      } else {
-        try {
-          await db.queueSOS({
-            ...expanded,
-            receivedViaMesh: true,
-            meshOriginId: rawPacket.originDeviceId,
-            meshPacketId: rawPacket.id,
-            timestamp: rawPacket.timestamp ?? Date.now(),
-          })
-          console.log('[meshSync] SOS saved to IndexedDB (offline)', expanded.barangay, expanded.municipality)
-          logMeshEvent('sos_stored_locally', { packetId: rawPacket.id, barangay: expanded.barangay })
-        } catch (e) {
-          console.warn('[meshSync] IndexedDB write failed:', e.message)
-        }
+      // ── RC3: persist locally FIRST — before ACK and before backend ─────────────
+      // A successful local write survives app kill, flaky WiFi, and unreachable backend.
+      // Never gate the ACK on a backend round-trip.
+      const role = useAuthStore.getState().role ?? 'device'
+      let localId
+      try {
+        localId = await db.queueSOS({
+          ...expanded,
+          receivedViaMesh: true,
+          meshOriginId: rawPacket.originDeviceId,
+          meshPacketId: rawPacket.id,
+          timestamp: rawPacket.timestamp ?? Date.now(),
+        })
+        console.log('[meshSync] SOS saved to IndexedDB', expanded.barangay, expanded.municipality)
+        logMeshEvent('sos_stored_locally', { sos_id: rawPacket.id, local_id: localId, barangay: expanded.barangay })
+      } catch (dbErr) {
+        console.warn('[meshSync] IndexedDB write failed:', dbErr.message)
+        logMeshEvent('sos_persist_failed', { sos_id: rawPacket.id, error: String(dbErr) })
       }
 
-      // ── ACK ───────────────────────────────────────────────────────────────────
-      // Send ACK back through mesh with this device's role (compact payload)
-      // trustLevel capped at 3 for client-side roles; level 4 reserved for server-confirmed responders
-      const role = useAuthStore.getState().role ?? 'device'
+      // ── ACK — sent right after local persist, not gated on backend ────────────
       mesh.broadcast({
         t:   'ack',
         si:  rawPacket.id,
@@ -243,6 +206,25 @@ export function startMeshSync() {
         hop_count_remaining: rawPacket.hopCount,
         barangay:            expanded.barangay ?? null,
       })
+
+      // ── Backend sync in background — does NOT gate the ACK ───────────────────
+      if (getNetworkOnline()) {
+        api.post('/sos', {
+          ...expanded,
+          relay_source:   rawPacket.originDeviceId,
+          mesh_packet_id: rawPacket.id,
+        }).then(async (serverResponse) => {
+          console.log('[meshSync] SOS relayed to Supabase', rawPacket.id)
+          if (localId) {
+            try { await db.markSOSSynced(localId, serverResponse?.id) } catch {}
+          }
+          logMeshEvent('sos_persisted', { sos_id: rawPacket.id, server_id: serverResponse?.id })
+        }).catch(() => {
+          logMeshEvent('backend_sync_pending', { sos_id: rawPacket.id })
+        })
+      } else {
+        logMeshEvent('backend_sync_pending', { sos_id: rawPacket.id })
+      }
 
       // ── Local push notification ───────────────────────────────────────────────
       if (window.Capacitor?.isNativePlatform?.()) {

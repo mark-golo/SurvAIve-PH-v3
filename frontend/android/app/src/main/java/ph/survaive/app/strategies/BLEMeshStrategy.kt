@@ -109,6 +109,10 @@ class BLEMeshStrategy : MeshStrategy {
     // Key = "${senderAddress}:${fragSetHex}" to isolate concurrent transfers from different peers.
     private val fragmentBuffers = ConcurrentHashMap<String, FragmentAssembly>()
 
+    // Tracks when the SOS beacon fan-out window ends (RC2). ACK beacons are suppressed
+    // during the window so the SOS beacon keeps advertising for its full 30-second radius.
+    private var sosFanOutEndMs = 0L
+
     // Records the timestamp (ms) when each peer was last seen in a scan result.
     private val peerLastSeen = ConcurrentHashMap<String, Long>()
 
@@ -299,6 +303,7 @@ class BLEMeshStrategy : MeshStrategy {
                         mainHandler.post { if (!_isAdvertising) startAdvertising(context) }
                     } else {
                         Log.e(TAG, "GATT addService failed: $status — retrying in 2s")
+                        fireMeshEvent("gatt_service_add_failed", mapOf("status" to status.toString(), "reason" to "onServiceAdded_non_success"))
                         mainHandler.postDelayed({ startGattServer(context) }, 2000L)
                     }
                 }
@@ -393,7 +398,13 @@ class BLEMeshStrategy : MeshStrategy {
             BluetoothGattCharacteristic.PERMISSION_WRITE,
         )
         service.addCharacteristic(char)
-        gattServer?.addService(service)
+        val serviceAdded = gattServer?.addService(service) ?: false
+        if (!serviceAdded) {
+            Log.e(TAG, "addService returned false — scheduling retry")
+            fireMeshEvent("gatt_service_add_failed", mapOf("reason" to "addService_returned_false"))
+            mainHandler.postDelayed({ _context?.let { startGattServer(it) } }, 2000L)
+            return
+        }
         Log.d(TAG, "GATT server open — waiting for onServiceAdded before advertising")
     }
 
@@ -630,6 +641,8 @@ class BLEMeshStrategy : MeshStrategy {
             fireMeshEvent("scan_started", mapOf("mode" to "LOW_LATENCY", "filter" to "software-UUID"))
         } catch (e: SecurityException) {
             Log.e(TAG, "startScan denied — BLUETOOTH_SCAN not granted: ${e.message}")
+            fireMeshEvent("scan_permission_denied", mapOf("error" to (e.message ?: "SecurityException")))
+            onBroadcastStatus?.invoke("scan_permission_denied", 0)
         }
     }
 
@@ -640,18 +653,22 @@ class BLEMeshStrategy : MeshStrategy {
         // Passively broadcast every ~100ms; all nearby scanners receive it without
         // sending SCAN_REQ — no scan-response caching issues.
         if (packet.type == "sos" || packet.type == "ack") {
-            // Both SOS and ACK beacons always update the advertising data.
-            // The prior "isSosRelay" guard blocked ACK beacons when a relay SOS was active,
-            // pushing ACKs to GATT-only (unreliable: STATUS_133, 2–5s delay). This kept
-            // ackLevel at 1 on the victim forever. The guard was unnecessary: Device C already
-            // deduplicated the relay SOS in seenBeaconIds, so briefly switching to an ACK
-            // beacon has no practical impact on Device C's ability to receive the relay.
-            updateBeacon(packet)
             if (packet.type == "sos") {
-                fireMeshEvent("sos_transmitted", mapOf(
+                // RC2: open 30-second fan-out window so ACK beacons can't replace the SOS beacon
+                sosFanOutEndMs = System.currentTimeMillis() + 30_000L
+                updateBeacon(packet)
+                fireMeshEvent("sos_beacon_queued", mapOf(
                     "packetId" to packet.id,
                     "hopCount" to packet.hopCount,
                 ))
+            } else {
+                // ACK beacon: only replace SOS after fan-out window expires
+                if (System.currentTimeMillis() < sosFanOutEndMs) {
+                    Log.d(TAG, "ACK beacon suppressed: SOS fan-out window active " +
+                        "(${sosFanOutEndMs - System.currentTimeMillis()}ms remaining) — GATT only")
+                } else {
+                    updateBeacon(packet)
+                }
             }
             if (discoveredPeers.isEmpty()) {
                 onBroadcastStatus?.invoke("awaiting_peers", 0)
@@ -949,8 +966,13 @@ class BLEMeshStrategy : MeshStrategy {
                         Log.d(TAG, "Write confirmed to ${gatt.device.address} — packet ${packet.id.take(8)} delivered")
                         inFlightPacketIds.remove(packet.id)
                         onWriteConfirmed?.invoke(packet.id)
-                        onBroadcastStatus?.invoke("sos_transmitted", 0)
-                        fireMeshEvent("sos_transmitted", mapOf("deviceAddress" to gatt.device.address, "packetId" to packet.id, "transport" to "BLE_GATT"))
+                        if (packet.type == "ack") {
+                            onBroadcastStatus?.invoke("ack_transmitted", 0)
+                            fireMeshEvent("ack_transmitted", mapOf("deviceAddress" to gatt.device.address, "packetId" to packet.id, "transport" to "BLE_GATT"))
+                        } else {
+                            onBroadcastStatus?.invoke("sos_transmitted", 0)
+                            fireMeshEvent("sos_transmitted", mapOf("deviceAddress" to gatt.device.address, "packetId" to packet.id, "transport" to "BLE_GATT"))
+                        }
                     } else {
                         Log.e(TAG, "Write failed: status=$status to ${gatt.device.address} — retry loop will re-send")
                         pendingFragments = null; fragmentChar = null
@@ -1110,7 +1132,13 @@ class BLEMeshStrategy : MeshStrategy {
             "sos" -> encodeSosBeacon(packet)
             "ack" -> encodeAckBeacon(packet)
             else  -> return
-        } ?: return
+        } ?: run {
+            Log.e(TAG, "updateBeacon: beacon encoding returned null for type=${packet.type}")
+            fireMeshEvent("sos_beacon_encode_failed", mapOf(
+                "packetId" to packet.id, "packetType" to packet.type
+            ))
+            return
+        }
         // Idempotency guard: skip the stop/restart cycle if we're already advertising
         // the exact same beacon bytes. The flushPending() retry loop calls this every 3s,
         // and constant stop/restart causes Samsung/Xiaomi BLE firmware to silently stop
