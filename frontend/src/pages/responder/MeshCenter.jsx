@@ -65,6 +65,10 @@ const EVENT_META = {
   beacon_decoded:         { label: 'Beacon Decoded',              color: '#00d4ff', Icon: Radio          },
   sos_beacon_encode_failed: { label: 'Beacon Encode Failed',      color: '#ef4444', Icon: ZapOff         },
   gatt_service_add_failed:  { label: 'GATT Service Add Failed',   color: '#ef4444', Icon: ZapOff         },
+  gatt_connecting:          { label: 'GATT Connecting',           color: '#a78bfa', Icon: Bluetooth      },
+  rx_gatt_write:            { label: 'RX GATT Write',             color: '#60a5fa', Icon: Bluetooth      },
+  gatt_server_started:      { label: 'GATT Server Ready',         color: '#22c55e', Icon: CheckCircle2   },
+  gatt_server_failed:       { label: 'GATT Server Failed',        color: '#ef4444', Icon: ZapOff         },
 }
 
 function ago(ms) {
@@ -183,9 +187,23 @@ function OverviewTab({ stats, peers, receivedSOS, eventLog, relayOn, setRelayOn 
                       {entry.data.service_type?.length > 0 && ` · ${entry.data.service_type.join(', ')}`}
                     </p>
                   </div>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-[rgba(239,68,68,0.15)] text-[#ef4444] font-bold shrink-0">
-                    ACK SENT
-                  </span>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    {entry.isPartial && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded font-bold"
+                        style={{ background: 'rgba(245,158,11,0.2)', color: '#f59e0b' }}>
+                        PARTIAL
+                      </span>
+                    )}
+                    {eventLog.some(e =>
+                      (e.type === 'ack_sent' || e.type === 'ack_transmitted') &&
+                      (e.data?.sos_id === entry.rawPacket?.id || e.data?.ack_packet_id === entry.rawPacket?.id)
+                    ) && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded font-bold"
+                        style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}>
+                        ACK SENT
+                      </span>
+                    )}
+                  </div>
                 </motion.div>
               ))}
             </AnimatePresence>
@@ -385,6 +403,12 @@ function TrackerTab({ receivedSOS, eventLog }) {
             const syncEvent = relatedEvents.find(e => e.type === 'sync_completed')
             return (
               <GlassCard key={id}>
+                {entry.isPartial && (
+                  <div style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.4)',
+                    borderRadius: 4, padding: '4px 8px', marginBottom: 8, fontSize: '0.7rem', color: '#f59e0b' }}>
+                    Beacon-only — partial data. Full payload arrives via GATT.
+                  </div>
+                )}
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <p className="text-xs font-black text-[#ef4444]">
@@ -451,9 +475,13 @@ function DiagnosticsTab({ stats, eventLog }) {
     ['transmission_failed','broadcast_failed','scan_failed','scanner_null'].includes(e.type)
   ).slice(0, 5)
 
+  const isWifiDirect = stats.transport === 'WiFiDirect'
   const rows = [
     { label: 'Mesh engine',       value: stats.transport !== 'not started' ? 'Running' : 'Stopped', ok: stats.transport !== 'not started' },
-    { label: 'Active transport',  value: stats.transport ?? 'none',        ok: stats.transport && stats.transport !== 'none' && stats.transport !== 'not started' },
+    { label: 'Active transport',
+      value: isWifiDirect ? 'WiFiDirect (P2P group required)' : (stats.transport ?? 'none'),
+      ok:   !isWifiDirect && stats.transport && stats.transport !== 'none' && stats.transport !== 'not started',
+      warn: isWifiDirect },
     { label: 'Peers discovered',  value: String(stats.peersNearby),        ok: stats.peersNearby > 0 },
     { label: 'Relay enabled',     value: stats.relayEnabled ? 'Yes' : 'No', ok: stats.relayEnabled },
     { label: 'IDB queue (pending)', value: queueCount === null ? '…' : String(queueCount), ok: queueCount === 0 },
@@ -466,13 +494,15 @@ function DiagnosticsTab({ stats, eventLog }) {
           System Status
         </p>
         <div className="space-y-2">
-          {rows.map(({ label, value, ok }) => (
+          {rows.map(({ label, value, ok, warn }) => (
             <div key={label} className="flex items-center gap-2">
               {ok
                 ? <CheckCircle2 size={12} className="text-[#22c55e] shrink-0" />
-                : <XCircle     size={12} className="text-[#ef4444] shrink-0" />}
+                : warn
+                  ? <CheckCircle2 size={12} className="shrink-0" style={{ color: '#f59e0b' }} />
+                  : <XCircle     size={12} className="text-[#ef4444] shrink-0" />}
               <p className="text-xs text-slate-400 flex-1">{label}</p>
-              <p className="text-xs font-semibold" style={{ color: ok ? '#22c55e' : '#ef4444' }}>{value}</p>
+              <p className="text-xs font-semibold" style={{ color: ok ? '#22c55e' : warn ? '#f59e0b' : '#ef4444' }}>{value}</p>
             </div>
           ))}
         </div>

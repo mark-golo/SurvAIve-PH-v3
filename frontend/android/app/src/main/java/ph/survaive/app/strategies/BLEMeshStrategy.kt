@@ -297,6 +297,7 @@ class BLEMeshStrategy : MeshStrategy {
                 override fun onServiceAdded(status: Int, service: BluetoothGattService) {
                     if (status == BluetoothGatt.GATT_SUCCESS) {
                         Log.d(TAG, "GATT service registered — starting advertising")
+                        fireMeshEvent("gatt_server_started", mapOf("serviceUuid" to service.uuid.toString()))
                         // startAdvertising must be called from the main thread on many OEM stacks.
                         // Guard: if an SOS beacon is already being advertised (e.g. updateBeacon()
                         // fired before onServiceAdded), skip — we must not clobber the running ad.
@@ -328,6 +329,11 @@ class BLEMeshStrategy : MeshStrategy {
                         ))
                         return
                     }
+                    fireMeshEvent("rx_gatt_write", mapOf(
+                        "from" to device.address,
+                        "bytes" to value.size,
+                        "preparedWrite" to preparedWrite,
+                    ))
                     val srv = gattServer
                     if (preparedWrite) {
                         val buf = preparedWriteBuffers.getOrPut(device.address) { java.util.TreeMap() }
@@ -382,8 +388,7 @@ class BLEMeshStrategy : MeshStrategy {
             })
         } catch (e: SecurityException) {
             Log.e(TAG, "openGattServer denied — BLUETOOTH_CONNECT not granted: ${e.message}")
-            // Fire a status event so the JS layer can surface this failure rather than
-            // silently believing the mesh started successfully.
+            fireMeshEvent("gatt_server_failed", mapOf("reason" to "security_exception", "message" to (e.message ?: "")))
             onBroadcastStatus?.invoke("gatt_server_failed", -1)
             return
         }
@@ -717,6 +722,7 @@ class BLEMeshStrategy : MeshStrategy {
         val ctx = _context ?: return
         val payload = packet.toJson().toByteArray(Charsets.UTF_8)
         Log.d(TAG, "connectAndWrite: payload=${payload.size}B to ${peer.address} (retries=$retriesLeft)")
+        fireMeshEvent("gatt_connecting", mapOf("peer" to peer.address, "packetId" to packet.id.take(8)))
         onBroadcastStatus?.invoke("connecting", 0)
 
         val mtuCallbackFired   = AtomicBoolean(false)
