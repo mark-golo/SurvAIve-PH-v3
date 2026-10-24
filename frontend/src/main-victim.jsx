@@ -7,10 +7,11 @@ import { initCapacitor } from './lib/capacitor'
 import { startMeshSync } from './lib/meshSync'
 import { mesh } from './lib/mesh'
 
-// Initialise native radios and the global receive pipeline before mounting UI.
+// Boot Capacitor plugins before rendering — logs platform context and allows
+// native plugins (Geolocation, Network, MeshNetwork) to initialise.
 initCapacitor()
 startMeshSync()
-mesh.getStats().catch((err) => console.error('[SurvAIve] victim mesh startup failed:', err))
+mesh.getStats().catch(() => {})   // eagerly registers native listener before first packet
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
