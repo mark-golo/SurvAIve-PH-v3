@@ -673,33 +673,41 @@ class BLEMeshStrategy : MeshStrategy {
                 val encoded = encodeSosBeacon(packet)
                 val now = System.currentTimeMillis()
                 val isNewSos = activeSosBeaconPacketId != packet.id
-                if (encoded != null && isNewSos) {
+                if (encoded == null) {
+                    // Do not log "beacon queued" if encoding failed. The GATT path below
+                    // can still attempt to carry the full packet.
+                    fireMeshEvent("sos_beacon_encode_failed", mapOf("packetId" to packet.id))
+                } else if (isNewSos) {
                     // Start the fan-out window only for a new packet ID, never for each
                     // 3-second pending-queue retry. Otherwise retries can indefinitely
                     // extend the SOS window and starve ACK beaconing.
                     activeSosBeaconPacketId = packet.id
                     activeSosBeaconUntilMs = now + SOS_BEACON_RETENTION_MS
                     updateBeacon(packet)
-                } else if (encoded != null && (
+                    fireMeshEvent("sos_beacon_queued", mapOf(
+                        "packetId" to packet.id,
+                        "hopCount" to packet.hopCount,
+                    ))
+                } else if (
                     currentBeacon == null ||
                     currentBeacon!!.contentEquals(encoded) ||
                     now < activeSosBeaconUntilMs
-                )) {
+                ) {
                     // Same SOS: leave its beacon up during the original fan-out window.
                     // If the grace period has elapsed and an ACK has taken the beacon
                     // slot, do not let the pending SOS retry immediately replace it.
                     updateBeacon(packet)
+                    fireMeshEvent("sos_beacon_queued", mapOf(
+                        "packetId" to packet.id,
+                        "hopCount" to packet.hopCount,
+                        "reason" to "same_active_sos",
+                    ))
                 } else {
                     fireMeshEvent("sos_beacon_retry_held", mapOf(
                         "packetId" to packet.id,
                         "reason" to "fanout_window_elapsed_and_another_beacon_is_active",
                     ))
                 }
-                // Scheduling/updating an advertisement is not proof that a phone received it.
-                fireMeshEvent("sos_beacon_queued", mapOf(
-                    "packetId" to packet.id,
-                    "hopCount" to packet.hopCount,
-                ))
             } else {
                 val remaining = activeSosBeaconUntilMs - System.currentTimeMillis()
                 if (activeSosBeaconPacketId != null && remaining > 0L) {
