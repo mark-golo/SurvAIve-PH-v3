@@ -44,7 +44,9 @@ export interface MeshNetworkPlugin {
   /**
    * Start BLE advertising + scanning + Wi-Fi Direct listening.
    * Also triggers Android runtime permission requests for BLE and location.
-   * Must be called before broadcast() or addListener().
+   * Register event listeners BEFORE calling this method — startup events
+   * (peer_discovered, advertising_started) may fire during startMesh() and
+   * would be lost if listeners are registered after.
    */
   startMesh(): Promise<{ success: boolean }>
 
@@ -58,6 +60,7 @@ export interface MeshNetworkPlugin {
    * On failure the caller should queue to IndexedDB for retry.
    */
   broadcast(options: {
+    id?: string
     type: string
     payload: string
   }): Promise<{ success: boolean; transport: string; packetId: string }>

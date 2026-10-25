@@ -63,6 +63,7 @@ const EVENT_META = {
   scan_permission_denied: { label: 'Scan Permission Denied',      color: '#ef4444', Icon: ZapOff         },
   scanner_null:           { label: 'Scanner Null (retrying)',      color: '#f59e0b', Icon: ZapOff         },
   beacon_decoded:         { label: 'Beacon Decoded',              color: '#00d4ff', Icon: Radio          },
+  beacon_provisional:     { label: 'SOS Beacon (provisional)',    color: '#f59e0b', Icon: Radio          },
   sos_beacon_encode_failed: { label: 'Beacon Encode Failed',      color: '#ef4444', Icon: ZapOff         },
   gatt_service_add_failed:  { label: 'GATT Service Add Failed',   color: '#ef4444', Icon: ZapOff         },
   gatt_connecting:          { label: 'GATT Connecting',           color: '#a78bfa', Icon: Bluetooth      },

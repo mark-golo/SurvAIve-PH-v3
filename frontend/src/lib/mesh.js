@@ -56,15 +56,33 @@ async function ensureStarted() {
       _listenerHandle = await MeshNetwork.addListener('meshPacketReceived', (packet) => {
         // Stage 3 of receive chain: Capacitor event reached JS listener.
         console.log('[mesh] meshPacketReceived: id=', packet?.id, 'type=', packet?.type, 'hopCount=', packet?.hopCount)
-        // Beacon packets carry a 20-byte binary payload that decodes to an empty or
-        // minimal JSON string. Rather than discarding them, fall through with {} so
-        // the handler can still route by rawPacket.type and log the SOS detection.
-        let data = {}
+        // Beacons no longer reach this path (BLEMeshStrategy fires beacon_provisional
+        // without invoking onPacketReceived). Only full GATT packets arrive here.
+        // Drop any malformed payload rather than delivering {} to downstream handlers.
+        let data
         try {
           const raw = packet?.payload
-          if (raw && raw !== 'null') data = JSON.parse(raw)
-        } catch {
-          console.warn('[mesh] payload parse failed — delivering with {}:', packet?.id)
+          if (typeof raw !== 'string' || !raw || raw === 'null') {
+            throw new Error('missing payload')
+          }
+          data = JSON.parse(raw)
+          if (!data || typeof data !== 'object' || Array.isArray(data)) {
+            throw new Error('payload is not a JSON object')
+          }
+        } catch (err) {
+          console.error('[mesh] dropping malformed mesh payload', {
+            id:      packet?.id,
+            type:    packet?.type,
+            error:   String(err),
+            payload: packet?.payload,
+          })
+          return
+        }
+        const payloadType = data.t ?? data.type
+        if (packet?.type === 'sos' && payloadType && payloadType !== 'sos') {
+          console.error('[mesh] dropping SOS packet with mismatched payload type',
+            { id: packet?.id, payloadType })
+          return
         }
         if (_msgHandlers.length > 0) {
           _msgHandlers.forEach((fn) => fn(data, packet))

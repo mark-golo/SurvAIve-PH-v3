@@ -575,15 +575,18 @@ class BLEMeshStrategy : MeshStrategy {
                             var pruned = 0
                             while (it.hasNext() && pruned < 50) { it.next(); it.remove(); pruned++ }
                         }
-                        Log.d(TAG, "Beacon received from ${device.address}: type=${packet.type} hops=${packet.hopCount}")
-                        fireMeshEvent("beacon_decoded", mapOf(
+                        Log.d(TAG, "Provisional SOS beacon from ${device.address}: type=${packet.type} hops=${packet.hopCount}")
+                        fireMeshEvent("beacon_provisional", mapOf(
                             "deviceAddress" to device.address,
                             "packetType"    to packet.type,
-                            "packetId"      to packet.id,
-                            "hopCount"      to packet.hopCount,
+                            "beaconId"      to packet.id,
                             "originId"      to packet.originDeviceId,
+                            "hopCount"      to packet.hopCount,
                         ))
-                        onPacketReceived?.invoke(packet)
+                        // Do NOT invoke onPacketReceived: beacon IDs are truncated (3 bytes,
+                        // not UUID-safe) and payloads are incomplete. Full GATT delivery is
+                        // the authoritative path. ACKing a beacon-ID would never match the
+                        // sender's active SOS UUID.
                     }
                 } else {
                     // mfgData present and ≥18B but decodeBeacon returned null — type byte or
