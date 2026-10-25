@@ -274,8 +274,11 @@ function SOSQueueTab({ ackState, sosQueue, eventLog, sosBroadcastLog }) {
             {(() => {
               const sub = ackState?.broadcastSubState
               const errCode = ackState?.broadcastErrorCode
+              const hasAck = (ackState.ackDevices?.length ?? 0) > 0
               const s = sub === 'transmitted'
-                ? { Icon: CheckCircle2, text: 'SOS Delivered ✓',     color: '#22c55e', spin: false }
+                ? hasAck
+                  ? { Icon: CheckCircle2, text: 'Acknowledged by Peer ✓', color: '#22c55e', spin: false }
+                  : { Icon: RefreshCw,    text: 'Sent — Awaiting ACK…',   color: '#00d4ff', spin: true  }
                 : sub === 'connecting'
                   ? { Icon: RefreshCw,   text: 'Connecting to Peer…',  color: '#00d4ff', spin: true  }
                   : sub === 'failed'
@@ -291,9 +294,6 @@ function SOSQueueTab({ ackState, sosQueue, eventLog, sosBroadcastLog }) {
                       style={s.spin ? { animationDuration: '2s' } : {}} />
                     {s.text}
                   </div>
-                  {sub === 'transmitted' && (ackState.ackDevices?.length ?? 0) === 0 && (
-                    <p className="text-[9px] text-slate-500 mt-0.5 ml-[15px]">Awaiting acknowledgement from peer…</p>
-                  )}
                 </div>
               )
             })()}

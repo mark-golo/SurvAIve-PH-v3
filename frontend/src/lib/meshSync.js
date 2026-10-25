@@ -26,13 +26,17 @@ import { useAlertStore } from '../store/alertStore'
 
 // ACK ID normalizer: beacons truncate UUID to 6 hex chars → "beacon-XXXXXX".
 // The victim stores the full UUID. This helper matches either format.
-function _ackMatchesSos(curPacketId, sosId) {
-  if (!curPacketId || !sosId) return false
-  if (curPacketId === sosId) return true
-  if (sosId.startsWith('beacon-')) {
-    return curPacketId.replace(/-/g, '').slice(0, 6) === sosId.slice(7)
-  }
-  return false
+function _ackMatchesSos(activeId, incomingId) {
+  if (!activeId || !incomingId) return false
+  const active   = String(activeId).trim().toLowerCase()
+  const incoming = String(incomingId).trim().toLowerCase()
+  if (active === incoming) return true
+  // Legacy BLE advertisement ACKs carry only the first 6 hex chars as beacon-XXXXXX.
+  const activePrefix = active.replace(/-/g, '').slice(0, 6)
+  const incomingPrefix = incoming.startsWith('beacon-')
+    ? incoming.slice('beacon-'.length).replace(/-/g, '').slice(0, 6)
+    : null
+  return Boolean(incomingPrefix && activePrefix === incomingPrefix)
 }
 
 let _unsubscribe    = null
@@ -138,7 +142,12 @@ export function startMeshSync() {
                 : 'id_mismatch',
           })
         }
-      } catch {}
+      } catch (err) {
+        logMeshEvent('ack_processing_error', {
+          error:    String(err),
+          packetId: rawPacket?.id ?? null,
+        })
+      }
       return
     }
 

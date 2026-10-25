@@ -241,7 +241,7 @@ class MeshNetworkService : Service() {
         // so that if the same packet arrives via both passive beacon and GATT write,
         // the second delivery is dropped by handleIncomingPacket.
         if (!packet.id.startsWith("beacon-") && !packet.id.startsWith("ack-")) {
-            seenPacketIds.add("beacon-" + packet.id.replace("-", "").take(6))
+            seenPacketIds.add(beaconKey(packet.id))
         }
 
         // Always queue first — BLE is optimistic (returns true before the write completes).
@@ -299,6 +299,15 @@ class MeshNetworkService : Service() {
 
     // ── Incoming packet handling ─────────────────────────────────────────────────
 
+    // Returns the canonical "beacon-XXXXXX" dedup key for any packet ID.
+    // Full UUIDs: strips hyphens and takes first 6 hex chars.
+    // Beacon/ack IDs: already canonical; returned unchanged.
+    private fun beaconKey(id: String): String {
+        val normalized = id.trim().lowercase()
+        if (normalized.startsWith("beacon-") || normalized.startsWith("ack-")) return normalized
+        return "beacon-" + normalized.replace("-", "").take(6)
+    }
+
     private fun handleIncomingPacket(packet: MeshPacket) {
         // Drop packets we originated ourselves (important for beacon self-receive)
         // Fix 4: lowercase both sides — beacon-decoded originDeviceId is always lowercase hex,
@@ -315,7 +324,7 @@ class MeshNetworkService : Service() {
         // Exact-ID dedup only. GATT is allowed through even if beacon arrived first:
         // beacon carries partial data (no barangay/municipality), GATT carries full SOS.
         // JS-side addReceivedSOS merges the two into one entry.
-        val shortId = "beacon-" + packet.id.replace("-", "").take(6)
+        val shortId = beaconKey(packet.id)
         if (seenPacketIds.contains(packet.id)) {
             // For SOS duplicates: re-forward to JS so the receiver can re-ACK.
             // The original ACK may have been lost; the sender retransmits the same ID.
@@ -354,6 +363,12 @@ class MeshNetworkService : Service() {
         if (cb != null) {
             android.util.Log.d("MeshService", "Forwarding to JS id=${packet.id} type=${packet.type} hops=${packet.hopCount}")
             if (packet.type == "sos") android.util.Log.d("SOSReceiver", "SOS delivered to JS id=${packet.id}")
+            strategies.filterIsInstance<BLEMeshStrategy>().firstOrNull()
+                ?.onMeshEvent?.invoke("packet_delivered_to_service", mapOf(
+                    "packetId" to packet.id.take(8),
+                    "type"     to packet.type,
+                    "hopCount" to packet.hopCount,
+                ))
             cb.invoke(packet)
         } else {
             synchronized(startupBuffer) {

@@ -68,8 +68,10 @@ const EVENT_META = {
   gatt_service_add_failed:  { label: 'GATT Service Add Failed',   color: '#ef4444', Icon: ZapOff         },
   gatt_connecting:          { label: 'GATT Connecting',           color: '#a78bfa', Icon: Bluetooth      },
   rx_gatt_write:            { label: 'RX GATT Write',             color: '#60a5fa', Icon: Bluetooth      },
-  gatt_server_started:      { label: 'GATT Server Ready',         color: '#22c55e', Icon: CheckCircle2   },
-  gatt_server_failed:       { label: 'GATT Server Failed',        color: '#ef4444', Icon: ZapOff         },
+  gatt_server_started:          { label: 'GATT Server Ready',         color: '#22c55e', Icon: CheckCircle2   },
+  gatt_server_failed:           { label: 'GATT Server Failed',        color: '#ef4444', Icon: ZapOff         },
+  packet_delivered_to_service:  { label: 'Packet → Service',          color: '#34d399', Icon: CheckCircle2   },
+  ack_processing_error:         { label: 'ACK Processing Error',      color: '#ef4444', Icon: ZapOff         },
 }
 
 function ago(ms) {
