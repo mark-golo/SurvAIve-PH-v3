@@ -651,6 +651,17 @@ export function MeshCenter() {
     <div className={`h-screen bg-mesh flex flex-col overflow-hidden${isLight ? ' light-theme' : ''}`}>
       <TopBar title="Mesh Center" subtitle="Emergency mesh network" onBack />
 
+      {!(window.Capacitor?.isNativePlatform?.() ?? false) && (
+        <div style={{
+          background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)',
+          borderRadius: 8, padding: '10px 14px', margin: '8px 16px',
+          fontSize: '0.75rem', color: '#ef4444', lineHeight: 1.4,
+        }}>
+          <strong>BLE mesh unavailable in browser.</strong> Install the Android APK to test
+          offline SOS delivery — the web fallback uses HTTP only and cannot simulate BLE GATT.
+        </div>
+      )}
+
       {/* Tab bar — horizontal scroll on small screens */}
       <div className="flex shrink-0 border-b border-[rgba(255,255,255,0.08)] overflow-x-auto">
         {TABS.map(({ key, label, Icon }) => (

@@ -56,8 +56,8 @@ async function ensureStarted() {
       _listenerHandle = await MeshNetwork.addListener('meshPacketReceived', (packet) => {
         // Stage 3 of receive chain: Capacitor event reached JS listener.
         console.log('[mesh] meshPacketReceived: id=', packet?.id, 'type=', packet?.type, 'hopCount=', packet?.hopCount)
-        // Beacons no longer reach this path (BLEMeshStrategy fires beacon_provisional
-        // without invoking onPacketReceived). Only full GATT packets arrive here.
+        // Both beacon-provisional and full GATT packets reach this path.
+        // Beacon packets carry provisional=true; meshSync.js deduplicates by short-ID.
         // Drop any malformed payload rather than delivering {} to downstream handlers.
         let data
         try {

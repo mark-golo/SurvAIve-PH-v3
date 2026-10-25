@@ -163,7 +163,18 @@ export function startMeshSync() {
       // to hang for the full HTTP timeout, blocking these calls in the old order).
       // Duplicate guard: check BEFORE addReceivedSOS so we can skip db.queueSOS on
       // re-ACK'd duplicate SOS packets (forwarded again by Kotlin after 30s cooldown).
-      const alreadyReceived = getReceivedSOS().some(s => s.rawPacket?.id === rawPacket.id)
+      // Normalize beacon-ID (beacon-XXXXXX) and full UUID to the same 6-char prefix so
+      // a GATT packet arriving after its beacon is treated as a duplicate, not a new SOS.
+      function _shortId(id) {
+        if (!id) return ''
+        if (id.startsWith('beacon-')) return id.slice(7, 13).toLowerCase()
+        return id.replace(/-/g, '').slice(0, 6).toLowerCase()
+      }
+      const shortId = _shortId(rawPacket.id)
+      const alreadyReceived = getReceivedSOS().some(s =>
+        s.rawPacket?.id === rawPacket.id ||
+        (shortId && _shortId(s.rawPacket?.id) === shortId)
+      )
       addReceivedSOS(expanded, rawPacket)
       logMeshEvent('sos_received', {
         packetId:       rawPacket.id         ?? null,

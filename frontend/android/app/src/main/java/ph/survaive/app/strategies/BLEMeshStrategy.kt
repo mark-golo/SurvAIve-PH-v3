@@ -583,10 +583,11 @@ class BLEMeshStrategy : MeshStrategy {
                             "originId"      to packet.originDeviceId,
                             "hopCount"      to packet.hopCount,
                         ))
-                        // Do NOT invoke onPacketReceived: beacon IDs are truncated (3 bytes,
-                        // not UUID-safe) and payloads are incomplete. Full GATT delivery is
-                        // the authoritative path. ACKing a beacon-ID would never match the
-                        // sender's active SOS UUID.
+                        // Forward beacon as provisional SOS — payload carries provisional=true
+                        // and source=ble_beacon so JS can show a "pending" badge. GATT packet
+                        // arriving later is the authoritative path; meshSync.js deduplicates
+                        // by short-ID so DB only stores one row per incident.
+                        onPacketReceived?.invoke(packet)
                     }
                 } else {
                     // mfgData present and ≥18B but decodeBeacon returned null — type byte or
@@ -1111,6 +1112,8 @@ class BLEMeshStrategy : MeshStrategy {
                         put("s", statusStr)
                         if (people > 0) put("n", people)
                         if (barangay.isNotEmpty()) put("b", barangay)
+                        put("provisional", true)       // beacon-only delivery; full fields in GATT packet
+                        put("source", "ble_beacon")
                     }.toString()
                     MeshPacket(id = packetId, type = "sos", payload = payload,
                                originDeviceId = originId, hopCount = hopCount)

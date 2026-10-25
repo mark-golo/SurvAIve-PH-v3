@@ -505,6 +505,17 @@ export function MeshStatus() {
     <div className={`h-screen bg-mesh flex flex-col overflow-hidden${isLight ? ' light-theme' : ''}`}>
       <TopBar title="Offline Mesh" subtitle="Peer-to-peer emergency relay" onBack />
 
+      {!(window.Capacitor?.isNativePlatform?.() ?? false) && (
+        <div style={{
+          background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)',
+          borderRadius: 8, padding: '10px 14px', margin: '8px 16px',
+          fontSize: '0.75rem', color: '#ef4444', lineHeight: 1.4,
+        }}>
+          <strong>BLE mesh unavailable in browser.</strong> Install the Android APK to test
+          offline SOS delivery — the web fallback uses HTTP only and cannot simulate BLE GATT.
+        </div>
+      )}
+
       {/* Stats strip */}
       <StatsStrip
         stats={stats}
