@@ -25,3 +25,7 @@ dist-ssr
 
 .vercel
 .env*
+
+# Android signing — never commit
+*.jks
+*.keystore

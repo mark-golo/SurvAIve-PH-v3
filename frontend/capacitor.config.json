@@ -1,0 +1,20 @@
+{
+  "appId": "ph.survaive.app",
+  "appName": "SurvAIve PH",
+  "webDir": "dist",
+  "plugins": {
+    "Geolocation": {},
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_icon_config_sample",
+      "iconColor": "#00d4ff",
+      "sound": "beep.wav"
+    },
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#050a14"
+  }
+}
