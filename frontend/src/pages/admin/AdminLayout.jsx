@@ -1,5 +1,5 @@
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
-import { LayoutDashboard, Users, BookUser, BarChart2, Radio, UserCog, MapPin, LogOut, Menu, ClipboardList, FileBarChart, Settings2, Bell, Layers, ScrollText } from 'lucide-react'
+import { LayoutDashboard, Users, BookUser, BarChart2, Radio, UserCog, MapPin, LogOut, Menu, ClipboardList, FileBarChart, Settings2, Bell, Layers, ScrollText, KeyRound } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '../../store/auth'
@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { icon: ClipboardList,   label: 'SITREP',                   path: '/admin/sitrep'                   },
   { icon: BarChart2,       label: 'AI Situational Analytics', path: '/admin/analytics'          },
   { icon: UserCog,         label: 'User Management',          path: '/admin/staff'              },
+  { icon: KeyRound,        label: 'Login Credentials',        path: '/admin/credentials'        },
   { icon: ScrollText,      label: 'Audit Logs',               path: '/admin/audit-logs'         },
 ]
 
@@ -30,6 +31,7 @@ const PAGE_TITLES = {
   '/admin/analytics':          'AI Situational Analytics',
   '/admin/responders':         'Rescue Updates',
   '/admin/staff':              'User Management',
+  '/admin/credentials':        'Login Credentials',
   '/admin/evacuation-centers': 'Evacuation Centers',
   '/admin/emergency-report':        'Emergency Report',
   '/admin/barangays-comparison':    'Barangays Comparison',

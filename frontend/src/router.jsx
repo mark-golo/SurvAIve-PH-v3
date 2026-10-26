@@ -32,6 +32,7 @@ import { RespondersView }      from './pages/admin/RespondersView'
 import { StaffManagement as AdminStaffManagement } from './pages/admin/StaffManagement'
 import { EvacuationCenters } from './pages/admin/EvacuationCenters'
 
+import { LoginCredentials }        from './pages/admin/LoginCredentials'
 import { SITREP }                 from './pages/admin/SITREP'
 import { EmergencyReport }        from './pages/admin/EmergencyReport'
 import { AdminSettings }          from './pages/admin/AdminSettings'
@@ -106,6 +107,7 @@ export const router = createHashRouter([
           { path: '/admin/sitrep',              element: <SITREP /> },
           { path: '/admin/emergency-report',        element: <EmergencyReport /> },
           { path: '/admin/barangays-comparison', element: <BarangaysComparison /> },
+          { path: '/admin/credentials',          element: <LoginCredentials /> },
           { path: '/admin/settings',             element: <AdminSettings /> },
           { path: '/admin/audit-logs',           element: <AuditLogs /> },
         ],
