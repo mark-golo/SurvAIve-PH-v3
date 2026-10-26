@@ -331,9 +331,10 @@ class MeshNetworkService : Service() {
             // Rate-limited to once per 30s per SOS ID. Relay is NOT attempted again.
             if (packet.type == "sos") {
                 val now = System.currentTimeMillis()
-                val lastReAck = reAckCooldownMs.getOrDefault(packet.id, 0L)
+                val reAckKey  = beaconKey(packet.id)
+                val lastReAck = reAckCooldownMs.getOrDefault(reAckKey, 0L)
                 if (now - lastReAck >= 30_000L) {
-                    reAckCooldownMs[packet.id] = now
+                    reAckCooldownMs[reAckKey] = now
                     android.util.Log.d("MeshService", "Duplicate SOS — re-forwarding for re-ACK id=${packet.id.take(8)}")
                     onPacketReceived?.invoke(packet)
                         ?: synchronized(startupBuffer) {

@@ -601,8 +601,11 @@ class BLEMeshStrategy : MeshStrategy {
                     // GATT-only peer: no manufacturer data in ADV — beacon path unavailable.
                     // This is normal for peers that have never sent an SOS (idle advertising).
                     Log.v(TAG, "No mfgData from ${device.address} — GATT-only peer")
+                } else if (mfgData.size == 1 && mfgData[0] == 0x00.toByte()) {
+                    // SurvAIve idle/alive marker — expected for non-SOS peers; no event.
+                    Log.v(TAG, "Idle/alive marker from ${device.address}")
                 } else {
-                    // Manufacturer data present but truncated by OEM firmware below minimum 18B.
+                    // Truncated or foreign manufacturer data — unexpected.
                     Log.w(TAG, "mfgData too short from ${device.address}: ${mfgData.size}B < 18B minimum")
                     fireMeshEvent("beacon_too_short", mapOf("deviceAddress" to device.address, "size" to mfgData.size))
                 }

@@ -24,19 +24,19 @@ import { getNetworkOnline } from './capacitor'
 import { useAuthStore } from '../store/auth'
 import { useAlertStore } from '../store/alertStore'
 
-// ACK ID normalizer: beacons truncate UUID to 6 hex chars → "beacon-XXXXXX".
-// The victim stores the full UUID. This helper matches either format.
+// Canonical ACK→SOS correlator. Both IDs normalised: beacon-/ack- prefix stripped,
+// whitespace trimmed, lowercased. Full UUIDs matched by exact hex; short IDs by exact string.
+function _normalizeId(value) {
+  if (typeof value !== 'string') return ''
+  return value.trim().toLowerCase().replace(/^beacon-/, '').replace(/^ack-/, '')
+}
 function _ackMatchesSos(activeId, incomingId) {
-  if (!activeId || !incomingId) return false
-  const active   = String(activeId).trim().toLowerCase()
-  const incoming = String(incomingId).trim().toLowerCase()
-  if (active === incoming) return true
-  // Legacy BLE advertisement ACKs carry only the first 6 hex chars as beacon-XXXXXX.
-  const activePrefix = active.replace(/-/g, '').slice(0, 6)
-  const incomingPrefix = incoming.startsWith('beacon-')
-    ? incoming.slice('beacon-'.length).replace(/-/g, '').slice(0, 6)
-    : null
-  return Boolean(incomingPrefix && activePrefix === incomingPrefix)
+  const active   = _normalizeId(activeId)
+  const incoming = _normalizeId(incomingId)
+  if (!active || !incoming) return false
+  const isUuid = v => /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/.test(v)
+  if (isUuid(active) && isUuid(incoming)) return active.replace(/-/g, '') === incoming.replace(/-/g, '')
+  return active === incoming
 }
 
 let _unsubscribe    = null
