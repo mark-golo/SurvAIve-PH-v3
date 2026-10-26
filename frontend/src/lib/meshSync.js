@@ -35,7 +35,13 @@ function _ackMatchesSos(activeId, incomingId) {
   const incoming = _normalizeId(incomingId)
   if (!active || !incoming) return false
   const isUuid = v => /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/.test(v)
+  // Full UUIDs must match exactly.
   if (isUuid(active) && isUuid(incoming)) return active.replace(/-/g, '') === incoming.replace(/-/g, '')
+  // Short BLE beacon IDs (6–8 hex chars) matched as a strict prefix of the full UUID.
+  const activeHex   = isUuid(active)   ? active.replace(/-/g, '')   : ''
+  const incomingHex = isUuid(incoming) ? incoming.replace(/-/g, '') : ''
+  if (activeHex   && /^[0-9a-f]{6,8}$/.test(incoming)) return activeHex.startsWith(incoming)
+  if (incomingHex && /^[0-9a-f]{6,8}$/.test(active))   return incomingHex.startsWith(active)
   return active === incoming
 }
 
