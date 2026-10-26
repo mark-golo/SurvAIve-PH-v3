@@ -93,6 +93,7 @@ function expandSOS(data) {
 }
 
 export function startMeshSync() {
+  console.info('[meshSync] startMeshSync called')
   // H5 fix: if _unsubscribe exists but the native engine died (isConnected false),
   // clear the stale handler so we re-register a fresh listener.
   if (_unsubscribe && !mesh.isConnected?.()) { stopMeshSync() }
@@ -111,9 +112,13 @@ export function startMeshSync() {
     if (status === 'connecting')          setBroadcastSubState('connecting')
     if (status === 'sos_transmitted')     setBroadcastSubState('transmitted')
   })
+  console.info('[meshSync] receiver pipeline subscribed')
   _unsubscribe = mesh.onMessage(async (data, rawPacket) => {
-    // Stage 4 of receive chain: meshSync.js message handler reached.
-    console.log('[meshSync] onMessage: id=', rawPacket?.id, 'type=', rawPacket?.type, 'hops=', rawPacket?.hopCount)
+    console.log('[meshSync] onMessage entered', {
+      id:           rawPacket?.id   ?? null,
+      type:         rawPacket?.type ?? null,
+      payloadBytes: typeof rawPacket?.payload === 'string' ? rawPacket.payload.length : 0,
+    })
     // ── ACK packets — update victim's SOS status level ─────────────────────────
     if (rawPacket?.type === 'ack') {
       try {

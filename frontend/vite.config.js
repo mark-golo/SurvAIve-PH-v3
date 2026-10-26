@@ -23,11 +23,14 @@ export default defineConfig(({ mode }) => {
       // dist/index.html — which is the file Capacitor's cap sync requires.
       isNative && {
         name: 'survaive-variant-entry',
-        transformIndexHtml(html) {
-          return html.replace(
-            '/src/main.jsx',
-            `/src/main-${variant}.jsx`,
-          )
+        transformIndexHtml: {
+          order: 'pre',
+          handler(html) {
+            return html.replace(
+              '/src/main.jsx',
+              `/src/main-${variant}.jsx`,
+            )
+          },
         },
       },
 
