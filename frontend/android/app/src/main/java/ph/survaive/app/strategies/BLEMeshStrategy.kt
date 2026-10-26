@@ -697,6 +697,7 @@ class BLEMeshStrategy : MeshStrategy {
         // Belt-and-suspenders: also attempt a GATT write to discovered peers
         if (inFlightPacketIds.contains(packet.id)) {
             Log.d(TAG, "Packet ${packet.id.take(8)} already in-flight — skipping duplicate connect")
+            fireMeshEvent("broadcast_already_in_flight", mapOf("packetId" to packet.id.take(8), "type" to packet.type))
             return true
         }
         inFlightPacketIds.add(packet.id)
@@ -866,6 +867,12 @@ class BLEMeshStrategy : MeshStrategy {
                     val maxSingleWrite = currentMtu - 3
                     if (payload.size <= maxSingleWrite) {
                         // Single write — payload fits within negotiated MTU.
+                        fireMeshEvent("gatt_write_started", mapOf(
+                            "packetId"    to packet.id.take(8),
+                            "peer"        to gatt.device.address,
+                            "payloadSize" to payload.size,
+                            "mode"        to "single",
+                        ))
                         writeCallbackFired.set(false)
                         mainHandler.removeCallbacks(writeWatchdog!!)
                         mainHandler.postDelayed(writeWatchdog!!, 30_000L)

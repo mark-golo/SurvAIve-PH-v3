@@ -116,16 +116,28 @@ export function startMeshSync() {
         const hopsUsed = 5 - ((data.hcr ?? data.hop_count_remaining) ?? 5)
         const cur      = getActiveSOS()
         if (sosId && _ackMatchesSos(cur.packetId, sosId)) {
-          let newLevel = cur.ackLevel
-          if ((role === 'responder' || role === 'admin') && newLevel < 4) newLevel = 4
-          else if (hopsUsed >= 1 && newLevel < 3) newLevel = 3
-          else if (newLevel < 2) newLevel = 2
-          updateACKState({
-            ackLevel:   newLevel,
-            device:     { deviceId: rawPacket.originDeviceId ?? 'unknown', hopCount: hopsUsed, receiverRole: role, time: Date.now() },
-            ackMaxHops: Math.max(cur.ackMaxHops, hopsUsed),
-          })
-          logMeshEvent('ack_received', { sos_id: sosId, deviceId: rawPacket.originDeviceId, hopCount: hopsUsed, receiverRole: role, newLevel })
+          // Missing stage → 'sos_received' for backward compat with pre-stage APKs.
+          const stage = data?.stage ?? 'sos_received'
+          if (stage === 'beacon_seen') {
+            // Receiver only saw the BLE advertisement — not the full GATT payload.
+            // Log for diagnostics but do NOT advance ackLevel or ackDevices.
+            logMeshEvent('ack_beacon_seen', {
+              sos_id:   sosId,
+              deviceId: rawPacket.originDeviceId,
+              hopCount: hopsUsed,
+            })
+          } else {
+            let newLevel = cur.ackLevel
+            if ((role === 'responder' || role === 'admin') && newLevel < 4) newLevel = 4
+            else if (hopsUsed >= 1 && newLevel < 3) newLevel = 3
+            else if (newLevel < 2) newLevel = 2
+            updateACKState({
+              ackLevel:   newLevel,
+              device:     { deviceId: rawPacket.originDeviceId ?? 'unknown', hopCount: hopsUsed, receiverRole: role, time: Date.now() },
+              ackMaxHops: Math.max(cur.ackMaxHops, hopsUsed),
+            })
+            logMeshEvent('ack_received', { sos_id: sosId, deviceId: rawPacket.originDeviceId, hopCount: hopsUsed, receiverRole: role, newLevel })
+          }
         } else {
           // ACK arrived but could not be matched to the active SOS — log for diagnostics.
           // reason='no_si_field'  → ACK payload missing si (old APK or encode bug)
@@ -218,21 +230,30 @@ export function startMeshSync() {
       }
 
       // ── ACK — sent after local persist (or skipped persist for duplicate) ───────
+      // Guard: skip if packet lacks identity fields (malformed beacon with null id/origin).
+      if (!rawPacket.id || !rawPacket.originDeviceId) {
+        logMeshEvent('ack_skipped', { reason: 'missing_packet_identity', rawId: rawPacket?.id ?? null })
+        return
+      }
+
       logMeshEvent('ack_send_started', {
         sos_id:        rawPacket.id,
         receiver_role: role,
       })
 
+      const isProvisional = data?.provisional === true || data?.source === 'ble_beacon'
       try {
         const ackResult = await mesh.broadcast({
-          t:   'ack',
-          si:  rawPacket.id,
-          hcr: rawPacket.hopCount,
-          rr:  role,
+          t:     'ack',
+          si:    rawPacket.id,
+          hcr:   rawPacket.hopCount,
+          rr:    role,
+          stage: isProvisional ? 'beacon_seen' : 'sos_received',
+          v:     1,
         })
 
         if (ackResult?.success === true) {
-          logMeshEvent('ack_sent', {
+          logMeshEvent('ack_queued', {
             sos_id:              rawPacket.id,
             ack_packet_id:       ackResult.packetId ?? null,
             receiver_role:       role,

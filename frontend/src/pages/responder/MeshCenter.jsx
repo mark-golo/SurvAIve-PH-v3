@@ -50,10 +50,13 @@ const EVENT_META = {
   sos_acknowledged:       { label: 'SOS Acknowledged',            color: '#22c55e', Icon: CheckCircle2   },
   sos_relayed:            { label: 'SOS Relayed',                 color: '#00d4ff', Icon: ArrowRightLeft  },
   ack_send_started:       { label: 'ACK Send Started',            color: '#f59e0b', Icon: Radio          },
-  ack_sent:               { label: 'ACK Sent',                    color: '#22c55e', Icon: CheckCircle2   },
+  ack_queued:             { label: 'ACK Queued',                  color: '#34d399', Icon: CheckCircle2   },
+  ack_sent:               { label: 'ACK Sent (legacy)',           color: '#22c55e', Icon: CheckCircle2   },
   ack_send_failed:        { label: 'ACK Send Failed',             color: '#ef4444', Icon: ZapOff         },
   ack_received:           { label: 'ACK Received',                color: '#22c55e', Icon: CheckCircle2   },
+  ack_beacon_seen:        { label: 'ACK — Beacon Seen',           color: '#f59e0b', Icon: Radio          },
   ack_transmitted:        { label: 'ACK Transmitted (GATT)',      color: '#22c55e', Icon: CheckCircle2   },
+  ack_skipped:            { label: 'ACK Skipped',                 color: '#ef4444', Icon: ZapOff         },
   duplicate_detected:     { label: 'Duplicate Suppressed',        color: '#6b7280', Icon: XCircle        },
   transmission_failed:    { label: 'Transmission Failed',         color: '#ef4444', Icon: XCircle        },
   retry_attempted:        { label: 'Retry Attempted',             color: '#f59e0b', Icon: RefreshCw      },
@@ -70,8 +73,10 @@ const EVENT_META = {
   rx_gatt_write:            { label: 'RX GATT Write',             color: '#60a5fa', Icon: Bluetooth      },
   gatt_server_started:          { label: 'GATT Server Ready',         color: '#22c55e', Icon: CheckCircle2   },
   gatt_server_failed:           { label: 'GATT Server Failed',        color: '#ef4444', Icon: ZapOff         },
-  packet_delivered_to_service:  { label: 'Packet → Service',          color: '#34d399', Icon: CheckCircle2   },
-  ack_processing_error:         { label: 'ACK Processing Error',      color: '#ef4444', Icon: ZapOff         },
+  packet_delivered_to_service:    { label: 'Packet → Service',          color: '#34d399', Icon: CheckCircle2   },
+  ack_processing_error:           { label: 'ACK Processing Error',      color: '#ef4444', Icon: ZapOff         },
+  broadcast_already_in_flight:    { label: 'Already In-Flight (dedup)', color: '#a78bfa', Icon: RefreshCw      },
+  gatt_write_started:             { label: 'GATT Write Started',        color: '#60a5fa', Icon: Bluetooth      },
 }
 
 function ago(ms) {
@@ -198,7 +203,7 @@ function OverviewTab({ stats, peers, receivedSOS, eventLog, relayOn, setRelayOn 
                       </span>
                     )}
                     {eventLog.some(e =>
-                      (e.type === 'ack_sent' || e.type === 'ack_transmitted') &&
+                      (e.type === 'ack_queued' || e.type === 'ack_sent' || e.type === 'ack_transmitted') &&
                       (e.data?.sos_id === entry.rawPacket?.id || e.data?.ack_packet_id === entry.rawPacket?.id)
                     ) && (
                       <span className="text-[9px] px-1.5 py-0.5 rounded font-bold"
@@ -289,7 +294,7 @@ function ActivityTab({ eventLog }) {
   const filterMap = {
     sos:   ['sos_received', 'sos_transmitted', 'sos_beacon_queued', 'sos_relayed', 'sos_broadcast',
             'sos_stored_locally', 'sos_persisted', 'backend_sync_pending'],
-    ack:   ['ack_send_started', 'ack_sent', 'ack_send_failed', 'ack_received', 'ack_transmitted', 'sos_acknowledged'],
+    ack:   ['ack_send_started', 'ack_queued', 'ack_sent', 'ack_beacon_seen', 'ack_send_failed', 'ack_received', 'ack_transmitted', 'ack_skipped', 'sos_acknowledged'],
     peer:  ['peer_discovered', 'connection_established', 'peer_disconnected'],
     error: ['transmission_failed', 'broadcast_failed', 'scan_failed', 'scan_permission_denied',
             'scanner_null', 'sos_beacon_encode_failed', 'gatt_service_add_failed'],
@@ -401,7 +406,7 @@ function TrackerTab({ receivedSOS, eventLog }) {
               e.data?.packetId?.endsWith(id.slice(-8)) ||
               e.data?.sos_id?.endsWith(id.slice(-8))
             )
-            const ackEvents = relatedEvents.filter(e => e.type === 'ack_sent' || e.type === 'ack_received')
+            const ackEvents = relatedEvents.filter(e => e.type === 'ack_queued' || e.type === 'ack_sent' || e.type === 'ack_received')
             const relayEvents = relatedEvents.filter(e => e.type === 'sos_relayed')
             const syncEvent = relatedEvents.find(e => e.type === 'sync_completed')
             return (
