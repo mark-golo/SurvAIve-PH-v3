@@ -4,7 +4,7 @@ import { GlassCard } from '../../components/ui/GlassCard'
 import { GlassInput } from '../../components/ui/GlassInput'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/api'
-import { useAuthStore } from '../../store/auth'
+import { supabase } from '../../lib/supabase'
 
 const ROLE_COLORS = {
   Admin:     { bg: 'rgba(0,212,255,0.12)',   border: 'rgba(0,212,255,0.3)',   text: '#00d4ff'  },
@@ -25,29 +25,24 @@ function RoleBadge({ role }) {
 }
 
 export function LoginCredentials() {
-  const { scope } = useAuthStore()
-  const muni = scope?.municipality
-  const prov = scope?.province
-
   const [rows,    setRows]    = useState([])
   const [loading, setLoading] = useState(true)
   const [search,  setSearch]  = useState('')
 
   useEffect(() => {
-    const q     = muni ? `?municipality=${encodeURIComponent(muni)}` : ''
-    const qProv = prov ? `?province=${encodeURIComponent(prov)}`     : ''
+    supabase.auth.getSession()
     Promise.all([
-      api.get(`/admins${qProv}`).catch(() => []),
-      api.get(`/agencies${q}`).catch(() => []),
-      api.get(`/responders${q}`).catch(() => []),
+      api.get('/admins').catch(() => []),
+      api.get('/agencies').catch(() => []),
+      api.get('/responders').catch(() => []),
     ]).then(([admins, agencies, responders]) => {
       setRows([
-        ...admins.map(r    => ({ ...r, _role: 'Admin',     _loginId: r.contact_number || r.gmail || '—' })),
-        ...agencies.map(r  => ({ ...r, _role: 'Agency',    _loginId: r.contact_number || '—' })),
+        ...admins.map(r     => ({ ...r, _role: 'Admin',     _loginId: r.contact_number || r.gmail || '—' })),
+        ...agencies.map(r   => ({ ...r, _role: 'Agency',    _loginId: r.contact_number || '—' })),
         ...responders.map(r => ({ ...r, _role: 'Responder', _loginId: r.contact_number || r.gmail || '—' })),
       ])
     }).finally(() => setLoading(false))
-  }, [muni, prov])
+  }, [])
 
   const q = search.toLowerCase()
   const filtered = rows.filter(r =>

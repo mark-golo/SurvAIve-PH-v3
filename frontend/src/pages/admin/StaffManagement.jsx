@@ -6,6 +6,7 @@ import { GlassInput, GlassSelect } from '../../components/ui/GlassInput'
 import { NeonButton } from '../../components/ui/NeonButton'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
+import { supabase } from '../../lib/supabase'
 import { PROVINCES, getMunicipalities, getBarangays } from '../../lib/philippineLocations'
 
 const AGENCY_TYPES = [
@@ -39,12 +40,11 @@ export function StaffManagement() {
   const [error, setError]         = useState('')
 
   useEffect(() => {
-    const q     = muni ? `?municipality=${encodeURIComponent(muni)}` : ''
-    const qProv = prov ? `?province=${encodeURIComponent(prov)}` : ''
+    supabase.auth.getSession()
     Promise.all([
-      api.get(`/admins${qProv}`).catch(() => []),
-      api.get(`/agencies${q}`).catch(() => []),
-      api.get(`/responders${q}`).catch(() => []),
+      api.get('/admins').catch(() => []),
+      api.get('/agencies').catch(() => []),
+      api.get('/responders').catch(() => []),
     ]).then(([a, ag, r]) => { setAdmins(a); setAgencies(ag); setResps(r) })
       .finally(() => setLoading(false))
   }, [])
