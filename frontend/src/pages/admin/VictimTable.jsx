@@ -82,6 +82,19 @@ export function VictimTable() {
     return () => { supabase.removeChannel(ch) }
   }, [])
 
+  // Bridge: sync immediately when AdminLayout's Realtime INSERT fires
+  useEffect(() => {
+    const h = () => load()
+    window.addEventListener('sos:new-insert', h)
+    return () => window.removeEventListener('sos:new-insert', h)
+  }, [load])
+
+  // Polling fallback — ensures list stays fresh even if Realtime missed an event
+  useEffect(() => {
+    const id = setInterval(() => load(), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
   // Initial load — and re-load if municipality changes
   useEffect(() => { load() }, [load])
 

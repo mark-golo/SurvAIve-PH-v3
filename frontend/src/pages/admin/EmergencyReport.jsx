@@ -193,7 +193,8 @@ export function EmergencyReport() {
   useEffect(() => {
     const channel = supabase
       .channel('er-sos-rescue')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sos_reports' }, () => generate())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sos_reports' }, () => generate())
+      .on('postgres_changes', { event: 'UPDATE',  schema: 'public', table: 'sos_reports' }, () => generate())
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [generate])

@@ -276,8 +276,8 @@ async function get(path) {
       .select('*')
       .order('created_at', { ascending: false })
       .limit(200)
-    if (muni)    q = q.eq('municipality', muni)
-    if (prov)    q = q.eq('province', prov)
+    if (muni)    q = q.or(`municipality.eq.${muni},municipality.is.null`)
+    if (prov)    q = q.or(`province.eq.${prov},province.is.null`)
     if (svcType) q = q.contains('service_type', [svcType])
     const { data, error } = await q
     if (error) sbThrow(error)

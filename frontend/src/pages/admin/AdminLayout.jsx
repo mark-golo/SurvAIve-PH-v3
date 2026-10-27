@@ -188,6 +188,7 @@ export function AdminLayout() {
             municipality: r.municipality ?? '',
             ts:           new Date().toLocaleTimeString(),
           })
+          window.dispatchEvent(new CustomEvent('sos:new-insert'))
         }
       )
       .subscribe()
