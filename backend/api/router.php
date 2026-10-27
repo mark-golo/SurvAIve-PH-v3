@@ -22,6 +22,7 @@ $routes = [
   'evacuation_centers' => __DIR__ . '/evacuation_centers/index.php',
   'analytics'     => __DIR__ . '/analytics/index.php',
   'sync'               => __DIR__ . '/sync/index.php',
+  'staff'              => __DIR__ . '/staff/index.php',
   'province_reports'   => __DIR__ . '/province_reports/index.php',
 ];
 

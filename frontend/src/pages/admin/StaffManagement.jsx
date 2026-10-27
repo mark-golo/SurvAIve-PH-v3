@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, Search, UserCog, ShieldCheck, Radio, Eye, EyeOff } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, UserCog, ShieldCheck, Radio, Eye, EyeOff, CloudUpload } from 'lucide-react'
 
 import { GlassCard } from '../../components/ui/GlassCard'
 import { GlassInput, GlassSelect } from '../../components/ui/GlassInput'
 import { NeonButton } from '../../components/ui/NeonButton'
-import api from '../../lib/api'
+import api, { syncLocalStaffToCloud } from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 import { supabase } from '../../lib/supabase'
 import { PROVINCES, getMunicipalities, getBarangays } from '../../lib/philippineLocations'
@@ -38,6 +38,8 @@ export function StaffManagement() {
   const [showPw, setShowPw]       = useState(false)
   const [saving, setSaving]       = useState(false)
   const [error, setError]         = useState('')
+  const [syncing, setSyncing]     = useState(false)
+  const [syncResult, setSyncResult] = useState(null)
 
   useEffect(() => {
     supabase.auth.getSession()
@@ -155,6 +157,21 @@ export function StaffManagement() {
           <Plus size={13} className="mr-1.5" />
           Add {isAdminTab ? 'Admin' : isAgencyTab ? 'Agency' : 'Responder'}
         </NeonButton>
+        <NeonButton size="sm" variant="ghost" disabled={syncing} onClick={async () => {
+          setSyncing(true); setSyncResult(null)
+          const r = await syncLocalStaffToCloud().catch(e => ({ synced: 0, skipped: 0, error: e?.message }))
+          setSyncResult(r); setSyncing(false)
+        }}>
+          <CloudUpload size={13} className="mr-1.5" />
+          {syncing ? 'Syncing…' : 'Sync to Cloud'}
+        </NeonButton>
+        {syncResult && (
+          <span className="text-xs text-slate-400">
+            {syncResult.error
+              ? `Sync error: ${syncResult.error}`
+              : `${syncResult.synced} synced, ${syncResult.skipped} already in cloud`}
+          </span>
+        )}
       </div>
 
       {/* Add form */}

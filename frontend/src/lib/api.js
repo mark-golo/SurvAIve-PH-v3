@@ -721,6 +721,12 @@ async function post(path, body = {}) {
     })
     if (profileErr) throwErr(profileErr.message, 500)
 
+    // Also persist to local MySQL so offline login works immediately
+    localFetch('responders', {
+      method: 'POST',
+      body: JSON.stringify({ ...respData, password }),
+    }).catch(() => {})
+
     const { data: respRow, error: respErr } = await supabase
       .from('responders').insert(respData).select().single()
     if (respErr) sbThrow(respErr)
@@ -815,6 +821,12 @@ async function post(path, body = {}) {
       province: adminData.province, municipality: adminData.municipality,
     })
     if (profileErr) throwErr(profileErr.message, 500)
+
+    // Also persist to local MySQL so offline login works immediately
+    localFetch('admins', {
+      method: 'POST',
+      body: JSON.stringify({ ...adminData, password }),
+    }).catch(() => {})
 
     const { data: adminRow, error: adminErr } = await supabase
       .from('admins').insert(adminData).select().single()
@@ -968,3 +980,37 @@ const api = {
   },
 }
 export default api
+
+// ── MySQL → Supabase staff sync ────────────────────────────────────────────────
+// Reads all staff from the local PHP/MySQL backend and creates any that are
+// missing from Supabase. Initial password is set to the contact number so the
+// user can log in and change it. Already-existing accounts are skipped.
+export async function syncLocalStaffToCloud() {
+  const localStaff = await localFetch('staff')
+  if (!Array.isArray(localStaff) || !localStaff.length) return { synced: 0, skipped: 0, error: null }
+
+  const { data: existing } = await supabase.from('profiles').select('contact_number')
+  const existingSet = new Set((existing ?? []).map(r => r.contact_number))
+
+  let synced = 0, skipped = 0
+  for (const s of localStaff) {
+    if (existingSet.has(s.contact_number)) { skipped++; continue }
+    const email    = `${s.contact_number}@survaive.ph`
+    const password = s.contact_number
+    const { data: authData, error: authErr } = await signupClient.auth.signUp({
+      email, password,
+      options: { data: { name: s.name, role: s.role, contact_number: s.contact_number } },
+    })
+    if (authErr || !authData?.user) continue
+    await supabase.from('profiles').upsert({
+      id:             authData.user.id,
+      role:           s.role,
+      name:           s.name,
+      contact_number: s.contact_number,
+      province:       s.province   ?? null,
+      municipality:   s.municipality ?? null,
+    }).catch(() => {})
+    synced++
+  }
+  return { synced, skipped, error: null }
+}
