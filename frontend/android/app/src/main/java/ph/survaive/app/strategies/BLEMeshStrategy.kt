@@ -89,6 +89,13 @@ class BLEMeshStrategy : MeshStrategy {
     // Auto-expires after 12s so a hung connection never permanently blocks retries.
     private val inFlightPacketIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
+    // Per-peer single-flight gate. Prevents concurrent connectAndWrite() calls to the same
+    // device address for *different* packet IDs, which cause write_enqueue_failed and
+    // service-discovery collisions (226 failures in v8 logs).
+    // Primary release path: STATE_DISCONNECTED in onConnectionStateChange.
+    // Secondary paths: SecurityException catch and _context null guard (no disconnect fires).
+    private val busyPeerAddresses: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
     // Deduplicates passive beacon receives: onScanResult fires every ~100–500ms for
     // the same in-range beacon; only the first seen ID is forwarded to onPacketReceived.
     // FIFO-bounded: evicts the oldest insertion once capacity exceeds 256.
@@ -798,8 +805,24 @@ class BLEMeshStrategy : MeshStrategy {
      *  Layer 4 — Write response watchdog: 30s timeout disconnects if onCharacteristicWrite
      *            never fires (e.g. server's sendResponse skipped due to gattServer==null).
      */
+    private fun releasePeer(address: String) {
+        busyPeerAddresses.remove(address)
+    }
+
     private fun connectAndWrite(peer: BluetoothDevice, packet: MeshPacket, retriesLeft: Int = 2) {
-        val ctx = _context ?: return
+        val address = peer.address
+        if (!busyPeerAddresses.add(address)) {
+            // A different packet's GATT flow is already active for this peer address.
+            // Remove from inFlightPacketIds so MeshNetworkService.flushPending() can
+            // retry this packet on the next 3s timer once the active flow releases the peer.
+            inFlightPacketIds.remove(packet.id)
+            fireMeshEvent("peer_busy_deferred", mapOf(
+                "deviceAddress" to address,
+                "packetId"      to packet.id.take(8),
+            ))
+            return
+        }
+        val ctx = _context ?: run { releasePeer(address); return }
         val payload = packet.toJson().toByteArray(Charsets.UTF_8)
         Log.d(TAG, "connectAndWrite: payload=${payload.size}B to ${peer.address} (retries=$retriesLeft)")
         fireMeshEvent("gatt_connecting", mapOf("peer" to peer.address, "packetId" to packet.id.take(8)))
@@ -860,6 +883,7 @@ class BLEMeshStrategy : MeshStrategy {
                             }, 3000L)
                         }
                     } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                        releasePeer(gatt.device.address)
                         fireMeshEvent("peer_disconnected", mapOf("deviceAddress" to gatt.device.address))
                         gatt.close()
                     }
@@ -1120,6 +1144,7 @@ class BLEMeshStrategy : MeshStrategy {
             }, BluetoothDevice.TRANSPORT_LE)
         } catch (e: SecurityException) {
             Log.e(TAG, "connectGatt denied — BLUETOOTH_CONNECT not granted: ${e.message}")
+            releasePeer(address)
             inFlightPacketIds.remove(packet.id)
         }
     }
