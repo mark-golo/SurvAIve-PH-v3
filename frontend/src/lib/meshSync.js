@@ -359,14 +359,6 @@ export function startMeshSync() {
       console.error('[meshSync] handler crash — SOS may not have been fully processed:', e)
     }
   })
-  // Gap 3 fix: auto-drain offline queue whenever connectivity is restored.
-  if (window.Capacitor?.isNativePlatform?.()) {
-    import('@capacitor/network').then(({ Network }) => {
-      Network.addListener('networkStatusChange', (status) => {
-        if (status.connected) drainOfflineQueue()
-      })
-    }).catch(() => {})
-  }
   // Backfill peer_discovered events for peers already known when this subscription
   // started (the BLE engine may have discovered peers before startMeshSync() ran).
   mesh.getPeers().then(peers => {

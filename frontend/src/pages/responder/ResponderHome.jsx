@@ -131,6 +131,14 @@ export function ResponderHome() {
           ))
         }
       )
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'sos_reports' },
+        payload => {
+          const r = payload.new
+          if (muni && r.municipality !== null && r.municipality !== muni) return
+          setSosList(prev => [r, ...prev])
+        }
+      )
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [])
