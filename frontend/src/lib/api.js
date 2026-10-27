@@ -375,7 +375,7 @@ async function post(path, body = {}) {
 
       const email = body.role === 'victim'
         ? `${body.contact_number}@internal.survaive.ph`
-        : `${body.contact_number}@survAIve.ph`
+        : `${body.contact_number}@survaive.ph`
       const { data, error } = await supabase.auth.signInWithPassword({ email, password: body.password })
       if (error) throwErr('Invalid credentials. Check your contact number and password.', 401)
 
