@@ -56,6 +56,12 @@ export function VictimQueue() {
     setLoading(false)
   }
 
+  // Polling fallback — keeps the queue fresh every 30 s
+  useEffect(() => {
+    const id = setInterval(() => refresh(), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
   const activeQueue = queue.filter(r => r.rescue_status !== 'rescued')
   const filtered = filter === 'all'
     ? activeQueue

@@ -376,6 +376,20 @@ export function AdminAnalytics() {
     return () => clearInterval(id)
   }, [offlineMode])
 
+  // Bridge: sync immediately when AdminLayout's Realtime fires a new SOS
+  useEffect(() => {
+    const h = () => load()
+    window.addEventListener('sos:new-insert', h)
+    return () => window.removeEventListener('sos:new-insert', h)
+  }, [])
+
+  // Online polling fallback — refreshes analytics every 30 s
+  useEffect(() => {
+    if (offlineMode) return
+    const id = setInterval(() => load(), 30_000)
+    return () => clearInterval(id)
+  }, [offlineMode])
+
   // AI-derived data
   const zones    = useMemo(() => analyzeZones(reports), [reports])
   const insights = useMemo(() => generateInsights(zones), [zones])

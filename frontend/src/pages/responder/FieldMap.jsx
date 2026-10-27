@@ -91,6 +91,23 @@ export function FieldMap() {
   useEffect(() => {
     const ch = supabase.channel('fm-sos-status')
       .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'sos_reports' },
+        () => {
+          api.get(muni ? `/sos?municipality=${encodeURIComponent(muni)}` : '/sos')
+            .then(rows => setAssigned(rows.map((r, i) => ({
+              id: r.id, lat: r.lat, lng: r.lng,
+              priority: r.priority ?? 'LOW',
+              ai_priority_score: r.ai_priority_score ?? 50,
+              label: String(i + 1),
+              name: r.name ?? 'Unknown',
+              barangay: r.barangay ?? '',
+              status: r.status ?? 'unknown',
+              rescue_status: r.rescue_status ?? null,
+            }))))
+            .catch(() => {})
+        }
+      )
+      .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'sos_reports' },
         payload => {
           const r = payload.new
@@ -101,6 +118,25 @@ export function FieldMap() {
       )
       .subscribe()
     return () => { supabase.removeChannel(ch) }
+  }, [])
+
+  // Polling fallback — keeps map markers fresh every 30 s
+  useEffect(() => {
+    const id = setInterval(() => {
+      api.get(muni ? `/sos?municipality=${encodeURIComponent(muni)}` : '/sos')
+        .then(rows => setAssigned(rows.map((r, i) => ({
+          id: r.id, lat: r.lat, lng: r.lng,
+          priority: r.priority ?? 'LOW',
+          ai_priority_score: r.ai_priority_score ?? 50,
+          label: String(i + 1),
+          name: r.name ?? 'Unknown',
+          barangay: r.barangay ?? '',
+          status: r.status ?? 'unknown',
+          rescue_status: r.rescue_status ?? null,
+        }))))
+        .catch(() => {})
+    }, 30_000)
+    return () => clearInterval(id)
   }, [])
 
   useEffect(() => {

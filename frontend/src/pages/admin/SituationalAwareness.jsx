@@ -345,7 +345,8 @@ export function SituationalAwareness() {
   useEffect(() => {
     const channel = supabase
       .channel('sa-sos-rescue')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sos_reports' }, () => load())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sos_reports' }, () => load())
+      .on('postgres_changes', { event: 'UPDATE',  schema: 'public', table: 'sos_reports' }, () => load())
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [])
@@ -382,6 +383,20 @@ export function SituationalAwareness() {
       const reachable = await probeBackend()
       if (reachable) { invalidateProbeCache(); setOfflineMode(false); load() }
     }, 30_000)
+    return () => clearInterval(id)
+  }, [offlineMode])
+
+  // Bridge: sync immediately when AdminLayout's Realtime fires a new SOS
+  useEffect(() => {
+    const h = () => load()
+    window.addEventListener('sos:new-insert', h)
+    return () => window.removeEventListener('sos:new-insert', h)
+  }, [])
+
+  // Online polling fallback — refreshes situational picture every 30 s
+  useEffect(() => {
+    if (offlineMode) return
+    const id = setInterval(() => load(), 30_000)
     return () => clearInterval(id)
   }, [offlineMode])
 

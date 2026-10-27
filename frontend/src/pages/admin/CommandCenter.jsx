@@ -298,7 +298,7 @@ export function CommandCenter() {
     const h = () => sync()
     window.addEventListener('sos:new-insert', h)
     return () => window.removeEventListener('sos:new-insert', h)
-  }, [sync])
+  }, [])
 
   // Online polling fallback — catches any INSERT missed by Realtime subscription
   useEffect(() => {

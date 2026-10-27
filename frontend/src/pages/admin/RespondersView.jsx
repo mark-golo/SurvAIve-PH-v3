@@ -55,9 +55,18 @@ export function RespondersView() {
     api.get(q).then(setSosReports).catch(() => setSosReports([])).finally(() => setSosLoading(false))
   }, [])
 
-  // Realtime: update rescue status when responder submits a report
+  // Realtime: update rescue status when responder submits a report; show new SOS on INSERT
   useEffect(() => {
     const ch = supabase.channel('rv-sos-status')
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'sos_reports' },
+        payload => {
+          const r = payload.new
+          if (muni && r.municipality !== null && r.municipality !== muni) return
+          const q = muni ? `/sos?municipality=${encodeURIComponent(muni)}` : '/sos'
+          api.get(q).then(setSosReports).catch(() => {})
+        }
+      )
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'sos_reports' },
         payload => {
@@ -72,6 +81,21 @@ export function RespondersView() {
       )
       .subscribe()
     return () => { supabase.removeChannel(ch) }
+  }, [])
+
+  // Bridge: sync immediately when AdminLayout fires sos:new-insert
+  useEffect(() => {
+    const q = muni ? `/sos?municipality=${encodeURIComponent(muni)}` : '/sos'
+    const h = () => api.get(q).then(setSosReports).catch(() => {})
+    window.addEventListener('sos:new-insert', h)
+    return () => window.removeEventListener('sos:new-insert', h)
+  }, [])
+
+  // Online polling — keeps responder assignment list fresh
+  useEffect(() => {
+    const q = muni ? `/sos?municipality=${encodeURIComponent(muni)}` : '/sos'
+    const id = setInterval(() => api.get(q).then(setSosReports).catch(() => {}), 30_000)
+    return () => clearInterval(id)
   }, [])
 
   const sortedReports = sosReports
