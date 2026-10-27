@@ -304,7 +304,14 @@ class MeshNetworkPlugin : Plugin() {
                     @Suppress("DEPRECATION")
                     adapter.enable()
                 } catch (_: Exception) {
-                    activity?.startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                    try {
+                        activity?.startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                            ?: run { call.reject("No active Activity"); return }
+                    } catch (e: SecurityException) {
+                        Log.e(TAG, "Bluetooth enable denied (legacy): ${e.message}")
+                        call.reject("Bluetooth enable denied: ${e.message}")
+                        return
+                    }
                 }
             } else {
                 // Android 12+: ACTION_REQUEST_ENABLE requires BLUETOOTH_CONNECT at runtime.
@@ -327,13 +334,17 @@ class MeshNetworkPlugin : Plugin() {
 
         // WiFi — prompt or silently enable based on API level
         val wm = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-        if (wm != null && !wm.isWifiEnabled) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                activity?.startActivity(Intent(Settings.Panel.ACTION_WIFI))
-            } else {
-                @Suppress("DEPRECATION")
-                wm.setWifiEnabled(true)
+        try {
+            if (wm != null && !wm.isWifiEnabled) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    activity?.startActivity(Intent(Settings.Panel.ACTION_WIFI))
+                } else {
+                    @Suppress("DEPRECATION")
+                    wm.setWifiEnabled(true)
+                }
             }
+        } catch (e: Exception) {
+            Log.w(TAG, "WiFi enable failed: ${e.message}")
         }
 
         call.resolve()

@@ -118,7 +118,7 @@ class BLEMeshStrategy : MeshStrategy {
     private val fragmentBuffers = ConcurrentHashMap<String, FragmentAssembly>()
 
     // Tracks when the SOS beacon fan-out window ends (RC2). ACK beacons are suppressed
-    // during the window so the SOS beacon keeps advertising for its full 30-second radius.
+    // during the window so the SOS beacon keeps advertising for its full 8-second radius.
     private var sosFanOutEndMs = 0L
 
     // Records the timestamp (ms) when each peer was last seen in a scan result.
@@ -733,8 +733,8 @@ class BLEMeshStrategy : MeshStrategy {
         // sending SCAN_REQ — no scan-response caching issues.
         if (packet.type == "sos" || packet.type == "ack") {
             if (packet.type == "sos") {
-                // RC2: open 30-second fan-out window so ACK beacons can't replace the SOS beacon
-                sosFanOutEndMs = System.currentTimeMillis() + 30_000L
+                // RC2: open 8-second fan-out window so ACK beacons can't replace the SOS beacon
+                sosFanOutEndMs = System.currentTimeMillis() + 8_000L
                 updateBeacon(packet)
                 fireMeshEvent("sos_beacon_queued", mapOf(
                     "packetId" to packet.id,
