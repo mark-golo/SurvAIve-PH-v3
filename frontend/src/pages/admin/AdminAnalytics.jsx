@@ -342,6 +342,9 @@ export function AdminAnalytics() {
 
   useEffect(() => { load() }, [])
   useEffect(() => {
+    if (muni !== undefined) load()
+  }, [muni])
+  useEffect(() => {
     const goOnline = async () => {
       const reachable = await probeBackend()
       if (reachable) { invalidateProbeCache(); setOfflineMode(false); load() }

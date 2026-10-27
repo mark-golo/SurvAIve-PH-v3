@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
+import api from '../../lib/api'
 
 /* ─── helpers ─── */
 const todayStr = () => new Date().toISOString().slice(0, 10)
@@ -167,16 +168,15 @@ export function BarangaysComparison() {
 
   /* ─── generate ─── */
   const generate = useCallback(async () => {
-    if (!muni) return
     setLoading(true)
     try {
-      const { data: sosList = [] } = await supabase
-        .from('sos_reports')
-        .select('id,barangay,rescue_status,ai_priority_score,people_count,special_conditions,created_at')
-        .eq('municipality', muni)
-        .gte('created_at', fromDate + 'T00:00:00')
-        .lte('created_at', toDate   + 'T23:59:59')
-        .order('created_at', { ascending: false })
+      const url = muni ? `/sos?municipality=${encodeURIComponent(muni)}` : '/sos'
+      const allSos = await api.get(url)
+      const sosList = (allSos ?? []).filter(r => {
+        const ts = r.created_at ?? r.timestamp ?? null
+        if (!ts) return true
+        return ts >= fromDate + 'T00:00:00' && ts <= toDate + 'T23:59:59'
+      })
 
       // aggregate per barangay
       const brgyStats = {}
@@ -215,6 +215,12 @@ export function BarangaysComparison() {
 
   /* ─── auto-load today on mount ─── */
   useEffect(() => { generate() }, [generate])
+
+  useEffect(() => {
+    const h = () => generate()
+    window.addEventListener('sos:new-insert', h)
+    return () => window.removeEventListener('sos:new-insert', h)
+  }, [generate])
 
   /* ─── derived ─── */
   const { brgyRows = [], summary, ranked, insights } = useMemo(() => {

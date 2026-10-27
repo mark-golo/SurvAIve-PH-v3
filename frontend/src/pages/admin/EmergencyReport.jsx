@@ -199,6 +199,12 @@ export function EmergencyReport() {
     return () => { supabase.removeChannel(channel) }
   }, [generate])
 
+  useEffect(() => {
+    const h = () => generate()
+    window.addEventListener('sos:new-insert', h)
+    return () => window.removeEventListener('sos:new-insert', h)
+  }, [generate])
+
   // ── Derived data ─────────────────────────────────────────────────────────────
   const bRows     = useMemo(() => data ? Object.entries(data.bMap).sort((a, b) => b[1].total - a[1].total) : [], [data])
   const chartData = useMemo(() => bRows.slice(0, 10).map(([b, v]) => ({ name: b, Rescued: v.rescued, Pending: v.total - v.rescued })), [bRows])

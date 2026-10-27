@@ -9,6 +9,7 @@ import {
 
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
+import api from '../../lib/api'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const todayStr = () => new Date().toISOString().slice(0, 10)
@@ -186,20 +187,19 @@ export function SITREP() {
   const generate = useCallback(async () => {
     setLoading(true)
     try {
-      const [sosRes, vicRes] = await Promise.all([
-        supabase
-          .from('sos_reports')
-          .select('id, barangay, status, rescue_status, ai_priority_score, people_count, special_conditions, created_at, notes')
-          .eq('municipality', muni)
-          .gte('created_at', fromDate + 'T00:00:00')
-          .lte('created_at', toDate   + 'T23:59:59')
-          .order('created_at', { ascending: false }),
+      const url = muni ? `/sos?municipality=${encodeURIComponent(muni)}` : '/sos'
+      const [allSos, vicRes] = await Promise.all([
+        api.get(url),
         supabase
           .from('victims')
           .select('id, barangay')
-          .eq('municipality', muni),
+          .eq('municipality', muni ?? ''),
       ])
-      const sosList = sosRes.data ?? []
+      const sosList = (allSos ?? []).filter(r => {
+        const ts = r.created_at ?? r.timestamp ?? null
+        if (!ts) return true
+        return ts >= fromDate + 'T00:00:00' && ts <= toDate + 'T23:59:59'
+      })
       const victimsByBarangay = {}
       ;(vicRes.data ?? []).forEach(v => {
         const b = v.barangay ?? 'Unknown'
@@ -215,6 +215,12 @@ export function SITREP() {
   }, [muni, fromDate, toDate])
 
   useEffect(() => { generate() }, [generate])
+
+  useEffect(() => {
+    const h = () => generate()
+    window.addEventListener('sos:new-insert', h)
+    return () => window.removeEventListener('sos:new-insert', h)
+  }, [generate])
 
   // ── Derived data ─────────────────────────────────────────────────────────────
   const summary = useMemo(() => {
