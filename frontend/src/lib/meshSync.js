@@ -122,6 +122,11 @@ export function startMeshSync() {
     // ── ACK packets — update victim's SOS status level ─────────────────────────
     if (rawPacket?.type === 'ack') {
       try {
+        logMeshEvent('ack_rx_js', {
+          packetId:       rawPacket.id ?? null,
+          originDeviceId: rawPacket.originDeviceId ?? null,
+          si:             data?.si ?? null,
+        })
         const sosId    = data.si  ?? data.sos_id
         const role     = data.rr  ?? data.receiver_role  ?? 'device'
         const hopsUsed = 5 - ((data.hcr ?? data.hop_count_remaining) ?? 5)

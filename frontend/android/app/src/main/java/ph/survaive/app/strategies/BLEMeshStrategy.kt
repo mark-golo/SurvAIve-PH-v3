@@ -679,6 +679,10 @@ class BLEMeshStrategy : MeshStrategy {
                 if (System.currentTimeMillis() < sosFanOutEndMs) {
                     Log.d(TAG, "ACK beacon suppressed: SOS fan-out window active " +
                         "(${sosFanOutEndMs - System.currentTimeMillis()}ms remaining) — GATT only")
+                    fireMeshEvent("ack_beacon_suppressed", mapOf(
+                        "packetId"    to packet.id.take(8),
+                        "remainingMs" to (sosFanOutEndMs - System.currentTimeMillis()),
+                    ))
                 } else {
                     updateBeacon(packet)
                 }
@@ -832,13 +836,15 @@ class BLEMeshStrategy : MeshStrategy {
                     }
                     val service = gatt.getService(SERVICE_UUID)
                     if (service == null) {
-                        Log.e(TAG, "Remote GATT service not found on ${gatt.device.address}")
+                        val foundSvcs = gatt.services.joinToString { it.uuid.toString().take(8) }
+                        Log.e(TAG, "Remote GATT service not found on ${gatt.device.address} — discovered: $foundSvcs")
                         fireMeshEvent("transmission_failed", mapOf(
-                            "deviceAddress" to gatt.device.address,
-                            "packetId"      to packet.id,
-                            "errorCode"     to -1,
-                            "reason"        to "gatt_service_not_found",
-                            "transport"     to "BLE_GATT",
+                            "deviceAddress"      to gatt.device.address,
+                            "packetId"           to packet.id,
+                            "errorCode"          to -1,
+                            "reason"             to "gatt_service_not_found",
+                            "transport"          to "BLE_GATT",
+                            "discoveredServices" to foundSvcs,
                         ))
                         inFlightPacketIds.remove(packet.id)
                         gatt.disconnect(); return
@@ -896,7 +902,17 @@ class BLEMeshStrategy : MeshStrategy {
                             Log.e(TAG, "writeCharacteristic (single) failed for ${gatt.device.address}")
                             mainHandler.removeCallbacks(writeWatchdog!!)
                             inFlightPacketIds.remove(packet.id)
-                            gatt.disconnect()
+                            fireMeshEvent("transmission_failed", mapOf(
+                                "deviceAddress" to gatt.device.address,
+                                "packetId"      to packet.id,
+                                "reason"        to "write_enqueue_failed",
+                                "transport"     to "BLE_GATT",
+                            ))
+                            try { gatt.disconnect() } catch (_: Exception) {}
+                            try { gatt.close()      } catch (_: Exception) {}
+                            if (retriesLeft > 0) {
+                                mainHandler.postDelayed({ connectAndWrite(peer, packet, retriesLeft - 1) }, 1000L)
+                            }
                             return
                         }
                         writeStarted = true
@@ -956,7 +972,19 @@ class BLEMeshStrategy : MeshStrategy {
                             Log.e(TAG, "First fragment write failed for ${gatt.device.address}")
                             mainHandler.removeCallbacks(writeWatchdog!!)
                             pendingFragments = null; fragmentChar = null
-                            inFlightPacketIds.remove(packet.id); gatt.disconnect(); return
+                            inFlightPacketIds.remove(packet.id)
+                            fireMeshEvent("transmission_failed", mapOf(
+                                "deviceAddress" to gatt.device.address,
+                                "packetId"      to packet.id,
+                                "reason"        to "write_enqueue_failed",
+                                "transport"     to "BLE_GATT",
+                            ))
+                            try { gatt.disconnect() } catch (_: Exception) {}
+                            try { gatt.close()      } catch (_: Exception) {}
+                            if (retriesLeft > 0) {
+                                mainHandler.postDelayed({ connectAndWrite(peer, packet, retriesLeft - 1) }, 1000L)
+                            }
+                            return
                         }
                         writeStarted = true
                     }

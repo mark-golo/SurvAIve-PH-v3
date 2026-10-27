@@ -294,7 +294,6 @@ class MeshNetworkPlugin : Plugin() {
     // ── @PluginMethod: enableRadios ───────────────────────────────────────────────
 
     @PluginMethod
-    @SuppressLint("MissingPermission")
     fun enableRadios(call: PluginCall) {
         // Bluetooth — prompt or silently enable based on API level
         val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
@@ -308,7 +307,21 @@ class MeshNetworkPlugin : Plugin() {
                     activity?.startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
                 }
             } else {
-                activity?.startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                // Android 12+: ACTION_REQUEST_ENABLE requires BLUETOOTH_CONNECT at runtime.
+                val hasConnect = ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.BLUETOOTH_CONNECT
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (!hasConnect) {
+                    call.reject("BLUETOOTH_CONNECT permission required to enable Bluetooth")
+                    return
+                }
+                try {
+                    activity?.startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                        ?: run { call.reject("No active Activity"); return }
+                } catch (e: SecurityException) {
+                    call.reject("Bluetooth enable denied: ${e.message}")
+                    return
+                }
             }
         }
 
