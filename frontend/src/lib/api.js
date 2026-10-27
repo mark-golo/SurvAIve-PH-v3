@@ -268,15 +268,33 @@ async function get(path) {
       return normalizeSos(data)
     }
 
-    // Always pass all 3 params — PostgREST resolves by named-param set.
-    // null means no filter (admin/responder); agency gets their service_type.
-    const { data, error } = await supabase.rpc('get_sos_with_priority', {
-      p_municipality: muni,
-      p_province:     prov,
-      p_service_type: svcType,
-    })
+    // Direct table SELECT — replaced the get_sos_with_priority RPC which is not
+    // guaranteed to exist in every Supabase project deployment.
+    // ai_priority_score is stored directly on the row at INSERT time so nothing is lost.
+    let q = supabase
+      .from('sos_reports')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(200)
+    if (muni)    q = q.eq('municipality', muni)
+    if (prov)    q = q.eq('province', prov)
+    if (svcType) q = q.contains('service_type', [svcType])
+    const { data, error } = await q
     if (error) sbThrow(error)
-    return (data ?? []).map(normalizeSos)
+    const sbRows = (data ?? []).map(normalizeSos)
+
+    // Secondary source: MySQL via XAMPP (offline SOS submitted via local hotspot).
+    // Fails silently when not on the hotspot or running on Vercel — that's expected.
+    let mysqlRows = []
+    try {
+      const qs = params.toString()
+      const raw = await localFetch(`sos${qs ? '?' + qs : ''}`)
+      mysqlRows = (Array.isArray(raw) ? raw : []).map(normalizeSos)
+    } catch { /* not on XAMPP network — ignore */ }
+
+    // Merge: MySQL rows missing from Supabase (different ID namespaces, no collision)
+    const sbIds = new Set(sbRows.map(r => r.id))
+    return [...sbRows, ...mysqlRows.filter(r => !sbIds.has(r.id))]
   }
 
   // ── Constituents (victims enriched with account status from profiles) ──
@@ -679,7 +697,10 @@ async function post(path, body = {}) {
                                : (body.service_type ? [body.service_type] : null),
         relay_source:        body.relay_source ?? null,
       })
-    if (error) sbThrow(error)
+    if (error) {
+      console.error('[SOS INSERT] Supabase error:', error.code, error.message, error.details)
+      sbThrow(error)
+    }
     return { ai_priority_score: score }
   }
 
