@@ -972,6 +972,7 @@ class BLEMeshStrategy : MeshStrategy {
                             pendingFragments = null
                             fragmentChar = null
                             inFlightPacketIds.remove(packet.id)
+                            releasePeer(watchdogGatt.device.address)
                             fireMeshEvent("transmission_failed", mapOf(
                                 "deviceAddress" to watchdogGatt.device.address,
                                 "packetId"      to packet.id,
@@ -1139,6 +1140,10 @@ class BLEMeshStrategy : MeshStrategy {
                         inFlightPacketIds.remove(packet.id)
                         fireMeshEvent("transmission_failed", mapOf("deviceAddress" to gatt.device.address, "packetId" to packet.id, "errorCode" to status, "transport" to "BLE_GATT"))
                     }
+                    // Release the per-peer mutex on every completed write. Do not rely
+                    // exclusively on STATE_DISCONNECTED: some OEM stacks delay/omit it,
+                    // which otherwise leaves all subsequent packets deferred as peer_busy_deferred.
+                    releasePeer(gatt.device.address)
                     gatt.disconnect()
                 }
             }, BluetoothDevice.TRANSPORT_LE)
