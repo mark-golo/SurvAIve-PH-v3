@@ -48,6 +48,9 @@ function _ackMatchesSos(activeId, incomingId) {
 let _unsubscribe    = null
 let _eventUnsub     = null
 let _unsubBroadcast = null
+// Safety timeout: if native layer stops sending events while broadcastSubState === 'connecting',
+// this fires after 20s and moves the UI to 'failed' so the spinner is never infinite.
+let _connectingTimeoutId = null
 // _seenIds: Map<packetId, timestamp_ms> for time-based eviction (replay-attack hardening)
 const _seenIds = new Map()
 const SEEN_MAX = 300
@@ -107,10 +110,30 @@ export function startMeshSync() {
   _unsubBroadcast = onBroadcastStatus(({ status, errorCode }) => {
     if (status === 'advertising_requesting') setBroadcastSubState('requesting')
     if (status === 'advertising_started') setBroadcastSubState('advertising')
-    if (status === 'advertising_failed')  { setBroadcastSubState('failed'); setBroadcastErrorCode(errorCode ?? null) }
+    if (status === 'advertising_failed')  {
+      if (_connectingTimeoutId) { clearTimeout(_connectingTimeoutId); _connectingTimeoutId = null }
+      setBroadcastSubState('failed'); setBroadcastErrorCode(errorCode ?? null)
+    }
     if (status === 'awaiting_peers')      setBroadcastSubState('awaiting_peers')
-    if (status === 'connecting')          setBroadcastSubState('connecting')
-    if (status === 'sos_transmitted')     setBroadcastSubState('transmitted')
+    if (status === 'connecting') {
+      setBroadcastSubState('connecting')
+      // Start a 20-second safety timeout. If native events stop (GATT crash, OEM kill)
+      // the UI moves to 'failed' rather than spinning on "Connecting to Peer…" forever.
+      if (_connectingTimeoutId) clearTimeout(_connectingTimeoutId)
+      _connectingTimeoutId = setTimeout(() => {
+        _connectingTimeoutId = null
+        const cur = getActiveSOS()
+        if (cur?.broadcastSubState === 'connecting') {
+          logMeshEvent('connecting_timeout', { packetId: cur.packetId ?? null })
+          setBroadcastSubState('failed')
+          setBroadcastErrorCode(-99)
+        }
+      }, 20_000)
+    }
+    if (status === 'sos_transmitted') {
+      if (_connectingTimeoutId) { clearTimeout(_connectingTimeoutId); _connectingTimeoutId = null }
+      setBroadcastSubState('transmitted')
+    }
   })
   console.info('[meshSync] receiver pipeline subscribed')
   _unsubscribe = mesh.onMessage(async (data, rawPacket) => {
@@ -132,6 +155,8 @@ export function startMeshSync() {
         const hopsUsed = 5 - ((data.hcr ?? data.hop_count_remaining) ?? 5)
         const cur      = getActiveSOS()
         if (sosId && _ackMatchesSos(cur.packetId, sosId)) {
+          // ACK matched — cancel the connecting safety timeout if still pending.
+          if (_connectingTimeoutId) { clearTimeout(_connectingTimeoutId); _connectingTimeoutId = null }
           // Missing stage → 'sos_received' for backward compat with pre-stage APKs.
           const stage = data?.stage ?? 'sos_received'
           if (stage === 'beacon_seen') {

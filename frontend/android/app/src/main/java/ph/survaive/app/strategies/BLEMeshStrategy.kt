@@ -136,6 +136,17 @@ class BLEMeshStrategy : MeshStrategy {
     // can never cancel the running slot.
     private var _isAdvertising = false
 
+    // True only after onServiceAdded() confirms GATT_SUCCESS for SERVICE_UUID.
+    // Prevents startAdvertising() from running before the remote GATT database is ready,
+    // which would make this device appear connectable with no usable service — the root
+    // cause of 226 gatt_service_not_found failures observed in v7 logs.
+    private var gattServiceReady = false
+
+    // Bounded retry counter for ADVERTISE_FAILED_ALREADY_STARTED (error 3).
+    // Reset to 0 on each onStartSuccess(). Capped at MAX_ADVERTISE_RETRIES.
+    private var advertiseRetryCount = 0
+    private val MAX_ADVERTISE_RETRIES = 3
+
     // Status callback — notifies JS of advertising_started / advertising_failed / awaiting_peers.
     // Set from MeshNetworkPlugin after binding; null in tests / before bind.
     var onBroadcastStatus: ((status: String, errorCode: Int) -> Unit)? = null
@@ -242,6 +253,8 @@ class BLEMeshStrategy : MeshStrategy {
                     _scanRestartHandler.postDelayed(_scanRestartRunnable, SCAN_RESTART_INTERVAL_MS)
                 } else if (state == BluetoothAdapter.STATE_OFF) {
                     _isAdvertising = false
+                    gattServiceReady = false
+                    advertiseRetryCount = 0
                     _scanRestartHandler.removeCallbacks(_scanRestartRunnable)
                     scanner?.stopScan(scanCallback)
                     advertiser?.stopAdvertising(advertiseCallback)
@@ -266,6 +279,8 @@ class BLEMeshStrategy : MeshStrategy {
 
     override fun stop() {
         _isAdvertising = false
+        gattServiceReady = false
+        advertiseRetryCount = 0
         _scanRestartHandler.removeCallbacks(_scanRestartRunnable)
         scanner?.stopScan(scanCallback)
         advertiser?.stopAdvertising(advertiseCallback)
@@ -297,7 +312,8 @@ class BLEMeshStrategy : MeshStrategy {
 
                 override fun onServiceAdded(status: Int, service: BluetoothGattService) {
                     if (status == BluetoothGatt.GATT_SUCCESS) {
-                        Log.d(TAG, "GATT service registered — starting advertising")
+                        Log.d(TAG, "GATT service registered — advertising enabled")
+                        gattServiceReady = true
                         fireMeshEvent("gatt_server_started", mapOf("serviceUuid" to service.uuid.toString()))
                         // startAdvertising must be called from the main thread on many OEM stacks.
                         // Guard: if an SOS beacon is already being advertised (e.g. updateBeacon()
@@ -305,6 +321,7 @@ class BLEMeshStrategy : MeshStrategy {
                         mainHandler.post { if (!_isAdvertising) startAdvertising(context) }
                     } else {
                         Log.e(TAG, "GATT addService failed: $status — retrying in 2s")
+                        gattServiceReady = false
                         fireMeshEvent("gatt_service_add_failed", mapOf("status" to status.toString(), "reason" to "onServiceAdded_non_success"))
                         mainHandler.postDelayed({ startGattServer(context) }, 2000L)
                     }
@@ -404,9 +421,17 @@ class BLEMeshStrategy : MeshStrategy {
             BluetoothGattCharacteristic.PERMISSION_WRITE,
         )
         service.addCharacteristic(char)
+        if (gattServer == null) {
+            Log.e(TAG, "openGattServer returned null — retrying in 2s")
+            gattServiceReady = false
+            fireMeshEvent("gatt_server_open_failed", mapOf("reason" to "openGattServer_returned_null"))
+            mainHandler.postDelayed({ _context?.let { startGattServer(it) } }, 2000L)
+            return
+        }
         val serviceAdded = gattServer?.addService(service) ?: false
         if (!serviceAdded) {
             Log.e(TAG, "addService returned false — scheduling retry")
+            gattServiceReady = false
             fireMeshEvent("gatt_service_add_failed", mapOf("reason" to "addService_returned_false"))
             mainHandler.postDelayed({ _context?.let { startGattServer(it) } }, 2000L)
             return
@@ -417,6 +442,14 @@ class BLEMeshStrategy : MeshStrategy {
     // ── BLE Advertising ───────────────────────────────────────────────────────────
 
     private fun startAdvertising(context: Context) {
+        // Readiness guard: do not advertise this device as a connectable GATT peer until the
+        // GATT service has been successfully registered. Without this, a scanner that connects
+        // immediately after seeing the beacon will find an empty service list and emit 226+
+        // gatt_service_not_found failures (observed in v7 logs).
+        if (!gattServiceReady) {
+            Log.d(TAG, "startAdvertising deferred — GATT service not ready yet")
+            return
+        }
         // Race guard: if BT stack is already advertising, a second startAdvertising() call
         // would get ADVERTISE_FAILED_ALREADY_STARTED (3), create a NEW dead callback, and
         // leave advertiseCallback pointing at the dead one so stopAdvertising() stops nothing.
@@ -439,19 +472,45 @@ class BLEMeshStrategy : MeshStrategy {
             advertiseCallback = object : AdvertiseCallback() {
                 override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
                     _isAdvertising = true
+                    advertiseRetryCount = 0
                     Log.d(TAG, "BLE advertising started")
                     onBroadcastStatus?.invoke("advertising_started", 0)
                 }
                 override fun onStartFailure(errorCode: Int) {
                     _isAdvertising = false
                     Log.e(TAG, "BLE advertise failed: $errorCode")
-                    if (errorCode == ADVERTISE_FAILED_ALREADY_STARTED || errorCode == ADVERTISE_FAILED_TOO_MANY_ADVERTISERS) {
-                        val delay = if (errorCode == ADVERTISE_FAILED_ALREADY_STARTED) 600L else 2000L
-                        Log.w(TAG, "Advertise error $errorCode — retrying in ${delay}ms")
-                        mainHandler.postDelayed({ _context?.let { startAdvertising(it) } }, delay)
-                        return
+                    when (errorCode) {
+                        ADVERTISE_FAILED_ALREADY_STARTED -> {
+                            advertiseRetryCount++
+                            if (advertiseRetryCount > MAX_ADVERTISE_RETRIES) {
+                                Log.e(TAG, "Advertising permanently failed after $advertiseRetryCount attempts (err $errorCode)")
+                                advertiseRetryCount = 0
+                                onBroadcastStatus?.invoke("advertising_failed", errorCode)
+                                return
+                            }
+                            // Clear the stale platform advertising slot before retrying.
+                            // Without this, the platform reports ALREADY_STARTED on every retry
+                            // because the dead slot from a prior callback was never released.
+                            Log.w(TAG, "Advertise error $errorCode — stopping stale slot, retry ${advertiseRetryCount}/$MAX_ADVERTISE_RETRIES in 800ms")
+                            try { advertiser?.stopAdvertising(advertiseCallback) } catch (_: Exception) {}
+                            mainHandler.postDelayed({ _context?.let { startAdvertising(it) } }, 800L)
+                        }
+                        ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> {
+                            advertiseRetryCount++
+                            if (advertiseRetryCount > MAX_ADVERTISE_RETRIES) {
+                                Log.e(TAG, "Advertising permanently failed after $advertiseRetryCount attempts (err $errorCode)")
+                                advertiseRetryCount = 0
+                                onBroadcastStatus?.invoke("advertising_failed", errorCode)
+                                return
+                            }
+                            Log.w(TAG, "Advertise error $errorCode — retry ${advertiseRetryCount}/$MAX_ADVERTISE_RETRIES in 2000ms")
+                            mainHandler.postDelayed({ _context?.let { startAdvertising(it) } }, 2000L)
+                        }
+                        else -> {
+                            advertiseRetryCount = 0
+                            onBroadcastStatus?.invoke("advertising_failed", errorCode)
+                        }
                     }
-                    onBroadcastStatus?.invoke("advertising_failed", errorCode)
                 }
             }
         }
@@ -837,7 +896,7 @@ class BLEMeshStrategy : MeshStrategy {
                     val service = gatt.getService(SERVICE_UUID)
                     if (service == null) {
                         val foundSvcs = gatt.services.joinToString { it.uuid.toString().take(8) }
-                        Log.e(TAG, "Remote GATT service not found on ${gatt.device.address} — discovered: $foundSvcs")
+                        Log.e(TAG, "Remote GATT service not found on ${gatt.device.address} — discovered: $foundSvcs (retriesLeft=$retriesLeft)")
                         fireMeshEvent("transmission_failed", mapOf(
                             "deviceAddress"      to gatt.device.address,
                             "packetId"           to packet.id,
@@ -847,7 +906,24 @@ class BLEMeshStrategy : MeshStrategy {
                             "discoveredServices" to foundSvcs,
                         ))
                         inFlightPacketIds.remove(packet.id)
-                        gatt.disconnect(); return
+                        try { gatt.disconnect() } catch (_: Exception) {}
+                        try { gatt.close()      } catch (_: Exception) {}
+                        if (retriesLeft > 0) {
+                            // Retry after 2s to allow the remote GATT server time to finish
+                            // registering its service (the peer may be advertising before its
+                            // onServiceAdded callback has fired).
+                            mainHandler.postDelayed({ connectAndWrite(peer, packet, retriesLeft - 1) }, 2000L)
+                        } else {
+                            // All retries exhausted — evict this peer so the next broadcast()
+                            // does not keep targeting a device with no usable GATT service.
+                            discoveredPeers.remove(peer)
+                            peerLastSeen.remove(peer.address)
+                            fireMeshEvent("peer_evicted", mapOf(
+                                "deviceAddress" to peer.address,
+                                "reason"        to "gatt_service_not_found_exhausted",
+                            ))
+                        }
+                        return
                     }
                     val char = service.getCharacteristic(CHAR_UUID)
                     if (char == null) {
