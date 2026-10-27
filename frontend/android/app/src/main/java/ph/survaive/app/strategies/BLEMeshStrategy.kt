@@ -848,6 +848,7 @@ class BLEMeshStrategy : MeshStrategy {
                         // disconnect() before close() frees the connection slot on OEM stacks;
                         // skipping it leaks phantom connections on Samsung/Qualcomm firmware.
                         try { gatt.disconnect() } catch (_: Exception) {}
+                        releasePeer(gatt.device.address)
                         gatt.close()
                         if (retriesLeft > 0) {
                             Log.d(TAG, "Retrying GATT connect to ${gatt.device.address} ($retriesLeft left)")
@@ -930,6 +931,7 @@ class BLEMeshStrategy : MeshStrategy {
                             "discoveredServices" to foundSvcs,
                         ))
                         inFlightPacketIds.remove(packet.id)
+                        releasePeer(gatt.device.address)
                         try { gatt.disconnect() } catch (_: Exception) {}
                         try { gatt.close()      } catch (_: Exception) {}
                         if (retriesLeft > 0) {

@@ -128,7 +128,7 @@ export function startMeshSync() {
           setBroadcastSubState('failed')
           setBroadcastErrorCode(-99)
         }
-      }, 20_000)
+      }, 35_000)
     }
     if (status === 'sos_transmitted') {
       if (_connectingTimeoutId) { clearTimeout(_connectingTimeoutId); _connectingTimeoutId = null }

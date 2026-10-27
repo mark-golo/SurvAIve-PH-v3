@@ -38,7 +38,7 @@ function _debouncedSaveMeshState() {
   try {
     const saved = await db.getMeshState('activeSOS')
     if (saved?.packetId) {
-      const savedAt = saved.ackDevices?.[saved.ackDevices.length - 1]?.time ?? 0
+      const savedAt = saved.sentAt ?? saved.ackDevices?.[saved.ackDevices.length - 1]?.time ?? 0
       const age = Date.now() - Math.max(savedAt, 0)
       if (age < 30 * 60 * 1000) {
         _activeSOS = saved
@@ -76,7 +76,7 @@ export function logMeshEvent(type, data) {
 export function getMeshEventLog() { return _eventLog }
 
 export function setActiveSOS(packetId, sosDisplayId) {
-  _activeSOS = { packetId, sosDisplayId: sosDisplayId ?? null, ackLevel: 1, ackDevices: [], ackMaxHops: 0, broadcastSubState: null }
+  _activeSOS = { packetId, sosDisplayId: sosDisplayId ?? null, sentAt: Date.now(), ackLevel: 1, ackDevices: [], ackMaxHops: 0, broadcastSubState: null }
   _debouncedSaveMeshState()
   _notify()
 }
