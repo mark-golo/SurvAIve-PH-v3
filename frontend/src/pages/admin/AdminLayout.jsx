@@ -200,10 +200,26 @@ export function AdminLayout() {
   useEffect(() => {
     const endpoint = muni ? `/sos?municipality=${encodeURIComponent(muni)}` : '/sos'
 
-    // Seed: pre-populate seen IDs so we don't alert on records that existed before page load
+    // Seed: pre-populate seen IDs — BUT also alarm immediately for any SOS < 2 min old.
+    // Without this, a SOS inserted before the admin opens the page gets silently captured
+    // by the seed and the poll will skip it forever (it's already in seenIdsRef).
     api.get(endpoint)
       .then(rows => {
-        ;(Array.isArray(rows) ? rows : []).forEach(r => seenIdsRef.current.add(r.id))
+        ;(Array.isArray(rows) ? rows : []).forEach(r => {
+          if (seenIdsRef.current.has(r.id)) return
+          seenIdsRef.current.add(r.id)
+          const ts  = r.created_at ?? r.timestamp ?? null
+          const age = ts ? Date.now() - new Date(ts).getTime() : Infinity
+          if (age < 120_000) {
+            triggerAlert({
+              id:           r.id,
+              name:         r.name ?? 'Unknown',
+              barangay:     r.barangay ?? '—',
+              municipality: r.municipality ?? '',
+              ts:           new Date().toLocaleTimeString(),
+            })
+          }
+        })
       })
       .catch(() => {})
 
@@ -227,7 +243,7 @@ export function AdminLayout() {
           }
         })
       } catch { /* ignore polling errors */ }
-    }, 30_000)
+    }, 10_000)
 
     return () => clearInterval(poll)
   }, [muni, triggerAlert])

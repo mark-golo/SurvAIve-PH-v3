@@ -57,11 +57,12 @@ export function SOSReport() {
   const [conditions,  setConditions]  = useState([])
   const [lat,  setLat]  = useState(user?.lat ?? null)
   const [lng,  setLng]  = useState(user?.lng ?? null)
-  const [loading,     setLoading]     = useState(false)
-  const [submitted,   setSubmitted]   = useState(false)
-  const [sosError,    setSosError]    = useState(null)
+  const [loading,       setLoading]       = useState(false)
+  const [submitted,     setSubmitted]     = useState(false)
+  const [sosError,      setSosError]      = useState(null)
   const [priorityScore, setPriorityScore] = useState(null)
-  const [offline,     setOffline]     = useState(!getNetworkOnline())
+  const [offline,       setOffline]       = useState(!getNetworkOnline())
+  const [onlineDelivered, setOnlineDelivered] = useState(false)
 
   // ── Mesh ACK state (shared via meshActivityStore) ────────────────────────────
   const [ackState, setAckState] = useState(getActiveSOS)
@@ -346,26 +347,33 @@ export function SOSReport() {
       sv:  payload.service_type,
     }
     const _payloadBytes = JSON.stringify(_sosPayload).length
-    mesh.broadcast(_sosPayload)
-      .then(r  => logMeshEvent('broadcast_dispatched', { packetId: realPacketId, payloadBytes: _payloadBytes, success: r?.success, transport: r?.transport }))
-      .catch(err => logMeshEvent('broadcast_error',    { packetId: realPacketId, payloadBytes: _payloadBytes, error: String(err) }))
 
     if (offline || !getNetworkOnline()) {
+      // OFFLINE — broadcast via mesh first, then queue to IndexedDB
+      mesh.broadcast(_sosPayload)
+        .then(r   => logMeshEvent('broadcast_dispatched', { packetId: realPacketId, payloadBytes: _payloadBytes, success: r?.success, transport: r?.transport }))
+        .catch(err => logMeshEvent('broadcast_error',     { packetId: realPacketId, payloadBytes: _payloadBytes, error: String(err) }))
       await db.queueSOS({ ...payload, isGuest, timestamp: Date.now() })
       setSubmitted(true)
       setLoading(false)
       return
     }
 
+    // ONLINE — attempt internet delivery first; only fall back to mesh if it fails
     try {
       const res = await api.post('/sos', payload)
       setPriorityScore(res.ai_priority_score)
-      updateACKState({ ackLevel: 4, ackMaxHops: getActiveSOS().ackMaxHops })  // H2 fix: server confirmed
+      updateACKState({ ackLevel: 4, ackMaxHops: getActiveSOS().ackMaxHops })
+      setOnlineDelivered(true)
       setSubmitted(true)
     } catch (err) {
       console.error('[SOSReport] insert failed:', err?.message ?? String(err))
+      // Internet delivery failed — fall back to mesh + offline queue
+      mesh.broadcast(_sosPayload)
+        .then(r   => logMeshEvent('broadcast_dispatched', { packetId: realPacketId, payloadBytes: _payloadBytes, success: r?.success, transport: r?.transport }))
+        .catch(err2 => logMeshEvent('broadcast_error',    { packetId: realPacketId, payloadBytes: _payloadBytes, error: String(err2) }))
       await db.queueSOS({ ...payload, isGuest, timestamp: Date.now() })
-      setSosError('SOS saved offline. Your request will sync automatically when reconnected.')
+      setSosError('Server unreachable — broadcasting via mesh. Will sync when reconnected.')
       setSubmitted(true)
     }
     setLoading(false)
@@ -397,85 +405,123 @@ export function SOSReport() {
           transition={{ type: 'spring', damping: 12 }}
           className="text-center space-y-4 max-w-sm w-full"
         >
-          {/* 4-level SOS propagation checklist */}
-          <div className="rounded-2xl px-5 py-4 glass border-2 mx-auto w-full border-[rgba(255,255,255,0.1)]">
-            {/* SOS ID */}
-            <p className="text-[10px] text-slate-500 text-center mb-3 font-mono tracking-wider">
-              {ackState.sosDisplayId ?? 'SOS-XXXXX'}
-            </p>
-            {/* Level rows */}
-            <div className="space-y-2.5">
-              {MESH_STEPS.map(({ n, label, color }) => {
-                const done    = ackState.ackLevel > n
-                const active  = ackState.ackLevel === n
-                const pending = ackState.ackLevel < n
-                return (
-                  <div key={n} className="flex items-center gap-2.5">
-                    {done ? (
-                      <div className="w-4 h-4 rounded-full flex items-center justify-center shrink-0"
-                           style={{ background: color }}>
-                        <Check size={9} className="text-black" strokeWidth={3} />
-                      </div>
-                    ) : active ? (
-                      <div className="w-4 h-4 rounded-full shrink-0 animate-pulse"
-                           style={{ background: color }} />
-                    ) : (
-                      <div className="w-4 h-4 rounded-full shrink-0 border border-slate-700" />
-                    )}
-                    <p className={`text-[11px] font-bold tracking-wider${pending ? ' text-slate-600' : ''}`}
-                       style={pending ? {} : { color }}>
-                      {label}
-                    </p>
-                  </div>
-                )
-              })}
-            </div>
-            {/* Mesh node summary */}
-            {ackState.ackDevices.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-[rgba(255,255,255,0.06)]">
-                <p className="text-[10px] text-slate-500">
-                  Mesh nodes reached: {ackState.ackDevices.length}
-                  {ackState.ackMaxHops > 0 ? ` · Max hops: ${ackState.ackMaxHops}` : ''}
+          {onlineDelivered ? (
+            /* ── Online delivery confirmed ─────────────────────────────────── */
+            <>
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[rgba(34,197,94,0.3)] to-[rgba(22,163,74,0.3)]
+                              border-2 border-[rgba(34,197,94,0.5)] flex items-center justify-center mx-auto
+                              shadow-[0_0_32px_rgba(34,197,94,0.4)]">
+                <Check size={28} className="text-white" />
+              </div>
+              <h2 className="text-xl font-black text-white">SOS Delivered</h2>
+              <div className="glass rounded-xl p-3 border border-[rgba(34,197,94,0.3)]">
+                <p className="text-xs text-[#22c55e] font-semibold mb-1 tracking-wider">INTERNET DELIVERY CONFIRMED</p>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Your SOS has been transmitted to the emergency response system.
+                  Responders have been notified. Stay in place if possible.
                 </p>
               </div>
-            )}
-          </div>
+              {priorityScore && (
+                <div className="glass rounded-xl p-3">
+                  <p className="text-xs text-slate-500">AI Priority Score</p>
+                  <p className="text-3xl font-black text-[#ef4444]">{priorityScore}</p>
+                  <p className="text-xs text-slate-400">
+                    {priorityScore >= 80 ? 'CRITICAL – Rescue teams alerted' :
+                     priorityScore >= 60 ? 'HIGH – Added to priority queue' :
+                     priorityScore >= 40 ? 'MODERATE – In rescue queue' : 'LOW – Queued for response'}
+                  </p>
+                </div>
+              )}
+              {sosMode === 'photo' && aiAnalysis && (
+                <div className="glass rounded-xl p-3 border border-[rgba(139,92,246,0.3)]">
+                  <p className="text-xs text-violet-400 font-semibold mb-1">YOLO11 Scene Analysis</p>
+                  <p className="text-sm text-white font-bold">{aiAnalysis.classification.label}</p>
+                  <p className="text-xs text-slate-400">
+                    {aiAnalysis.classification.confidence}% confidence · {aiAnalysis.detection.count} detected
+                  </p>
+                </div>
+              )}
+            </>
+          ) : (
+            /* ── Mesh / offline path ────────────────────────────────────────── */
+            <>
+              {/* 4-level SOS propagation checklist */}
+              <div className="rounded-2xl px-5 py-4 glass border-2 mx-auto w-full border-[rgba(255,255,255,0.1)]">
+                <p className="text-[10px] text-slate-500 text-center mb-3 font-mono tracking-wider">
+                  {ackState.sosDisplayId ?? 'SOS-XXXXX'}
+                </p>
+                <div className="space-y-2.5">
+                  {MESH_STEPS.map(({ n, label, color }) => {
+                    const done    = ackState.ackLevel > n
+                    const active  = ackState.ackLevel === n
+                    const pending = ackState.ackLevel < n
+                    return (
+                      <div key={n} className="flex items-center gap-2.5">
+                        {done ? (
+                          <div className="w-4 h-4 rounded-full flex items-center justify-center shrink-0"
+                               style={{ background: color }}>
+                            <Check size={9} className="text-black" strokeWidth={3} />
+                          </div>
+                        ) : active ? (
+                          <div className="w-4 h-4 rounded-full shrink-0 animate-pulse"
+                               style={{ background: color }} />
+                        ) : (
+                          <div className="w-4 h-4 rounded-full shrink-0 border border-slate-700" />
+                        )}
+                        <p className={`text-[11px] font-bold tracking-wider${pending ? ' text-slate-600' : ''}`}
+                           style={pending ? {} : { color }}>
+                          {label}
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+                {ackState.ackDevices.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-[rgba(255,255,255,0.06)]">
+                    <p className="text-[10px] text-slate-500">
+                      Mesh nodes reached: {ackState.ackDevices.length}
+                      {ackState.ackMaxHops > 0 ? ` · Max hops: ${ackState.ackMaxHops}` : ''}
+                    </p>
+                  </div>
+                )}
+              </div>
 
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[rgba(239,68,68,0.3)] to-[rgba(220,38,38,0.3)]
-                          border-2 border-[rgba(239,68,68,0.5)] flex items-center justify-center mx-auto
-                          shadow-[0_0_32px_rgba(239,68,68,0.4)]">
-            <Check size={28} className="text-white" />
-          </div>
-          <h2 className="text-xl font-black text-white">SOS Sent!</h2>
-          {offline && <p className="text-sm text-[#f59e0b]">Saved offline — will sync when signal returns</p>}
-          {sosError && <p className="text-sm text-[#f59e0b]">{sosError}</p>}
-          {priorityScore && (
-            <div className="glass rounded-xl p-3">
-              <p className="text-xs text-slate-500">AI Priority Score</p>
-              <p className="text-3xl font-black text-[#ef4444]">{priorityScore}</p>
-              <p className="text-xs text-slate-400">
-                {priorityScore >= 80 ? 'CRITICAL – Rescue teams alerted' :
-                 priorityScore >= 60 ? 'HIGH – Added to priority queue' :
-                 priorityScore >= 40 ? 'MODERATE – In rescue queue' : 'LOW – Queued for response'}
-              </p>
-            </div>
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[rgba(239,68,68,0.3)] to-[rgba(220,38,38,0.3)]
+                              border-2 border-[rgba(239,68,68,0.5)] flex items-center justify-center mx-auto
+                              shadow-[0_0_32px_rgba(239,68,68,0.4)]">
+                <Check size={28} className="text-white" />
+              </div>
+              <h2 className="text-xl font-black text-white">SOS Sent!</h2>
+              {offline && <p className="text-sm text-[#f59e0b]">Saved offline — will sync when signal returns</p>}
+              {sosError && <p className="text-sm text-[#f59e0b]">{sosError}</p>}
+              {priorityScore && (
+                <div className="glass rounded-xl p-3">
+                  <p className="text-xs text-slate-500">AI Priority Score</p>
+                  <p className="text-3xl font-black text-[#ef4444]">{priorityScore}</p>
+                  <p className="text-xs text-slate-400">
+                    {priorityScore >= 80 ? 'CRITICAL – Rescue teams alerted' :
+                     priorityScore >= 60 ? 'HIGH – Added to priority queue' :
+                     priorityScore >= 40 ? 'MODERATE – In rescue queue' : 'LOW – Queued for response'}
+                  </p>
+                </div>
+              )}
+              {sosMode === 'photo' && aiAnalysis && (
+                <div className="glass rounded-xl p-3 border border-[rgba(139,92,246,0.3)]">
+                  <p className="text-xs text-violet-400 font-semibold mb-1">YOLO11 Scene Analysis</p>
+                  <p className="text-sm text-white font-bold">{aiAnalysis.classification.label}</p>
+                  <p className="text-xs text-slate-400">
+                    {aiAnalysis.classification.confidence}% confidence · {aiAnalysis.detection.count} detected
+                  </p>
+                </div>
+              )}
+              <div className="glass rounded-xl p-3 border border-[rgba(245,158,11,0.2)]">
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Your SOS is broadcast via mesh. Status updates above as nearby devices acknowledge it.
+                  Stay in place if possible. Keep your phone on.
+                </p>
+              </div>
+            </>
           )}
-          {/* YOLO11 AI analysis summary badge (Photo Mode) */}
-          {sosMode === 'photo' && aiAnalysis && (
-            <div className="glass rounded-xl p-3 border border-[rgba(139,92,246,0.3)]">
-              <p className="text-xs text-violet-400 font-semibold mb-1">YOLO11 Scene Analysis</p>
-              <p className="text-sm text-white font-bold">{aiAnalysis.classification.label}</p>
-              <p className="text-xs text-slate-400">
-                {aiAnalysis.classification.confidence}% confidence · {aiAnalysis.detection.count} detected
-              </p>
-            </div>
-          )}
-          <div className="glass rounded-xl p-3 border border-[rgba(245,158,11,0.2)]">
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Your SOS is broadcast via mesh. Status updates above as nearby devices acknowledge it.
-              Stay in place if possible. Keep your phone on.
-            </p>
-          </div>
           <NeonButton variant="ghost" onClick={() => navigate('/home')} className="w-full">
             Return to Home
           </NeonButton>
