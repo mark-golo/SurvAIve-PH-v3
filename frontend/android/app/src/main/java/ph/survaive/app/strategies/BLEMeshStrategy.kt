@@ -78,6 +78,10 @@ class BLEMeshStrategy : MeshStrategy {
     private val discoveredPeers = CopyOnWriteArrayList<BluetoothDevice>()
 
     private var gattServer: BluetoothGattServer? = null
+    // Prevent overlapping openGattServer/addService attempts. Some OEM stacks invoke
+    // retry/start paths before onServiceAdded returns; closing the pending server here
+    // leaves the peer connected to a GATT server with an empty service table.
+    @Volatile private var gattServiceAddInProgress = false
     private var scanner: BluetoothLeScanner?     = null
     private var advertiser: BluetoothLeAdvertiser? = null
     private var advertiseCallback: AdvertiseCallback? = null
@@ -304,9 +308,19 @@ class BLEMeshStrategy : MeshStrategy {
     // ── GATT Server — receives incoming packets ───────────────────────────────────
 
     private fun startGattServer(context: Context) {
+        // Idempotency guard: never tear down a healthy server or a server whose
+        // addService callback is still pending. Concurrent/retried initialization can
+        // otherwise close the only registered service while a peer is discovering it.
+        synchronized(this) {
+            if (gattServer != null && (gattServiceReady || gattServiceAddInProgress)) {
+                Log.d(TAG, "startGattServer skipped — server already ready or service registration pending")
+                return
+            }
+            gattServiceAddInProgress = true
+        }
         val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
 
-        // Fix 2: close any existing server before opening a new one.
+        // Close only a failed/stale server; never close one while service registration is pending.
         // Without this, retries (onServiceAdded failure) and BT-state-change restarts
         // accumulate ghost BluetoothGattServer instances. A ghost server can intercept
         // the sender's GATT connection before the active server's service is registered,
@@ -321,6 +335,7 @@ class BLEMeshStrategy : MeshStrategy {
                     if (status == BluetoothGatt.GATT_SUCCESS) {
                         Log.d(TAG, "GATT service registered — advertising enabled")
                         gattServiceReady = true
+                        gattServiceAddInProgress = false
                         fireMeshEvent("gatt_server_started", mapOf("serviceUuid" to service.uuid.toString()))
                         // startAdvertising must be called from the main thread on many OEM stacks.
                         // Guard: if an SOS beacon is already being advertised (e.g. updateBeacon()
@@ -329,6 +344,7 @@ class BLEMeshStrategy : MeshStrategy {
                     } else {
                         Log.e(TAG, "GATT addService failed: $status — retrying in 2s")
                         gattServiceReady = false
+                        gattServiceAddInProgress = false
                         fireMeshEvent("gatt_service_add_failed", mapOf("status" to status.toString(), "reason" to "onServiceAdded_non_success"))
                         mainHandler.postDelayed({ startGattServer(context) }, 2000L)
                     }
@@ -413,6 +429,7 @@ class BLEMeshStrategy : MeshStrategy {
             })
         } catch (e: SecurityException) {
             Log.e(TAG, "openGattServer denied — BLUETOOTH_CONNECT not granted: ${e.message}")
+            gattServiceAddInProgress = false
             fireMeshEvent("gatt_server_failed", mapOf("reason" to "security_exception", "message" to (e.message ?: "")))
             onBroadcastStatus?.invoke("gatt_server_failed", -1)
             return
@@ -431,6 +448,7 @@ class BLEMeshStrategy : MeshStrategy {
         if (gattServer == null) {
             Log.e(TAG, "openGattServer returned null — retrying in 2s")
             gattServiceReady = false
+            gattServiceAddInProgress = false
             fireMeshEvent("gatt_server_open_failed", mapOf("reason" to "openGattServer_returned_null"))
             mainHandler.postDelayed({ _context?.let { startGattServer(it) } }, 2000L)
             return
@@ -439,6 +457,7 @@ class BLEMeshStrategy : MeshStrategy {
         if (!serviceAdded) {
             Log.e(TAG, "addService returned false — scheduling retry")
             gattServiceReady = false
+            gattServiceAddInProgress = false
             fireMeshEvent("gatt_service_add_failed", mapOf("reason" to "addService_returned_false"))
             mainHandler.postDelayed({ _context?.let { startGattServer(it) } }, 2000L)
             return
