@@ -72,6 +72,7 @@ class BLEMeshStrategy : MeshStrategy {
         private const val SCAN_RESTART_INTERVAL_MS  = 30_000L
         private const val MAX_FRAGMENT_ASSEMBLIES   = 32
         private const val FRAGMENT_TTL_MS           = 30_000L
+        private const val PEER_TTL_MS               = 30_000L
     }
 
     private val discoveredPeers = CopyOnWriteArrayList<BluetoothDevice>()
@@ -708,7 +709,15 @@ class BLEMeshStrategy : MeshStrategy {
 
         // Limit to 3 concurrent GATT connects — Android BLE supports 4-7 max.
         // Beacon advertising already delivers to all nearby scanners passively.
-        for (peer in discoveredPeers.take(3)) {
+        // Only target peers seen within PEER_TTL_MS to avoid wasting a GATT slot on a device that moved away.
+        val now = System.currentTimeMillis()
+        val livePeers = discoveredPeers.filter { (peerLastSeen[it.address] ?: 0L) >= now - PEER_TTL_MS }
+        if (livePeers.isEmpty() && discoveredPeers.isNotEmpty()) {
+            fireMeshEvent("all_peers_stale", mapOf("staleCount" to discoveredPeers.size))
+            onBroadcastStatus?.invoke("awaiting_peers", 0)
+            return false
+        }
+        for (peer in livePeers.take(3)) {
             mainHandler.post { connectAndWrite(peer, packet) }
         }
         return true
@@ -776,11 +785,13 @@ class BLEMeshStrategy : MeshStrategy {
                         if (!mtuRequested) {
                             Log.w(TAG, "requestMtu returned false for ${gatt.device.address} — proceeding to discoverServices")
                             mtuCallbackFired.set(true)
+                            fireMeshEvent("gatt_services_discovering", mapOf("deviceAddress" to gatt.device.address, "packetId" to packet.id.take(8)))
                             gatt.discoverServices()
                         } else {
                             mainHandler.postDelayed({
                                 if (!mtuCallbackFired.getAndSet(true)) {
                                     Log.w(TAG, "onMtuChanged timeout for ${gatt.device.address} — proceeding to discoverServices")
+                                    fireMeshEvent("gatt_services_discovering", mapOf("deviceAddress" to gatt.device.address, "packetId" to packet.id.take(8)))
                                     gatt.discoverServices()
                                 }
                             }, 3000L)
@@ -809,6 +820,7 @@ class BLEMeshStrategy : MeshStrategy {
                     } else {
                         Log.w(TAG, "MTU negotiation failed (status=$status) for ${gatt.device.address} — using default ${currentMtu}B MTU")
                     }
+                    fireMeshEvent("gatt_services_discovering", mapOf("deviceAddress" to gatt.device.address, "packetId" to packet.id.take(8)))
                     gatt.discoverServices()
                 }
 
@@ -1136,6 +1148,7 @@ class BLEMeshStrategy : MeshStrategy {
                         put("si", packetId)
                         put("hcr", hopCount)
                         put("rr", role)
+                        put("stage", "beacon_seen")  // beacon ACK is provisional; only GATT ACK is authoritative
                     }.toString()
                     MeshPacket(id = "ack-$idHex", type = "ack", payload = payload,
                                originDeviceId = originId, hopCount = hopCount)
