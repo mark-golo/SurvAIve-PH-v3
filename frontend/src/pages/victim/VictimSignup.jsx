@@ -7,6 +7,7 @@ import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassInput, GlassSelect, GlassTextarea } from '../../components/ui/GlassInput'
 import { useAuthStore } from '../../store/auth'
 import api from '../../lib/api'
+import { supabase } from '../../lib/supabase'
 import { PROVINCES, getMunicipalities, getBarangays } from '../../lib/philippineLocations'
 import {
   getOrCreateDeviceKey,
@@ -60,7 +61,7 @@ export function VictimSignup() {
   }
 
   // ── Step 0 → Step 1 ──────────────────────────────────────────────────────────
-  const advanceToPin = () => {
+  const advanceToPin = async () => {
     setError('')
     if (!form.name.trim()) { setError('Full name is required.'); return }
     const cleaned = form.contact_number.replace(/\D/g, '')
@@ -68,6 +69,18 @@ export function VictimSignup() {
     if (!form.province || !form.municipality || !form.barangay) {
       setError('Province, Municipality, and Barangay are required.'); return
     }
+    // Early duplicate check — avoids wasting 3 steps then failing at Activate
+    setLoading(true)
+    try {
+      const { data: existing } = await supabase
+        .from('victims').select('id').eq('contact_number', cleaned).maybeSingle()
+      if (existing) {
+        setError('This contact number is already registered. Please sign in instead.')
+        setLoading(false)
+        return
+      }
+    } catch { /* Supabase unreachable — let the server handle it later */ }
+    setLoading(false)
     setForm(p => ({ ...p, contact_number: cleaned }))
     setStep(1)
   }
@@ -141,7 +154,12 @@ export function VictimSignup() {
       login(res.token, { ...user, victim_id: regPayload.victim_id })
       navigate('/home')
     } catch (e) {
-      setError(e.error ?? e.message ?? 'Registration failed. Please try again.')
+      const raw = e.error ?? e.message ?? 'Registration failed. Please try again.'
+      if (/already exists|duplicate|unique constraint/i.test(raw)) {
+        setError('This contact number is already registered. Go back to Step 1 and sign in instead.')
+      } else {
+        setError(raw)
+      }
     }
     setLoading(false)
   }

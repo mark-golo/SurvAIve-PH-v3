@@ -544,9 +544,12 @@ async function post(path, body = {}) {
         supabase.from('victims').insert(victimData).then(() => {}).catch(() => {})
 
         return phpRes
-      } catch {
+      } catch (phpErr) {
+        // Re-throw business errors (4xx) — only swallow network/connectivity errors
+        // so that a PHP 409 "already exists" is NOT silently swallowed and replaced
+        // by a raw Supabase unique-constraint error on the fallback path.
+        if (phpErr.status && phpErr.status < 500) throw phpErr
         // XAMPP not reachable — fall through to Supabase-only insert below.
-        // Requires the victims_device_register RLS policy to be in place.
       }
 
       // Supabase fallback: insert victim row directly with the anon key.
