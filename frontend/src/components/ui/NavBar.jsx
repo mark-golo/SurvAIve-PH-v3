@@ -11,7 +11,7 @@ export function MobileNavBar({ items }) {
     >
       <div className="flex items-center justify-around px-2 py-2 max-w-md mx-auto">
         {items.map(({ icon: Icon, label, path }) => {
-          const active = pathname === path || pathname.startsWith(path + '/')
+          const active = pathname === path || (path.lastIndexOf('/') > 0 && pathname.startsWith(path + '/'))
           return (
             <button
               key={path}
