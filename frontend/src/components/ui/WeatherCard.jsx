@@ -347,37 +347,37 @@ export function WeatherCard({ user, isGuest }) {
     <div className="glass rounded-2xl overflow-hidden border border-[rgba(0,180,255,0.2)]"
       style={{ background: 'linear-gradient(160deg, rgba(0,160,255,0.08) 0%, rgba(0,180,255,0.03) 100%)' }}>
 
-      {/* Header row — location + status badge + refresh */}
+      {/* Header row — location + refresh button */}
       <div className="px-4 pt-4 pb-0 flex items-start justify-between gap-2">
         <div className="text-center flex-1">
+          {/* Status badge — centered above location name */}
+          <div className="flex justify-center mb-1">
+            {displayState === 'live' && !refreshing && (
+              <span className="text-[9px] font-semibold text-[#22c55e] flex items-center gap-0.5">
+                <span className="inline-block w-1 h-1 rounded-full bg-[#22c55e]" />Live
+              </span>
+            )}
+            {refreshing && (
+              <span className="text-[9px] font-semibold text-[#00d4ff]">Updating…</span>
+            )}
+            {displayState === 'stale' && !refreshing && (
+              <span className="text-[9px] font-semibold text-[#f59e0b]">
+                Cached · {fmtTime(fetchedAt)}
+              </span>
+            )}
+          </div>
           <p className="text-sm font-bold text-white leading-tight">{locationStr}</p>
           <p className="text-[11px] text-slate-400 mt-0.5">{dateStr}</p>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-          {/* Status badge */}
-          {displayState === 'live' && !refreshing && (
-            <span className="text-[10px] font-semibold text-[#22c55e] flex items-center gap-0.5">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#22c55e]" />Live
-            </span>
-          )}
-          {refreshing && (
-            <span className="text-[10px] font-semibold text-[#00d4ff]">Updating…</span>
-          )}
-          {displayState === 'stale' && !refreshing && (
-            <span className="text-[10px] font-semibold text-[#f59e0b]">
-              Cached · {fmtTime(fetchedAt)}
-            </span>
-          )}
-          {/* Manual refresh */}
-          <button
-            onClick={refresh}
-            disabled={refreshing}
-            title="Refresh weather"
-            className="p-1 rounded-md text-slate-400 hover:text-[#00d4ff] transition-colors disabled:opacity-30"
-          >
-            <RefreshIcon spinning={refreshing} />
-          </button>
-        </div>
+        {/* Manual refresh stays top-right */}
+        <button
+          onClick={refresh}
+          disabled={refreshing}
+          title="Refresh weather"
+          className="p-1 rounded-md text-slate-400 hover:text-[#00d4ff] transition-colors disabled:opacity-30 mt-0.5 shrink-0"
+        >
+          <RefreshIcon spinning={refreshing} />
+        </button>
       </div>
 
       {/* Weather icon */}
