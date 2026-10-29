@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { RefreshCw } from 'lucide-react'
 import { getPosition, onNetworkChange } from '../../lib/capacitor'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -197,19 +198,6 @@ function Skeleton() {
   )
 }
 
-// ── RefreshIcon ────────────────────────────────────────────────────────────────
-function RefreshIcon({ spinning, size = 14 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      style={spinning ? { animation: 'spin 1s linear infinite' } : {}}>
-      <polyline points="1 4 1 10 7 10" />
-      <path d="M3.51 15a9 9 0 1 0 .49-3.5" />
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </svg>
-  )
-}
-
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function WeatherCard({ user, isGuest }) {
@@ -327,7 +315,7 @@ export function WeatherCard({ user, isGuest }) {
             text-[11px] font-semibold text-[#00d4ff] border border-[rgba(0,212,255,0.25)]
             hover:bg-[rgba(0,212,255,0.08)] transition-colors disabled:opacity-40"
         >
-          <RefreshIcon spinning={refreshing} />
+          <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
           {refreshing ? 'Retrying…' : 'Retry'}
         </button>
       </div>
@@ -370,7 +358,7 @@ export function WeatherCard({ user, isGuest }) {
             title="Refresh weather"
             className="p-0.5 rounded text-slate-400 hover:text-[#00d4ff] transition-colors disabled:opacity-30"
           >
-            <RefreshIcon spinning={refreshing} size={11} />
+            <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
           </button>
         </div>
         <p className="text-sm font-bold text-white leading-tight">{locationStr}</p>
