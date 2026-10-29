@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LogOut, User, MapPin, Radio, List, Map, Settings, Home, Server, Check, Sun } from 'lucide-react'
+import { User, MapPin, Radio, List, Map, Settings, Home, Server, Check, Sun } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { NeonButton } from '../../components/ui/NeonButton'
@@ -90,9 +90,6 @@ export function ResponderSettings() {
       <TopBar title="Responder Settings" onBack />
 
       <main className="flex-1 p-4 space-y-4">
-        {/* Account Settings */}
-        <AccountSettings />
-
         {/* Profile */}
         <GlassCard>
           <div className="flex items-center gap-3 mb-3">
@@ -178,8 +175,10 @@ export function ResponderSettings() {
           />
         </GlassCard>
 
+        {/* Account Settings */}
+        <AccountSettings />
+
         <NeonButton variant="ghost" onClick={() => { logout(); navigate('/') }} className="w-full">
-          <LogOut size={14} className="mr-2" />
           Sign Out
         </NeonButton>
       </main>
