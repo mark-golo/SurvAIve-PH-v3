@@ -10,6 +10,7 @@ import { autoSOS } from '../../lib/autoSOS'
 import { useState, useEffect } from 'react'
 import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
+import { WeatherCard } from '../../components/ui/WeatherCard'
 
 const STATUS_OPTIONS = [
   { label: 'Injured', colorFrom: 'rgb(239,68,68)',  colorTo: 'rgb(185,28,28)',  Icon: HeartPulse,   value: 'injured' },
@@ -134,6 +135,9 @@ export function HomeScreen() {
         >
           <SOSButton onTrigger={handleSOS} />
         </motion.div>
+
+        {/* Weather */}
+        <WeatherCard user={user} isGuest={isGuest} />
 
         {/* Quick status */}
         <div>
