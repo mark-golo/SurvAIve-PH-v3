@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  --nav-bg: #0f172a;
   --neon-blue: #00d4ff;
   --neon-cyan: #00fff5;
   --neon-violet: #8b5cf6;
@@ -87,6 +88,9 @@ html, body {
     #050a18;
 }
 
+/* Mobile safe area — content scrolls clear of fixed nav + device home indicator */
+.pb-nav { padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px)); }
+
 /* Leaflet overrides */
 .leaflet-container {
   background: #0a1628 !important;
@@ -126,6 +130,7 @@ html, body {
 /* Rules are outside @layer so they override Tailwind's @layer utilities.      */
 
 .light-theme {
+  --nav-bg: #e0eef8;
   --bg-card:             rgba(255, 255, 255, 0.88);
   --bg-surface:          rgba(240, 249, 255, 0.96);
   --glass-border:        rgba(0, 0, 0, 0.08);

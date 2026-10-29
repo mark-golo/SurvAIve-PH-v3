@@ -75,7 +75,10 @@ export function HomeScreen() {
   return (
     <div className={`h-screen bg-mesh flex flex-col overflow-hidden${isLight ? ' light-theme' : ''}`}>
       {/* Top bar */}
-      <header className="glass border-b border-[rgba(255,255,255,0.08)] px-4 py-3">
+      <header
+        className="border-b border-[rgba(0,0,0,0.12)] px-4 pb-3"
+        style={{ background: 'var(--nav-bg)', paddingTop: 'calc(0.75rem + env(safe-area-inset-top, 0px))' }}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[rgba(0,212,255,0.3)] to-[rgba(139,92,246,0.3)] flex items-center justify-center">
@@ -96,7 +99,7 @@ export function HomeScreen() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto p-5 space-y-5 pb-20">
+      <main className="flex-1 overflow-y-auto p-5 space-y-5 pb-nav">
         {/* Status indicators */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Internet */}

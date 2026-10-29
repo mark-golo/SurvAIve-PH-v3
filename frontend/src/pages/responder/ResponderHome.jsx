@@ -167,7 +167,7 @@ export function ResponderHome() {
   }
 
   return (
-    <div className={`min-h-screen bg-mesh flex flex-col pb-20${isLight ? ' light-theme' : ''}`}>
+    <div className={`min-h-screen bg-mesh flex flex-col pb-nav${isLight ? ' light-theme' : ''}`}>
       {/* Header */}
       <header className="glass border-b border-[rgba(255,255,255,0.08)] px-4 py-3">
         <div className="flex items-center justify-between">

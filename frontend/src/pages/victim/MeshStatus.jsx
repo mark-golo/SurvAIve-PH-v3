@@ -558,7 +558,7 @@ export function MeshStatus() {
       </div>
 
       {/* Tab content */}
-      <main className="flex-1 overflow-y-auto p-4 pb-20">
+      <main className="flex-1 overflow-y-auto p-4 pb-nav">
         {activeTab === 'connections' && (
           <ConnectionsTab peers={peers} stats={stats} eventLog={eventLog} />
         )}

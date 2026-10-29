@@ -108,7 +108,7 @@ export function MeshRelay() {
           ))}
       </div>
 
-      <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-20">
+      <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-nav">
 
         {/* ── RELAY TAB ──────────────────────────────────────────────────────────── */}
         {activeTab === 'relay' && (

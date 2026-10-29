@@ -539,7 +539,7 @@ export function SOSReport() {
         onBack
       />
 
-      <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
+      <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-nav">
 
         {/* Offline banner */}
         {offline && (

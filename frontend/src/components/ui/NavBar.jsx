@@ -5,7 +5,10 @@ export function MobileNavBar({ items }) {
   const { pathname } = useLocation()
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 glass border-t border-[rgba(255,255,255,0.08)]">
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50 border-t border-[rgba(0,0,0,0.12)]"
+      style={{ background: 'var(--nav-bg)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+    >
       <div className="flex items-center justify-around px-2 py-2 max-w-md mx-auto">
         {items.map(({ icon: Icon, label, path }) => {
           const active = pathname === path || pathname.startsWith(path + '/')
@@ -32,7 +35,10 @@ export function MobileNavBar({ items }) {
 export function TopBar({ title, subtitle, rightSlot, leftSlot, onBack }) {
   const navigate = useNavigate()
   return (
-    <header className="sticky top-0 z-40 glass border-b border-[rgba(255,255,255,0.08)] px-4 py-3">
+    <header
+      className="sticky top-0 z-40 border-b border-[rgba(0,0,0,0.12)] px-4 pb-3"
+      style={{ background: 'var(--nav-bg)', paddingTop: 'calc(0.75rem + env(safe-area-inset-top, 0px))' }}
+    >
       <div className="flex items-center gap-3">
         {onBack && (
           <button onClick={() => navigate(-1)} className="text-slate-400 hover:text-slate-200 transition-colors">

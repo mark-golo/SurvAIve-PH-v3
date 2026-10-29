@@ -99,7 +99,7 @@ export function LocalMap() {
       <TopBar title="My Location & Evacuation Centers" subtitle="Tap a shelter for details" onBack />
 
       {/* Scrollable area: banners + map + center list */}
-      <div className="flex-1 overflow-y-auto pb-20">
+      <div className="flex-1 overflow-y-auto pb-nav">
 
       {/* GPS warning */}
       {gpsError && (

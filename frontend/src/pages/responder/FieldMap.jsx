@@ -175,7 +175,7 @@ export function FieldMap() {
   }, [])
 
   return (
-    <div className={`min-h-screen bg-mesh flex flex-col pb-20${isLight ? ' light-theme' : ''}`}>
+    <div className={`min-h-screen bg-mesh flex flex-col pb-nav${isLight ? ' light-theme' : ''}`}>
       <TopBar title="Field Map" subtitle={profile?.assigned_zone ?? 'Field Map'} onBack />
 
       {/* Map */}

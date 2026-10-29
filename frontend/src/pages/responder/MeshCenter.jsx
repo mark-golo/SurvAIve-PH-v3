@@ -686,7 +686,7 @@ export function MeshCenter() {
         ))}
       </div>
 
-      <main className="flex-1 overflow-y-auto p-4 pb-20">
+      <main className="flex-1 overflow-y-auto p-4 pb-nav">
         {activeTab === 'overview'    && <OverviewTab    {...tabProps} />}
         {activeTab === 'peers'       && <PeersTab       {...tabProps} />}
         {activeTab === 'activity'    && <ActivityTab    eventLog={eventLog} />}

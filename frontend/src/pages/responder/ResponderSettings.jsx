@@ -78,7 +78,7 @@ export function ResponderSettings() {
   const status = profile?.status ?? 'active'
 
   if (loading) return (
-    <div className={`min-h-screen bg-mesh flex flex-col pb-20${theme === 'light' ? ' light-theme' : ''}`}>
+    <div className={`min-h-screen bg-mesh flex flex-col pb-nav${theme === 'light' ? ' light-theme' : ''}`}>
       <TopBar title="Responder Settings" onBack />
       <div className="flex items-center justify-center flex-1 text-slate-400 text-sm">Loading…</div>
       <MobileNavBar items={NAV} />
@@ -86,7 +86,7 @@ export function ResponderSettings() {
   )
 
   return (
-    <div className={`min-h-screen bg-mesh flex flex-col pb-20${theme === 'light' ? ' light-theme' : ''}`}>
+    <div className={`min-h-screen bg-mesh flex flex-col pb-nav${theme === 'light' ? ' light-theme' : ''}`}>
       <TopBar title="Responder Settings" onBack />
 
       <main className="flex-1 p-4 space-y-4">

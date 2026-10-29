@@ -68,7 +68,7 @@ export function VictimQueue() {
     : activeQueue.filter(r => r.priority === filter.toUpperCase())
 
   return (
-    <div className={`min-h-screen bg-mesh flex flex-col pb-20${isLight ? ' light-theme' : ''}`}>
+    <div className={`min-h-screen bg-mesh flex flex-col pb-nav${isLight ? ' light-theme' : ''}`}>
       <TopBar
         title="Victim Queue"
         subtitle={`${activeQueue.filter(r => r.priority === 'CRITICAL').length} critical · ${activeQueue.length} total`}
