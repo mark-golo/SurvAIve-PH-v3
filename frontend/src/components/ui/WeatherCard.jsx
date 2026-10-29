@@ -198,9 +198,9 @@ function Skeleton() {
 }
 
 // ── RefreshIcon ────────────────────────────────────────────────────────────────
-function RefreshIcon({ spinning }) {
+function RefreshIcon({ spinning, size = 14 }) {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
       style={spinning ? { animation: 'spin 1s linear infinite' } : {}}>
       <polyline points="1 4 1 10 7 10" />
@@ -347,37 +347,34 @@ export function WeatherCard({ user, isGuest }) {
     <div className="glass rounded-2xl overflow-hidden border border-[rgba(0,180,255,0.2)]"
       style={{ background: 'linear-gradient(160deg, rgba(0,160,255,0.08) 0%, rgba(0,180,255,0.03) 100%)' }}>
 
-      {/* Header row — location + refresh button */}
-      <div className="px-4 pt-4 pb-0 flex items-start justify-between gap-2">
-        <div className="text-center flex-1">
-          {/* Status badge — centered above location name */}
-          <div className="flex justify-center mb-1">
-            {displayState === 'live' && !refreshing && (
-              <span className="text-[9px] font-semibold text-[#22c55e] flex items-center gap-0.5">
-                <span className="inline-block w-1 h-1 rounded-full bg-[#22c55e]" />Live
-              </span>
-            )}
-            {refreshing && (
-              <span className="text-[9px] font-semibold text-[#00d4ff]">Updating…</span>
-            )}
-            {displayState === 'stale' && !refreshing && (
-              <span className="text-[9px] font-semibold text-[#f59e0b]">
-                Cached · {fmtTime(fetchedAt)}
-              </span>
-            )}
-          </div>
-          <p className="text-sm font-bold text-white leading-tight">{locationStr}</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">{dateStr}</p>
+      {/* Header — centered above location */}
+      <div className="px-4 pt-4 pb-0 text-center">
+        {/* Badge + refresh — single centered row */}
+        <div className="flex justify-center items-center gap-1.5 mb-1">
+          {displayState === 'live' && !refreshing && (
+            <span className="text-[9px] font-semibold text-[#22c55e] flex items-center gap-0.5">
+              <span className="inline-block w-1 h-1 rounded-full bg-[#22c55e]" />Live
+            </span>
+          )}
+          {refreshing && (
+            <span className="text-[9px] font-semibold text-[#00d4ff]">Updating…</span>
+          )}
+          {displayState === 'stale' && !refreshing && (
+            <span className="text-[9px] font-semibold text-[#f59e0b]">
+              Cached · {fmtTime(fetchedAt)}
+            </span>
+          )}
+          <button
+            onClick={refresh}
+            disabled={refreshing}
+            title="Refresh weather"
+            className="p-0.5 rounded text-slate-400 hover:text-[#00d4ff] transition-colors disabled:opacity-30"
+          >
+            <RefreshIcon spinning={refreshing} size={11} />
+          </button>
         </div>
-        {/* Manual refresh stays top-right */}
-        <button
-          onClick={refresh}
-          disabled={refreshing}
-          title="Refresh weather"
-          className="p-1 rounded-md text-slate-400 hover:text-[#00d4ff] transition-colors disabled:opacity-30 mt-0.5 shrink-0"
-        >
-          <RefreshIcon spinning={refreshing} />
-        </button>
+        <p className="text-sm font-bold text-white leading-tight">{locationStr}</p>
+        <p className="text-[11px] text-slate-400 mt-0.5">{dateStr}</p>
       </div>
 
       {/* Weather icon */}
