@@ -18,7 +18,7 @@ const NAV = [
   { icon: Home,     label: 'Home',     path: '/responder'          },
   { icon: List,     label: 'Queue',    path: '/responder/queue'    },
   { icon: Map,      label: 'Map',      path: '/responder/map'      },
-  { icon: Radio,    label: 'Relay',    path: '/responder/relay'    },
+  { icon: Radio,    label: 'Mesh',     path: '/responder/relay'    },
   { icon: Settings, label: 'Settings', path: '/responder/settings' },
 ]
 

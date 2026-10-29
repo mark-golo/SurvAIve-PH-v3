@@ -21,7 +21,7 @@ const NAV = [
   { icon: Home,     label: 'Home',     path: '/responder'          },
   { icon: List,     label: 'Queue',    path: '/responder/queue'    },
   { icon: Map,      label: 'Map',      path: '/responder/map'      },
-  { icon: Radio,    label: 'Mesh',     path: '/responder/mesh'     },
+  { icon: Radio,    label: 'Mesh',     path: '/responder/relay'    },
   { icon: Settings, label: 'Settings', path: '/responder/settings' },
 ]
 
@@ -695,7 +695,7 @@ export function MeshCenter() {
         {activeTab === 'settings'    && <SettingsTab    relayOn={relayOn} setRelayOn={setRelayOn} />}
       </main>
 
-      <MobileNavBar items={NAV} active="/responder/mesh" navigate={navigate} />
+      <MobileNavBar items={NAV} />
     </div>
   )
 }
