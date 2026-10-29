@@ -358,7 +358,7 @@ export function WeatherCard({ user, isGuest }) {
             title="Refresh weather"
             className="p-0.5 rounded text-slate-400 hover:text-[#00d4ff] transition-colors disabled:opacity-30"
           >
-            <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
+            <RefreshCw size={9} className={refreshing ? 'animate-spin' : ''} />
           </button>
         </div>
         <p className="text-sm font-bold text-white leading-tight">{locationStr}</p>
