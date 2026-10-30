@@ -1,5 +1,5 @@
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
-import { LayoutDashboard, Users, BookUser, BarChart2, Radio, UserCog, MapPin, LogOut, Menu, ClipboardList, FileBarChart, Settings2, Bell, Layers, ScrollText, Scale } from 'lucide-react'
+import { LayoutDashboard, Users, BookUser, BarChart2, Radio, UserCog, MapPin, LogOut, Menu, ClipboardList, FileBarChart, Settings2, Bell, Layers, ScrollText, Scale, ChevronDown, ChevronUp } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '../../store/auth'
@@ -330,7 +330,10 @@ export function AdminLayout() {
                   <span className="text-[9px] font-bold uppercase tracking-widest leading-tight text-left pr-2">
                     {group.label}
                   </span>
-                  <span className="text-[10px] shrink-0">{isOpen ? '↓' : '↑'}</span>
+                  {isOpen
+                    ? <ChevronDown size={14} className="shrink-0 text-slate-500" />
+                    : <ChevronUp   size={14} className="shrink-0 text-slate-500" />
+                  }
                 </button>
 
                 <AnimatePresence initial={false}>
