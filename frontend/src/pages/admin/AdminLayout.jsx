@@ -1,5 +1,5 @@
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
-import { LayoutDashboard, Users, BookUser, BarChart2, Radio, UserCog, MapPin, LogOut, Menu, ClipboardList, FileBarChart, Settings2, Bell, Layers, ScrollText } from 'lucide-react'
+import { LayoutDashboard, Users, BookUser, BarChart2, Radio, UserCog, MapPin, LogOut, Menu, ClipboardList, FileBarChart, Settings2, Bell, Layers, ScrollText, Scale } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '../../store/auth'
@@ -17,8 +17,9 @@ const NAV_ITEMS = [
   { icon: FileBarChart,    label: 'Emergency Report',         path: '/admin/emergency-report'         },
   { icon: Layers,          label: 'Barangays Comparison',     path: '/admin/barangays-comparison'     },
   { icon: ClipboardList,   label: 'SITREP',                   path: '/admin/sitrep'                   },
-  { icon: BarChart2,       label: 'AI Situational Analytics', path: '/admin/analytics'          },
-  { icon: UserCog,         label: 'User Management',          path: '/admin/staff'              },
+  { icon: BarChart2,       label: 'AI Situational Analytics', path: '/admin/analytics'              },
+  { icon: Scale,           label: 'AI Policy Intelligence',   path: '/admin/policy-intelligence'   },
+  { icon: UserCog,         label: 'User Management',          path: '/admin/staff'                  },
   { icon: ScrollText,      label: 'Audit Logs',               path: '/admin/audit-logs'         },
 ]
 
@@ -27,7 +28,8 @@ const PAGE_TITLES = {
   '/admin':                    'Command Center',
   '/admin/victims':            'Affected Person Status',
   '/admin/constituents':       'Constituent Registry',
-  '/admin/analytics':          'AI Situational Analytics',
+  '/admin/analytics':              'AI Situational Analytics',
+  '/admin/policy-intelligence':    'AI Policy Intelligence',
   '/admin/responders':         'Rescue Updates',
   '/admin/staff':              'User Management',
   '/admin/evacuation-centers': 'Evacuation Centers',

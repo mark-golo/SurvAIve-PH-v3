@@ -28,6 +28,7 @@ import { CommandCenter }       from './pages/admin/CommandCenter'
 import { VictimTable }         from './pages/admin/VictimTable'
 import { ConstituentRegistry } from './pages/admin/ConstituentRegistry'
 import { AdminAnalytics }      from './pages/admin/AdminAnalytics'
+import { PolicyIntelligence }  from './pages/admin/PolicyIntelligence'
 import { RespondersView }      from './pages/admin/RespondersView'
 import { StaffManagement as AdminStaffManagement } from './pages/admin/StaffManagement'
 import { EvacuationCenters } from './pages/admin/EvacuationCenters'
@@ -100,7 +101,8 @@ export const router = createHashRouter([
           { path: '/admin',                     element: <CommandCenter /> },
           { path: '/admin/victims',             element: <VictimTable /> },
           { path: '/admin/constituents',        element: <ConstituentRegistry /> },
-          { path: '/admin/analytics',           element: <AdminAnalytics /> },
+          { path: '/admin/analytics',             element: <AdminAnalytics /> },
+          { path: '/admin/policy-intelligence',  element: <PolicyIntelligence /> },
           { path: '/admin/responders',          element: <RespondersView /> },
           { path: '/admin/staff',               element: <AdminStaffManagement /> },
           { path: '/admin/evacuation-centers',  element: <EvacuationCenters /> },
