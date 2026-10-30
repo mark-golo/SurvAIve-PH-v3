@@ -10,13 +10,13 @@ import { getAdminTheme, saveAdminTheme } from '../../lib/victimTheme'
 
 const NAV_GROUPS = [
   {
-    label: 'DASHBOARD & MONITORING',
+    label: 'OVERVIEW',
     items: [
       { icon: LayoutDashboard, label: 'Command Center',           path: '/admin'                      },
     ],
   },
   {
-    label: 'EMERGENCY RESPONSE MANAGEMENT',
+    label: 'OPERATIONS',
     items: [
       { icon: Users,           label: 'Victim Status',            path: '/admin/victims'              },
       { icon: Radio,           label: 'Rescue Updates',           path: '/admin/responders'           },
@@ -24,28 +24,28 @@ const NAV_GROUPS = [
     ],
   },
   {
-    label: 'COMMUNITY & RESOURCE MANAGEMENT',
+    label: 'RESOURCES',
     items: [
       { icon: BookUser,        label: 'Constituents',             path: '/admin/constituents'         },
       { icon: MapPin,          label: 'Evacuation Centers',       path: '/admin/evacuation-centers'   },
     ],
   },
   {
-    label: 'SITUATIONAL ASSESSMENT & REPORTING',
+    label: 'ASSESSMENT',
     items: [
       { icon: Layers,          label: 'Barangays Comparison',     path: '/admin/barangays-comparison' },
       { icon: ClipboardList,   label: 'SITREP',                   path: '/admin/sitrep'               },
     ],
   },
   {
-    label: 'INTELLIGENCE & DECISION SUPPORT',
+    label: 'INTELLIGENCE',
     items: [
       { icon: BarChart2,       label: 'AI Situational Analytics', path: '/admin/analytics'            },
       { icon: Scale,           label: 'AI Policy Intelligence',   path: '/admin/policy-intelligence'  },
     ],
   },
   {
-    label: 'SYSTEM ADMINISTRATION & SECURITY',
+    label: 'GOVERNANCE',
     items: [
       { icon: UserCog,         label: 'User Management',          path: '/admin/staff'                },
       { icon: ScrollText,      label: 'Audit Logs',               path: '/admin/audit-logs'           },
