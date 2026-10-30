@@ -8,19 +8,49 @@ import { supabase } from '../../lib/supabase'
 import api from '../../lib/api'
 import { getAdminTheme, saveAdminTheme } from '../../lib/victimTheme'
 
-const NAV_ITEMS = [
-  { icon: LayoutDashboard, label: 'Command Center',           path: '/admin'                    },
-  { icon: Users,           label: 'Victim Status',            path: '/admin/victims'            },
-  { icon: Radio,           label: 'Rescue Updates',           path: '/admin/responders'         },
-  { icon: BookUser,        label: 'Constituents',             path: '/admin/constituents'       },
-  { icon: MapPin,          label: 'Evacuation Centers',       path: '/admin/evacuation-centers' },
-  { icon: FileBarChart,    label: 'Emergency Report',         path: '/admin/emergency-report'         },
-  { icon: Layers,          label: 'Barangays Comparison',     path: '/admin/barangays-comparison'     },
-  { icon: ClipboardList,   label: 'SITREP',                   path: '/admin/sitrep'                   },
-  { icon: BarChart2,       label: 'AI Situational Analytics', path: '/admin/analytics'              },
-  { icon: Scale,           label: 'AI Policy Intelligence',   path: '/admin/policy-intelligence'   },
-  { icon: UserCog,         label: 'User Management',          path: '/admin/staff'                  },
-  { icon: ScrollText,      label: 'Audit Logs',               path: '/admin/audit-logs'         },
+const NAV_GROUPS = [
+  {
+    label: 'DASHBOARD & MONITORING',
+    items: [
+      { icon: LayoutDashboard, label: 'Command Center',           path: '/admin'                      },
+    ],
+  },
+  {
+    label: 'EMERGENCY RESPONSE MANAGEMENT',
+    items: [
+      { icon: Users,           label: 'Victim Status',            path: '/admin/victims'              },
+      { icon: Radio,           label: 'Rescue Updates',           path: '/admin/responders'           },
+      { icon: FileBarChart,    label: 'Emergency Report',         path: '/admin/emergency-report'     },
+    ],
+  },
+  {
+    label: 'COMMUNITY & RESOURCE MANAGEMENT',
+    items: [
+      { icon: BookUser,        label: 'Constituents',             path: '/admin/constituents'         },
+      { icon: MapPin,          label: 'Evacuation Centers',       path: '/admin/evacuation-centers'   },
+    ],
+  },
+  {
+    label: 'SITUATIONAL ASSESSMENT & REPORTING',
+    items: [
+      { icon: Layers,          label: 'Barangays Comparison',     path: '/admin/barangays-comparison' },
+      { icon: ClipboardList,   label: 'SITREP',                   path: '/admin/sitrep'               },
+    ],
+  },
+  {
+    label: 'INTELLIGENCE & DECISION SUPPORT',
+    items: [
+      { icon: BarChart2,       label: 'AI Situational Analytics', path: '/admin/analytics'            },
+      { icon: Scale,           label: 'AI Policy Intelligence',   path: '/admin/policy-intelligence'  },
+    ],
+  },
+  {
+    label: 'SYSTEM ADMINISTRATION & SECURITY',
+    items: [
+      { icon: UserCog,         label: 'User Management',          path: '/admin/staff'                },
+      { icon: ScrollText,      label: 'Audit Logs',               path: '/admin/audit-logs'           },
+    ],
+  },
 ]
 
 // ─── Page title lookup (used by single layout instance) ──────────────────────
@@ -74,6 +104,19 @@ export function AdminLayout() {
 
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [adminTheme, setAdminTheme] = useState(() => getAdminTheme())
+
+  const [expandedGroups, setExpandedGroups] = useState(() =>
+    Object.fromEntries(NAV_GROUPS.map(g => [g.label, true]))
+  )
+
+  useEffect(() => {
+    const activeGroup = NAV_GROUPS.find(g => g.items.some(i => i.path === pathname))
+    if (activeGroup) setExpandedGroups(prev => ({ ...prev, [activeGroup.label]: true }))
+  }, [pathname])
+
+  function toggleGroup(label) {
+    setExpandedGroups(prev => ({ ...prev, [label]: !prev[label] }))
+  }
 
   // Alert settings from persisted store
   const { soundEnabled, visualEnabled, notificationEnabled, volume } = useAlertStore()
@@ -274,19 +317,52 @@ export function AdminLayout() {
           <p className="text-[10px] text-slate-600 truncate">{user?.municipality ?? 'Municipality'}</p>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {NAV_ITEMS.map(({ icon: Icon, label, path }) => {
-            const active = pathname === path
+        <nav className="flex-1 p-3 overflow-y-auto">
+          {NAV_GROUPS.map(group => {
+            const isOpen = expandedGroups[group.label] ?? true
             return (
-              <button key={path} onClick={() => { navigate(path); setSidebarOpen(false) }}
-                className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  active
-                    ? 'bg-[rgba(0,212,255,0.12)] text-[#00d4ff] border border-[rgba(0,212,255,0.2)]'
-                    : 'text-slate-400 hover:text-white hover:bg-[rgba(255,255,255,0.05)] border border-transparent'
-                }`}>
-                <Icon size={16} className="shrink-0 mt-0.5" />
-                <span className="leading-snug text-left">{label}</span>
-              </button>
+              <div key={group.label} className="mb-2">
+                <button
+                  onClick={() => toggleGroup(group.label)}
+                  aria-expanded={isOpen}
+                  className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-slate-500 hover:text-slate-300 transition-colors"
+                >
+                  <span className="text-[9px] font-bold uppercase tracking-widest leading-tight text-left pr-2">
+                    {group.label}
+                  </span>
+                  <span className="text-[10px] shrink-0">{isOpen ? '↓' : '↑'}</span>
+                </button>
+
+                <AnimatePresence initial={false}>
+                  {isOpen && (
+                    <motion.div
+                      key="items"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: 'easeInOut' }}
+                      className="overflow-hidden"
+                    >
+                      <div className="space-y-0.5 pt-0.5 pl-2">
+                        {group.items.map(({ icon: Icon, label, path }) => {
+                          const active = pathname === path
+                          return (
+                            <button key={path} onClick={() => { navigate(path); setSidebarOpen(false) }}
+                              className={`w-full flex items-start gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                                active
+                                  ? 'bg-[rgba(0,212,255,0.12)] text-[#00d4ff] border border-[rgba(0,212,255,0.2)]'
+                                  : 'text-slate-400 hover:text-white hover:bg-[rgba(255,255,255,0.05)] border border-transparent'
+                              }`}>
+                              <Icon size={16} className="shrink-0 mt-0.5" />
+                              <span className="leading-snug text-left">{label}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             )
           })}
         </nav>
