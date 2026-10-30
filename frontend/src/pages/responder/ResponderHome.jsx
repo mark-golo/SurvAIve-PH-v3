@@ -8,7 +8,7 @@ import { GlassCard } from '../../components/ui/GlassCard'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { mesh } from '../../lib/mesh'
-import api from '../../lib/api'
+import api, { logActivity } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 import { onMeshSOSAlert } from '../../lib/meshAlerts'
@@ -160,6 +160,10 @@ export function ResponderHome() {
     try {
       if (responderId) {
         await supabase.from('responders').update({ duty_status: newStatus }).eq('id', responderId)
+        logActivity('PUT', 'responders', 'responders', responderId, {
+          duty_status: newStatus,
+          previous_duty_status: prev ? 'on_duty' : 'standby',
+        })
       }
     } catch {
       setOnDuty(prev)

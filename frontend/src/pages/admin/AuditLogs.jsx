@@ -230,6 +230,7 @@ export default function AuditLogs() {
                   {/* Details */}
                   <td className="px-4 py-3 text-xs text-slate-500">
                     <div className="flex flex-col gap-1">
+                      {/* Rescue status change */}
                       {row.details?.new_rescue_status && (
                         <span className="text-[10px] text-slate-300 whitespace-nowrap">
                           {row.details.old_rescue_status
@@ -243,12 +244,51 @@ export default function AuditLogs() {
                           By: <span className="text-slate-200 font-medium">{row.details.confirmed_by}</span>
                         </span>
                       )}
+                      {/* Duty status toggle */}
+                      {row.details?.duty_status && (
+                        <span className="text-[10px] text-slate-300 whitespace-nowrap">
+                          {row.details.previous_duty_status && <><span className="text-slate-500">{fmtStatus(row.details.previous_duty_status)}</span>{' → '}</>}
+                          <span className={row.details.duty_status === 'on_duty' ? 'text-[#22c55e] font-semibold' : 'text-slate-400 font-semibold'}>{fmtStatus(row.details.duty_status)}</span>
+                        </span>
+                      )}
+                      {/* SOS dismissed */}
+                      {row.details?.dismissed && (
+                        <span className="text-[10px] text-amber-400 font-semibold">Dismissed</span>
+                      )}
+                      {/* Constituent login toggle */}
+                      {row.details?.account_active !== undefined && (
+                        <span className={`text-[10px] font-semibold ${row.details.account_active ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
+                          Login {row.details.account_active ? 'Enabled' : 'Disabled'}
+                        </span>
+                      )}
+                      {/* Profile name change */}
+                      {row.details?.new_name && (
+                        <span className="text-[10px] text-slate-300 whitespace-nowrap">
+                          Name: <span className="text-white font-medium">{row.details.new_name}</span>
+                        </span>
+                      )}
+                      {/* Staff cloud sync results */}
+                      {row.details?.synced_count !== undefined && (
+                        <span className="text-[10px] text-slate-300 whitespace-nowrap">
+                          Synced: <span className="text-[#22c55e] font-medium">{row.details.synced_count}</span>
+                          {' · '}Skipped: <span className="text-slate-400">{row.details.skipped_count ?? 0}</span>
+                        </span>
+                      )}
+                      {/* Municipality badge */}
                       {row.details?.municipality && (
                         <span className="px-2 py-0.5 rounded-full bg-[rgba(255,255,255,0.05)] text-slate-400 self-start">
                           {row.details.municipality}
                         </span>
                       )}
-                      {!row.details?.municipality && !row.details?.new_rescue_status && '—'}
+                      {/* Fallback */}
+                      {!row.details?.new_rescue_status &&
+                       !row.details?.confirmed_by &&
+                       !row.details?.duty_status &&
+                       !row.details?.dismissed &&
+                       row.details?.account_active === undefined &&
+                       !row.details?.new_name &&
+                       row.details?.synced_count === undefined &&
+                       !row.details?.municipality && '—'}
                     </div>
                   </td>
                 </tr>

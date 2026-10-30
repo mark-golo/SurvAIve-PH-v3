@@ -958,11 +958,14 @@ function isUUID(v) { return typeof v === 'string' && UUID_RE.test(v) }
 
 const ACTION_LABELS = {
   POST:   { sos_reports: 'Submitted SOS report', responders: 'Created responder', admins: 'Created admin account', agencies: 'Created agency account', evacuation_centers: 'Created evacuation center', constituents: 'Registered constituent', province_reports: 'Submitted province report', escalations: 'Created escalation' },
-  PUT:    { sos_reports: 'Updated SOS report', responders: 'Updated responder record', admins: 'Updated admin account', agencies: 'Updated agency account', evacuation_centers: 'Updated evacuation center', constituents: 'Updated constituent', escalations: 'Acknowledged/updated escalation', superadmins: 'Updated superadmin' },
+  PUT:    { sos_reports: 'Updated SOS report', responders: 'Updated responder record', admins: 'Updated admin account', agencies: 'Updated agency account', evacuation_centers: 'Updated evacuation center', constituents: 'Updated constituent', escalations: 'Acknowledged/updated escalation', superadmins: 'Updated superadmin', profiles: 'Updated profile' },
   DELETE: { sos_reports: 'Deleted SOS report', responders: 'Deleted responder', admins: 'Deleted admin account', agencies: 'Deleted agency account', evacuation_centers: 'Deleted evacuation center', constituents: 'Removed constituent', superadmins: 'Deleted superadmin' },
+  LOGIN:  { auth: 'Staff logged in' },
+  LOGOUT: { auth: 'Staff logged out' },
+  SYNC:   { profiles: 'Synced staff to cloud' },
 }
 
-function logActivity(method, resource, table, id, extra = {}) {
+export function logActivity(method, resource, table, id, extra = {}) {
   const { user, role } = _getAuthState()
   if (!user || role === 'victim' || !role) return
   const label = ACTION_LABELS[method]?.[table] ?? `${method} ${resource}`
@@ -993,6 +996,8 @@ const api = {
       extra.new_rescue_status = body.rescue_status
       if (body.confirmed_by_name) extra.confirmed_by = body.confirmed_by_name
     }
+    if (resource === 'sos' && body.dismissed) extra.dismissed = true
+    if (resource === 'constituents' && body.account_active !== undefined) extra.account_active = body.account_active
     logActivity('PUT', resource, table, id, extra)
     return res
   },
@@ -1036,5 +1041,6 @@ export async function syncLocalStaffToCloud() {
     }).catch(() => {})
     synced++
   }
+  logActivity('SYNC', 'profiles', 'profiles', null, { synced_count: synced, skipped_count: skipped })
   return { synced, skipped, error: null }
 }

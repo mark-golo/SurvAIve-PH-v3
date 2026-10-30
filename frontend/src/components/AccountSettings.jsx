@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { User, Lock, CheckCircle, AlertCircle, Loader } from 'lucide-react'
-import { localFetch } from '../lib/api'
+import { localFetch, logActivity } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { getNetworkOnline } from '../lib/capacitor'
 import { useAuthStore } from '../store/auth'
@@ -48,6 +48,7 @@ export function AccountSettings() {
         await localFetch('profile', { method: 'PUT', body: JSON.stringify({ name: trimmed }) })
       }
       updateUser({ name: trimmed })
+      logActivity('PUT', 'profiles', 'profiles', user?.id, { field_changed: 'display_name', new_name: trimmed })
       setNameMsg({ ok: true, text: 'Name updated successfully.' })
     } catch (err) {
       setNameMsg({ ok: false, text: err?.message ?? 'Failed to update name.' })
