@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { getResponderTheme } from '../../lib/victimTheme'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { AlertTriangle, Home, Map, Radio, Settings, List, RefreshCw, Power, Users, ArrowUpDown } from 'lucide-react'
+import { AlertTriangle, Home, Map, Radio, Settings, List, RefreshCw, Power, Users, ArrowUpDown, Star } from 'lucide-react'
 import { MobileNavBar, TopBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -21,6 +21,49 @@ const NAV = [
   { icon: Radio,    label: 'Mesh',     path: '/responder/relay'    },
   { icon: Settings, label: 'Settings', path: '/responder/settings' },
 ]
+
+function MyRatingsSummary({ responderId, supabase }) {
+  const [ratings, setRatings] = useState(null)
+  useEffect(() => {
+    if (!responderId) return
+    supabase
+      .from('response_feedback')
+      .select('rating,comments,created_at')
+      .eq('target_type', 'responder')
+      .eq('target_id', String(responderId))
+      .eq('moderation_status', 'visible')
+      .order('created_at', { ascending: false })
+      .limit(20)
+      .then(({ data }) => {
+        if (!data || data.length === 0) { setRatings({ count: 0, avg: 0, recent: [] }); return }
+        const avg = data.reduce((s, r) => s + r.rating, 0) / data.length
+        setRatings({ count: data.length, avg: avg.toFixed(1), recent: data.slice(0, 3) })
+      })
+      .catch(() => {})
+  }, [responderId])
+
+  if (!ratings || ratings.count === 0) return null
+
+  return (
+    <div className="glass rounded-2xl p-4 border border-[rgba(245,158,11,0.2)] space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Star size={15} className="text-amber-400" />
+          <p className="text-sm font-semibold text-white">My Response Ratings</p>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-lg font-black text-amber-400">{ratings.avg}</span>
+          <span className="text-xs text-slate-500">/ 5 ({ratings.count} review{ratings.count !== 1 ? 's' : ''})</span>
+        </div>
+      </div>
+      {ratings.recent.filter(r => r.comments).slice(0, 2).map((r, i) => (
+        <div key={i} className="text-xs text-slate-400 border-l-2 border-amber-700 pl-3 italic">
+          "{r.comments}"
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export function ResponderHome() {
   const navigate = useNavigate()
@@ -349,6 +392,9 @@ export function ResponderHome() {
             <span className="text-[10px]">Sync</span>
           </NeonButton>
         </div>
+
+        {/* My Ratings summary */}
+        <MyRatingsSummary responderId={responderId} supabase={supabase} />
 
         {/* Critical alerts */}
         {criticalCount > 0 && (

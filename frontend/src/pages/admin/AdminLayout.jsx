@@ -1,5 +1,5 @@
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
-import { LayoutDashboard, Users, BookUser, BarChart2, Radio, UserCog, MapPin, LogOut, Menu, ClipboardList, FileBarChart, Settings2, Bell, Layers, ScrollText, Scale, ChevronDown, ChevronUp } from 'lucide-react'
+import { LayoutDashboard, Users, BookUser, BarChart2, Radio, UserCog, MapPin, LogOut, Menu, ClipboardList, FileBarChart, Settings2, Bell, Layers, ScrollText, Scale, ChevronDown, ChevronUp, Star } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '../../store/auth'
@@ -21,6 +21,7 @@ const NAV_GROUPS = [
       { icon: Users,           label: 'Victim Status',            path: '/admin/victims'              },
       { icon: Radio,           label: 'Rescue Updates',           path: '/admin/responders'           },
       { icon: FileBarChart,    label: 'Emergency Report',         path: '/admin/emergency-report'     },
+      { icon: Star,            label: 'Response Feedback',        path: '/admin/response-feedback'    },
     ],
   },
   {
@@ -67,7 +68,8 @@ const PAGE_TITLES = {
   '/admin/barangays-comparison':    'Barangays Comparison',
   '/admin/sitrep':                  'SITREP',
   '/admin/settings':           'Settings',
-  '/admin/audit-logs':         'Audit Logs',
+  '/admin/audit-logs':             'Audit Logs',
+  '/admin/response-feedback':      'Response Feedback',
 }
 
 // ─── Web Audio alarm tone (synthesised — no audio file needed) ────────────────

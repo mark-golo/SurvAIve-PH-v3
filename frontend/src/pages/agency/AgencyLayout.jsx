@@ -1,5 +1,5 @@
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
-import { LayoutDashboard, Users, FileBarChart, BarChart2, Settings2, LogOut, Menu, Bell } from 'lucide-react'
+import { LayoutDashboard, Users, FileBarChart, BarChart2, Settings2, LogOut, Menu, Bell, Star } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '../../store/auth'
@@ -25,18 +25,20 @@ const AGENCY_COLORS = {
 }
 
 const NAV_ITEMS = [
-  { icon: LayoutDashboard, label: 'Command Center',           path: '/agency'           },
-  { icon: Users,           label: 'Victim Status',            path: '/agency/victims'   },
-  { icon: FileBarChart,    label: 'Emergency Reports',        path: '/agency/reports'   },
-  { icon: BarChart2,       label: 'AI Situational Analytics', path: '/agency/analytics' },
+  { icon: LayoutDashboard, label: 'Command Center',           path: '/agency'                  },
+  { icon: Users,           label: 'Victim Status',            path: '/agency/victims'          },
+  { icon: FileBarChart,    label: 'Emergency Reports',        path: '/agency/reports'          },
+  { icon: BarChart2,       label: 'AI Situational Analytics', path: '/agency/analytics'        },
+  { icon: Star,            label: 'Service Feedback',         path: '/agency/service-feedback' },
 ]
 
 const PAGE_TITLES = {
-  '/agency':           'Command Center',
-  '/agency/victims':   'Affected Person Status',
-  '/agency/reports':   'Emergency Reports',
-  '/agency/analytics': 'AI Situational Analytics',
-  '/agency/settings':  'Settings',
+  '/agency':                   'Command Center',
+  '/agency/victims':           'Affected Person Status',
+  '/agency/reports':           'Emergency Reports',
+  '/agency/analytics':         'AI Situational Analytics',
+  '/agency/settings':          'Settings',
+  '/agency/service-feedback':  'Service Feedback',
 }
 
 function playAlarmTone(vol, audioCtxRef) {

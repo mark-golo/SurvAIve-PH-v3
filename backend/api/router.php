@@ -21,12 +21,26 @@ $routes = [
   'agencies'           => __DIR__ . '/agencies/index.php',
   'evacuation_centers' => __DIR__ . '/evacuation_centers/index.php',
   'analytics'     => __DIR__ . '/analytics/index.php',
+  'feedback'      => __DIR__ . '/feedback/index.php',
   'sync'               => __DIR__ . '/sync/index.php',
   'staff'              => __DIR__ . '/staff/index.php',
   'province_reports'   => __DIR__ . '/province_reports/index.php',
 ];
 
 // Dynamic routes — order matters (most specific first)
+
+// /sos/mine — victim-scoped SOS list (must come before /sos/:id)
+if ($path === 'sos/mine') {
+  require __DIR__ . '/sos/mine.php';
+  exit;
+}
+
+if (preg_match('#^feedback/(\d+)$#', $path, $m)) {
+  $_GET['id'] = $m[1];
+  require __DIR__ . '/feedback/item.php';
+  exit;
+}
+
 if (preg_match('#^sos/(\d+)$#', $path, $m)) {
   $_GET['id'] = $m[1];
   require __DIR__ . '/sos/item.php';

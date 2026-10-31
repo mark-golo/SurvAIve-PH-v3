@@ -63,6 +63,7 @@ export function SOSReport() {
   const [priorityScore, setPriorityScore] = useState(null)
   const [offline,       setOffline]       = useState(!getNetworkOnline())
   const [onlineDelivered, setOnlineDelivered] = useState(false)
+  const [newSosId,        setNewSosId]        = useState(null)
 
   // ── Mesh ACK state (shared via meshActivityStore) ────────────────────────────
   const [ackState, setAckState] = useState(getActiveSOS)
@@ -318,6 +319,7 @@ export function SOSReport() {
         ai_detected_count:    aiAnalysis.detection.count,
       } : {}),
     }
+    // realPacketId is set below after generation — attached to payload before online submission
 
     // Always broadcast over mesh — fires regardless of internet state.
     // Generate the display ID and record state immediately so the Activity tab
@@ -359,11 +361,16 @@ export function SOSReport() {
       return
     }
 
+    // Attach packet ID to online payload for idempotency
+    payload.mesh_packet_id = realPacketId
+
     // ONLINE — attempt internet delivery first; only fall back to mesh if it fails
     try {
       const res = await api.post('/sos', payload)
       setPriorityScore(res.ai_priority_score)
-      updateACKState({ ackLevel: 4, ackMaxHops: getActiveSOS().ackMaxHops })
+      if (res.id) setNewSosId(res.id)
+      // Do NOT call updateACKState here — online delivery is transport confirmation only,
+      // not agency acknowledgment. ACK level is driven by meshSync.js for mesh paths.
       setOnlineDelivered(true)
       setSubmitted(true)
     } catch (err) {
@@ -415,10 +422,10 @@ export function SOSReport() {
               </div>
               <h2 className="text-xl font-black text-white">SOS Delivered</h2>
               <div className="glass rounded-xl p-3 border border-[rgba(34,197,94,0.3)]">
-                <p className="text-xs text-[#22c55e] font-semibold mb-1 tracking-wider">INTERNET DELIVERY CONFIRMED</p>
+                <p className="text-xs text-[#22c55e] font-semibold mb-1 tracking-wider">REPORT TRANSMITTED TO SYSTEM</p>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Your SOS has been transmitted to the emergency response system.
-                  Responders have been notified. Stay in place if possible.
+                  Your SOS has been delivered to the emergency response system.
+                  A responder will be assigned shortly. Stay in place if possible.
                 </p>
               </div>
               {priorityScore && (
@@ -522,9 +529,19 @@ export function SOSReport() {
               </div>
             </>
           )}
-          <NeonButton variant="ghost" onClick={() => navigate('/home')} className="w-full">
-            Return to Home
-          </NeonButton>
+          <div className="space-y-2 w-full">
+            {newSosId && (
+              <NeonButton variant="primary" onClick={() => navigate(`/sos/${newSosId}`)} className="w-full">
+                Track Response
+              </NeonButton>
+            )}
+            <NeonButton variant="secondary" onClick={() => navigate('/sos/history')} className="w-full">
+              View My Reports
+            </NeonButton>
+            <NeonButton variant="ghost" onClick={() => navigate('/home')} className="w-full">
+              Return to Home
+            </NeonButton>
+          </div>
         </motion.div>
       </div>
     )

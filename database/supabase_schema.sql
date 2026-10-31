@@ -718,3 +718,146 @@ ALTER TABLE sos_reports REPLICA IDENTITY FULL;
 ALTER PUBLICATION supabase_realtime ADD TABLE sos_reports;
 ALTER TABLE victims REPLICA IDENTITY FULL;
 ALTER PUBLICATION supabase_realtime ADD TABLE victims;
+
+-- ============================================================
+-- MIGRATION 2026-10-31: Response Feedback & SOS Center tables
+-- ============================================================
+
+-- ── sos_response_assignments ──────────────────────────────────
+CREATE TABLE IF NOT EXISTS sos_response_assignments (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sos_id                BIGINT NOT NULL REFERENCES sos_reports(id) ON DELETE CASCADE,
+  agency_id             UUID REFERENCES response_agencies(id) ON DELETE SET NULL,
+  agency_type           TEXT NOT NULL CHECK (agency_type IN ('mdrrmo','hospital','bfp','pnp','pcg')),
+  status                TEXT NOT NULL DEFAULT 'pending_acknowledgment'
+                          CHECK (status IN (
+                            'pending_acknowledgment','acknowledged','declined',
+                            'assigned','en_route','on_scene','completed',
+                            'unable_to_respond','cancelled'
+                          )),
+  assigned_responder_id UUID REFERENCES responders(id) ON DELETE SET NULL,
+  acknowledged_by       TEXT,
+  acknowledged_at       TIMESTAMPTZ,
+  assigned_at           TIMESTAMPTZ,
+  completed_at          TIMESTAMPTZ,
+  decline_reason        TEXT,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (sos_id, agency_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sra_sos_id        ON sos_response_assignments (sos_id);
+CREATE INDEX IF NOT EXISTS idx_sra_agency_status ON sos_response_assignments (agency_id, status);
+CREATE INDEX IF NOT EXISTS idx_sra_resp_status   ON sos_response_assignments (assigned_responder_id, status);
+ALTER TABLE sos_response_assignments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "staff_read_assignments" ON sos_response_assignments FOR SELECT USING (
+  (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin','response_agency','responder')
+  OR (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin','response_agency','responder')
+);
+CREATE POLICY "victims_read_own_assignments" ON sos_response_assignments FOR SELECT USING (
+  EXISTS (SELECT 1 FROM sos_reports WHERE sos_reports.id = sos_response_assignments.sos_id AND sos_reports.user_id = auth.uid())
+);
+CREATE POLICY "staff_insert_assignments" ON sos_response_assignments FOR INSERT WITH CHECK (
+  (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','response_agency','responder')
+);
+CREATE POLICY "staff_update_assignments" ON sos_response_assignments FOR UPDATE USING (
+  (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','response_agency','responder')
+);
+
+-- ── sos_status_events ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS sos_status_events (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sos_id              BIGINT NOT NULL REFERENCES sos_reports(id) ON DELETE CASCADE,
+  assignment_id       UUID REFERENCES sos_response_assignments(id) ON DELETE SET NULL,
+  event_type          TEXT NOT NULL,
+  old_status          TEXT,
+  new_status          TEXT,
+  actor_role          TEXT,
+  actor_id            UUID,
+  actor_name_snapshot TEXT,
+  message             TEXT,
+  notes               TEXT,
+  source              TEXT NOT NULL DEFAULT 'online'
+                        CHECK (source IN ('online','offline_sync','ble_mesh','wifi_direct','system')),
+  idempotency_key     UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_sse_sos_id      ON sos_status_events (sos_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_sse_assignment  ON sos_status_events (assignment_id);
+ALTER TABLE sos_status_events ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "victims_read_own_events" ON sos_status_events FOR SELECT USING (
+  EXISTS (SELECT 1 FROM sos_reports WHERE sos_reports.id = sos_status_events.sos_id AND sos_reports.user_id = auth.uid())
+);
+CREATE POLICY "staff_read_events" ON sos_status_events FOR SELECT USING (
+  (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin','response_agency','responder')
+  OR (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin','response_agency','responder')
+);
+CREATE POLICY "staff_insert_events" ON sos_status_events FOR INSERT WITH CHECK (
+  (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','response_agency','responder')
+);
+-- No UPDATE or DELETE policies — events are immutable
+
+-- ── response_feedback ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS response_feedback (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sos_id              BIGINT NOT NULL REFERENCES sos_reports(id) ON DELETE CASCADE,
+  victim_id           UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  target_type         TEXT NOT NULL CHECK (target_type IN ('responder','agency')),
+  target_id           UUID NOT NULL,
+  rating              SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  comments            TEXT,
+  display_anonymously BOOLEAN NOT NULL DEFAULT FALSE,
+  moderation_status   TEXT NOT NULL DEFAULT 'visible'
+                        CHECK (moderation_status IN ('visible','flagged','hidden')),
+  moderation_reason   TEXT,
+  moderated_by        UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  moderated_at        TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (sos_id, victim_id, target_type, target_id)
+);
+CREATE INDEX IF NOT EXISTS idx_rf_sos_id  ON response_feedback (sos_id);
+CREATE INDEX IF NOT EXISTS idx_rf_target  ON response_feedback (target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_rf_victim  ON response_feedback (victim_id);
+ALTER TABLE response_feedback ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "victims_insert_own_feedback" ON response_feedback FOR INSERT WITH CHECK (
+  auth.uid() = victim_id
+  AND EXISTS (
+    SELECT 1 FROM sos_reports
+    WHERE sos_reports.id = response_feedback.sos_id
+      AND sos_reports.user_id = auth.uid()
+      AND sos_reports.rescue_status = 'rescued'
+  )
+);
+CREATE POLICY "victims_read_own_feedback" ON response_feedback FOR SELECT USING (
+  auth.uid() = victim_id
+);
+CREATE POLICY "staff_read_feedback" ON response_feedback FOR SELECT USING (
+  (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin','response_agency','responder')
+  OR (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin','response_agency','responder')
+);
+CREATE POLICY "admin_moderate_feedback" ON response_feedback FOR UPDATE USING (
+  (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin')
+);
+-- No DELETE policy — feedback is permanent
+
+-- ── Victim SELECT on sos_reports (own records) ───────────────
+-- Victims can now read their own SOS records when authenticated
+CREATE POLICY "victims_select_own_sos" ON sos_reports FOR SELECT USING (
+  (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin','responder','response_agency')
+  OR (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin','superadmin','responder','response_agency')
+  OR (auth.uid() IS NOT NULL AND sos_reports.user_id = (
+    SELECT id FROM victims WHERE id = (
+      SELECT CAST(auth.uid()::text AS BIGINT)
+    ) LIMIT 1
+  ))
+);
+
+-- Realtime for new tables
+ALTER TABLE sos_response_assignments REPLICA IDENTITY FULL;
+ALTER TABLE sos_status_events        REPLICA IDENTITY FULL;
+ALTER TABLE response_feedback        REPLICA IDENTITY FULL;
+ALTER PUBLICATION supabase_realtime ADD TABLE sos_response_assignments;
+ALTER PUBLICATION supabase_realtime ADD TABLE sos_status_events;
+ALTER PUBLICATION supabase_realtime ADD TABLE response_feedback;

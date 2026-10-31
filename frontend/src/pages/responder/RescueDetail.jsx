@@ -10,6 +10,7 @@ import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassTextarea } from '../../components/ui/GlassInput'
 import api from '../../lib/api'
 import { supabase } from '../../lib/supabase'
+import { getNetworkOnline } from '../../lib/capacitor'
 
 
 const ACTIONS = [
@@ -18,6 +19,13 @@ const ACTIONS = [
   { label: 'Rescued',      value: 'rescued',     variant: 'green',  icon: CheckCircle },
   { label: 'Cannot Reach', value: 'cannot_reach',variant: 'ghost',  icon: XCircle     },
 ]
+
+const STATUS_MESSAGE = {
+  en_route:     'Responder is en route to your location',
+  on_scene:     'Responder has arrived on scene',
+  rescued:      'Rescue / assistance completed',
+  cannot_reach: 'Responder was unable to reach the location',
+}
 
 export function RescueDetail() {
   const { id } = useParams()
@@ -76,6 +84,7 @@ export function RescueDetail() {
   }, [])
 
   const updateStatus = async (newStatus) => {
+    const prevStatus = rescueStatus
     if (newStatus === 'on_scene') setTimer(Date.now())
     setRescueStatus(newStatus)
     if (victim?.id) {
@@ -86,6 +95,20 @@ export function RescueDetail() {
       }
       try {
         await api.put(`/sos/${victim.id}`, payload)
+        // Write status event to Supabase (online only — best-effort)
+        if (getNetworkOnline()) {
+          supabase.from('sos_status_events').insert({
+            sos_id:             Number(victim.id),
+            event_type:         `status_${newStatus}`,
+            old_status:         prevStatus,
+            new_status:         newStatus,
+            actor_role:         'responder',
+            actor_name_snapshot: responderProfile?.name ?? null,
+            source:             'online',
+            message:            STATUS_MESSAGE[newStatus] ?? newStatus,
+            idempotency_key:    crypto.randomUUID(),
+          }).then(({ error }) => { if (error) console.warn('[RescueDetail] event insert:', error.message) })
+        }
       } catch {
         // local state already reflects the change; failure is surfaced by submitReport if needed
       }

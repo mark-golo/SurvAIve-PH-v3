@@ -9,8 +9,12 @@ import { ProfileLogin }    from './pages/victim/ProfileLogin'
 import { GuestChallenge }  from './pages/victim/GuestChallenge'
 import { VictimSignup }   from './pages/victim/VictimSignup'
 import { HomeScreen }      from './pages/victim/HomeScreen'
-import { SOSReport }       from './pages/victim/SOSReport'
-import { MeshStatus }      from './pages/victim/MeshStatus'
+import { SOSReport }        from './pages/victim/SOSReport'
+import { SOSCenter }        from './pages/victim/SOSCenter'
+import { IncidentHistory }  from './pages/victim/IncidentHistory'
+import { ResponseTracking } from './pages/victim/ResponseTracking'
+import { RescueFeedback }   from './pages/victim/RescueFeedback'
+import { MeshStatus }       from './pages/victim/MeshStatus'
 import { LocalMap }        from './pages/victim/LocalMap'
 import { VictimSettings }  from './pages/victim/VictimSettings'
 
@@ -38,6 +42,7 @@ import { SITREP }                 from './pages/admin/SITREP'
 import { EmergencyReport }        from './pages/admin/EmergencyReport'
 import { AdminSettings }          from './pages/admin/AdminSettings'
 import AuditLogs                  from './pages/admin/AuditLogs'
+import { ResponseFeedback }       from './pages/admin/ResponseFeedback'
 import { BarangaysComparison }    from './pages/admin/BarangaysComparison'
 
 // Agency pages
@@ -47,6 +52,7 @@ import { AgencyVictimTable }      from './pages/agency/AgencyVictimTable'
 import { AgencyEmergencyReport }  from './pages/agency/AgencyEmergencyReport'
 import { AgencyAnalytics }        from './pages/agency/AgencyAnalytics'
 import { AgencySettings }         from './pages/agency/AgencySettings'
+import { AgencyServiceFeedback }  from './pages/agency/AgencyServiceFeedback'
 
 
 function RoleGuard({ allowed }) {
@@ -68,9 +74,13 @@ export const router = createHashRouter([
   {
     element: <RoleGuard allowed={['victim']} />,
     children: [
-      { path: '/home',     element: <HomeScreen /> },
-      { path: '/sos',      element: <SOSReport /> },
-      { path: '/mesh',     element: <MeshStatus /> },
+      { path: '/home',             element: <HomeScreen /> },
+      { path: '/sos',             element: <SOSCenter /> },
+      { path: '/sos/new',         element: <SOSReport /> },
+      { path: '/sos/history',     element: <IncidentHistory /> },
+      { path: '/sos/:id/feedback',element: <RescueFeedback /> },
+      { path: '/sos/:id',         element: <ResponseTracking /> },
+      { path: '/mesh',            element: <MeshStatus /> },
       { path: '/map',      element: <LocalMap /> },
       { path: '/settings', element: <VictimSettings /> },
     ],
@@ -112,6 +122,7 @@ export const router = createHashRouter([
           { path: '/admin/credentials',          element: <LoginCredentials /> },
           { path: '/admin/settings',             element: <AdminSettings /> },
           { path: '/admin/audit-logs',           element: <AuditLogs /> },
+          { path: '/admin/response-feedback',   element: <ResponseFeedback /> },
         ],
       },
     ],
@@ -128,7 +139,8 @@ export const router = createHashRouter([
           { path: '/agency/victims',    element: <AgencyVictimTable />     },
           { path: '/agency/reports',    element: <AgencyEmergencyReport /> },
           { path: '/agency/analytics',  element: <AgencyAnalytics />       },
-          { path: '/agency/settings',   element: <AgencySettings />        },
+          { path: '/agency/settings',          element: <AgencySettings />         },
+          { path: '/agency/service-feedback',  element: <AgencyServiceFeedback />  },
         ],
       },
     ],
