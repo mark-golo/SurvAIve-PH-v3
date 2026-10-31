@@ -207,6 +207,25 @@ function _getAuthState() {
 
 // ── GET ────────────────────────────────────────────────────────────────────────
 async function get(path) {
+  const rawPath = path.replace(/^\//, '')
+
+  // ── Victim-scoped SOS list ────────────────────────────────────────────────
+  // parsePath('sos/mine') returns {resource:'sos', id:'mine'} which would query
+  // Supabase for sos_reports.id = 'mine', find nothing, and silently return [].
+  // Intercept here before parsePath runs.
+  if (rawPath === 'sos/mine') {
+    const authState = _getAuthState()
+    const victimId  = authState.user?.victim_id ?? null
+    if (getNetworkOnline() && victimId) {
+      const { data, error } = await supabase.rpc('get_victim_sos_reports', { p_victim_id: victimId })
+      if (!error) return (data ?? []).map(normalizeSos)
+      // If RPC not yet deployed, fall through to PHP backend
+    }
+    // Offline path or no victimId or RPC error → PHP mine.php → MySQL
+    const rows = await localFetch('sos/mine')
+    return (Array.isArray(rows) ? rows : []).map(normalizeSos)
+  }
+
   const { resource, id, table, params } = parsePath(path)
 
   // Auto-inject service_type for response_agency role on every SOS fetch
