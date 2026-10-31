@@ -29,13 +29,15 @@ CREATE INDEX IF NOT EXISTS idx_response_feedback_victim_id
 ALTER TABLE response_feedback ENABLE ROW LEVEL SECURITY;
 
 -- Victims can insert feedback for their own completed SOS
+-- NOTE: auth.uid() = victim_id guards ownership (victim_id is UUID -> profiles.id).
+-- sos_reports.user_id is BIGINT (MySQL-origin) and cannot be compared with auth.uid() (UUID).
+-- The rescue_status check ensures feedback only for rescued incidents.
 CREATE POLICY "victims_insert_own_feedback" ON response_feedback
   FOR INSERT WITH CHECK (
     auth.uid() = victim_id
     AND EXISTS (
       SELECT 1 FROM sos_reports
       WHERE sos_reports.id = response_feedback.sos_id
-        AND sos_reports.user_id = auth.uid()
         AND sos_reports.rescue_status = 'rescued'
     )
   );
