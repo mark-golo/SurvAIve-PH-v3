@@ -44,14 +44,9 @@ CREATE POLICY "staff_read_assignments" ON sos_response_assignments
     )
   );
 
-CREATE POLICY "victims_read_own_assignments" ON sos_response_assignments
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM sos_reports
-      WHERE sos_reports.id = sos_response_assignments.sos_id
-        AND sos_reports.user_id = auth.uid()
-    )
-  );
+-- victims_read_own_assignments intentionally omitted:
+-- sos_reports.user_id is BIGINT; auth.uid() is UUID — comparison fails (42883).
+-- Victims read SOS data via PHP backend (/sos/mine), not Supabase directly.
 
 CREATE POLICY "staff_insert_assignments" ON sos_response_assignments
   FOR INSERT WITH CHECK (

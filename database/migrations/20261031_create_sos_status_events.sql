@@ -26,15 +26,9 @@ CREATE INDEX IF NOT EXISTS idx_sos_status_events_assignment_id
 
 ALTER TABLE sos_status_events ENABLE ROW LEVEL SECURITY;
 
--- Victims can read events for their own SOS (message field only — not notes)
-CREATE POLICY "victims_read_own_events" ON sos_status_events
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM sos_reports
-      WHERE sos_reports.id = sos_status_events.sos_id
-        AND sos_reports.user_id = auth.uid()
-    )
-  );
+-- victims_read_own_events intentionally omitted:
+-- sos_reports.user_id is BIGINT; auth.uid() is UUID — comparison fails (42883).
+-- Victims read SOS status via PHP backend (/sos/mine), not Supabase directly.
 
 -- Staff can read all events in their scope
 CREATE POLICY "staff_read_events" ON sos_status_events
