@@ -54,7 +54,7 @@ function AcknowledgmentPanel({ agencyType, agencyId }) {
       }
       const { error } = await supabase
         .from('sos_response_assignments')
-        .upsert(insertRow, { onConflict: 'sos_id,agency_id' })
+        .upsert(insertRow, { onConflict: 'sos_id,agency_type' })
       if (error) throw error
       setPendingSOS(prev => prev.filter(r => r.id !== sosId))
     } catch (err) {
