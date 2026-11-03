@@ -8,6 +8,7 @@ import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline } from '../../lib/capacitor'
 import api from '../../lib/api'
+import { db } from '../../lib/db'
 
 const NAV = [
   { icon: Home,          label: 'Home',    path: '/home'     },
@@ -22,14 +23,49 @@ export function SOSCenter() {
   const { user }  = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
   const [isOnline]= useState(getNetworkOnline)
-  const [reports, setReports] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [reports, setReports]     = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [hasPending, setHasPending] = useState(false)
 
   useEffect(() => {
-    if (!isOnline) { setLoading(false); return }
-    api.get('/sos/mine').then(data => {
-      setReports(Array.isArray(data) ? data : [])
-    }).catch(() => {}).finally(() => setLoading(false))
+    let cancelled = false
+    async function load() {
+      // Always check IndexedDB for submitted-but-unsynced SOS records.
+      // These exist when the Supabase insert failed (e.g. migration not yet run)
+      // or when the victim was offline — the SOS was queued locally.
+      let pending = []
+      try {
+        const queue = await db.getPendingSOS()
+        pending = queue.map(item => ({
+          ...item,
+          rescue_status: item.rescue_status ?? 'pending',
+          created_at:    item.timestamp ? new Date(item.timestamp).toISOString()
+                                        : new Date(item.createdAt ?? Date.now()).toISOString(),
+          _fromQueue:    true,
+        }))
+      } catch { /* IndexedDB unavailable */ }
+
+      // Also try Supabase / PHP for server-confirmed records.
+      let confirmed = []
+      if (isOnline) {
+        try {
+          const data = await api.get('/sos/mine')
+          confirmed = Array.isArray(data) ? data : []
+        } catch { /* RPC not deployed or network error — show queue only */ }
+      }
+
+      // Merge: confirmed records take precedence; exclude pending if already confirmed
+      const confirmedPackets = new Set(confirmed.map(r => r.mesh_packet_id).filter(Boolean))
+      const unconfirmed = pending.filter(p => !confirmedPackets.has(p.mesh_packet_id ?? p.meshPacketId))
+
+      if (!cancelled) {
+        setHasPending(unconfirmed.length > 0 && confirmed.length === 0)
+        setReports([...confirmed, ...unconfirmed])
+        setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
   }, [isOnline])
 
   const active    = reports.filter(r => !['rescued','cannot_reach'].includes(r.rescue_status) && !r.dismissed)
@@ -89,17 +125,25 @@ export function SOSCenter() {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
-              {stats.map(({ label, value, icon: Icon, color, bg }) => (
-                <div key={label} className={`glass rounded-2xl p-4 bg-gradient-to-br ${bg} border border-[rgba(255,255,255,0.06)]`}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Icon size={14} className={color} />
-                    <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{label}</span>
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                {stats.map(({ label, value, icon: Icon, color, bg }) => (
+                  <div key={label} className={`glass rounded-2xl p-4 bg-gradient-to-br ${bg} border border-[rgba(255,255,255,0.06)]`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Icon size={14} className={color} />
+                      <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{label}</span>
+                    </div>
+                    <p className={`text-3xl font-black ${color}`}>{value}</p>
                   </div>
-                  <p className={`text-3xl font-black ${color}`}>{value}</p>
+                ))}
+              </div>
+              {hasPending && (
+                <div className="mt-2 rounded-xl px-3 py-2 flex items-center gap-2 border border-amber-500/30 bg-amber-900/20">
+                  <Clock size={13} className="text-amber-400 shrink-0" />
+                  <p className="text-[11px] text-amber-400">SOS queued locally — awaiting server sync</p>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
 
