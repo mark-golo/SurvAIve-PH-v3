@@ -10,11 +10,12 @@ import api from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 
 const RESCUE_STATUS_META = {
-  pending:      { label: 'Awaiting Response', color: '#f59e0b' },
-  en_route:     { label: 'Responder En Route', color: '#60a5fa' },
-  on_scene:     { label: 'Responder On Scene', color: '#a78bfa' },
-  rescued:      { label: 'Rescued / Assisted', color: '#22c55e' },
-  cannot_reach: { label: 'Cannot Reach',        color: '#ef4444' },
+  pending:      { label: 'Awaiting Acknowledgment', color: '#94a3b8' },
+  acknowledged: { label: 'Acknowledged',             color: '#f59e0b' },
+  en_route:     { label: 'In Progress',              color: '#60a5fa' },
+  on_scene:     { label: 'In Progress',              color: '#a78bfa' },
+  cannot_reach: { label: 'In Progress',              color: '#f59e0b' },
+  rescued:      { label: 'Completed',                color: '#22c55e' },
 }
 
 const PRIORITY_LABEL = s => s >= 80 ? 'CRITICAL' : s >= 60 ? 'HIGH' : s >= 40 ? 'MODERATE' : 'LOW'
@@ -62,6 +63,19 @@ export function ResponseTracking() {
   }
 
   useEffect(() => { if (isOnline) { load() } else { setLoading(false) } }, [isOnline, id])
+
+  // Auto-refresh when responder updates this SOS's rescue_status
+  useEffect(() => {
+    if (!isOnline) return
+    const ch = supabase.channel(`rt-sos-${id}`)
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'sos_reports',
+          filter: `id=eq.${id}` },
+        () => { load() }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [id, isOnline])
 
   // Build timeline steps — merge system events with derived steps
   function buildTimeline(r, evts) {

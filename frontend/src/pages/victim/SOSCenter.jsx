@@ -9,6 +9,7 @@ import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline } from '../../lib/capacitor'
 import api from '../../lib/api'
 import { db } from '../../lib/db'
+import { supabase } from '../../lib/supabase'
 
 const NAV = [
   { icon: Home,          label: 'Home',    path: '/home'     },
@@ -26,6 +27,15 @@ export function SOSCenter() {
   const [reports, setReports]     = useState([])
   const [loading, setLoading]     = useState(true)
   const [hasPending, setHasPending] = useState(false)
+  // reloadKey triggers the load effect when incremented (e.g. from Realtime subscription)
+  const [reloadKey, setReloadKey] = useState(0)
+  // victimId for Realtime subscription filter — computed once from localStorage on mount
+  const [victimIdForSub] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('survAIve-auth') ?? '{}')
+      return stored?.state?.user?.victim_id ?? null
+    } catch { return null }
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -84,11 +94,24 @@ export function SOSCenter() {
     }
     load()
     return () => { cancelled = true }
-  }, [isOnline])
+  }, [isOnline, reloadKey])
 
-  const active    = reports.filter(r => !['rescued','cannot_reach'].includes(r.rescue_status) && !r.dismissed)
-  const awaiting  = reports.filter(r => r.rescue_status === 'pending')
-  const inprog    = reports.filter(r => ['en_route','on_scene'].includes(r.rescue_status))
+  // Supabase Realtime subscription — auto-refresh when a responder updates this victim's SOS.
+  useEffect(() => {
+    if (!victimIdForSub || !isOnline) return
+    const ch = supabase.channel('victim-sos-updates')
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'sos_reports',
+          filter: `victim_device_id=eq.${victimIdForSub}` },
+        () => { setReloadKey(k => k + 1) }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [victimIdForSub, isOnline])
+
+  const active    = reports.filter(r => r.rescue_status !== 'rescued' && !r.dismissed)
+  const awaiting  = reports.filter(r => r.rescue_status === 'acknowledged')
+  const inprog    = reports.filter(r => ['en_route','on_scene','cannot_reach'].includes(r.rescue_status))
   const completed = reports.filter(r => r.rescue_status === 'rescued' || r.dismissed)
 
   function goToTracking() {
@@ -99,7 +122,7 @@ export function SOSCenter() {
 
   const stats = [
     { label: 'Active',           value: active.length,    icon: AlertOctagon, color: 'text-red-400',   bg: 'from-red-900/30 to-red-800/20' },
-    { label: 'Awaiting Response',value: awaiting.length,  icon: Clock,        color: 'text-amber-400', bg: 'from-amber-900/30 to-amber-800/20' },
+    { label: 'Acknowledged',      value: awaiting.length,  icon: Clock,        color: 'text-amber-400', bg: 'from-amber-900/30 to-amber-800/20' },
     { label: 'In Progress',      value: inprog.length,    icon: Activity,     color: 'text-blue-400',  bg: 'from-blue-900/30 to-blue-800/20' },
     { label: 'Completed',        value: completed.length, icon: CheckCircle,  color: 'text-green-400', bg: 'from-green-900/30 to-green-800/20' },
   ]

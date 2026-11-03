@@ -155,6 +155,8 @@ export function AdminLayout() {
 
   // ── Acknowledge one alert ─────────────────────────────────────────────────
   const acknowledgeAlert = useCallback((id) => {
+    // Write acknowledged status to DB so victim's SOSCenter reflects it
+    api.put('/sos/' + id, { rescue_status: 'acknowledged' }).catch(() => {})
     setAlertQueue(prev => {
       const next = prev.filter(a => a.id !== id)
       if (next.length === 0) {

@@ -16,11 +16,12 @@ const NAV = [
 ]
 
 const RESCUE_STATUS_LABELS = {
-  pending:       { label: 'Awaiting Response', color: 'text-amber-400',  bg: 'bg-amber-900/40' },
-  en_route:      { label: 'En Route',          color: 'text-blue-400',   bg: 'bg-blue-900/40'  },
-  on_scene:      { label: 'On Scene',          color: 'text-violet-400', bg: 'bg-violet-900/40'},
-  rescued:       { label: 'Rescued',           color: 'text-green-400',  bg: 'bg-green-900/40' },
-  cannot_reach:  { label: 'Cannot Reach',      color: 'text-red-400',    bg: 'bg-red-900/40'   },
+  pending:       { label: 'Awaiting Acknowledgment', color: 'text-slate-400',  bg: 'bg-slate-700'    },
+  acknowledged:  { label: 'Acknowledged',            color: 'text-amber-400',  bg: 'bg-amber-900/40' },
+  en_route:      { label: 'In Progress',             color: 'text-blue-400',   bg: 'bg-blue-900/40'  },
+  on_scene:      { label: 'In Progress',             color: 'text-violet-400', bg: 'bg-violet-900/40'},
+  cannot_reach:  { label: 'In Progress',             color: 'text-amber-400',  bg: 'bg-amber-900/40' },
+  rescued:       { label: 'Completed',               color: 'text-green-400',  bg: 'bg-green-900/40' },
 }
 
 const PRIORITY_LABELS = {
@@ -68,9 +69,9 @@ export function IncidentHistory() {
 
   const filtered = useMemo(() => {
     switch (tab) {
-      case 'active':    return reports.filter(r => !['rescued','cannot_reach'].includes(r.rescue_status) && !r.dismissed)
+      case 'active':    return reports.filter(r => r.rescue_status !== 'rescued' && !r.dismissed)
       case 'completed': return reports.filter(r => r.rescue_status === 'rescued' || r.dismissed)
-      case 'awaiting':  return reports.filter(r => r.rescue_status === 'pending')
+      case 'awaiting':  return reports.filter(r => ['pending','acknowledged'].includes(r.rescue_status))
       default:          return reports
     }
   }, [reports, tab])
@@ -78,7 +79,7 @@ export function IncidentHistory() {
   const tabs = [
     { key: 'all',       label: 'All' },
     { key: 'active',    label: 'Active' },
-    { key: 'awaiting',  label: 'Awaiting' },
+    { key: 'awaiting',  label: 'Acknowledged' },
     { key: 'completed', label: 'Completed' },
   ]
 

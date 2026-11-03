@@ -15,6 +15,7 @@ import { useAuthStore } from './store/auth'
 import { StaffLogin } from './pages/StaffLogin'
 
 // Responder app screens
+import { ResponderLayout }   from './pages/responder/ResponderLayout'
 import { ResponderHome }     from './pages/responder/ResponderHome'
 import { VictimQueue }       from './pages/responder/VictimQueue'
 import { RescueDetail }      from './pages/responder/RescueDetail'
@@ -38,14 +39,17 @@ export const responderRouter = createHashRouter([
   // ── Protected responder screens ──────────────────────────────────────────────
   {
     element: <ResponderGuard />,
-    children: [
-      { path: '/responder',              element: <ResponderHome /> },
-      { path: '/responder/queue',        element: <VictimQueue /> },
-      { path: '/responder/rescue/:id',   element: <RescueDetail /> },
-      { path: '/responder/map',          element: <FieldMap /> },
-      { path: '/responder/relay',        element: <MeshRelay /> },
-      { path: '/responder/settings',     element: <ResponderSettings /> },
-    ],
+    children: [{
+      element: <ResponderLayout />,
+      children: [
+        { path: '/responder',              element: <ResponderHome /> },
+        { path: '/responder/queue',        element: <VictimQueue /> },
+        { path: '/responder/rescue/:id',   element: <RescueDetail /> },
+        { path: '/responder/map',          element: <FieldMap /> },
+        { path: '/responder/relay',        element: <MeshRelay /> },
+        { path: '/responder/settings',     element: <ResponderSettings /> },
+      ],
+    }],
   },
 
   // Catch-all

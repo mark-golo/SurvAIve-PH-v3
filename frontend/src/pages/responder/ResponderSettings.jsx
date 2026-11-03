@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User, MapPin, Radio, List, Map, Settings, Home, Server, Check, Sun } from 'lucide-react'
+import { User, MapPin, Radio, List, Map, Settings, Home, Server, Check, Sun, Bell, Volume2, Eye, Zap, VolumeX } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { NeonButton } from '../../components/ui/NeonButton'
@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase'
 import { setXamppHost } from '../../lib/api'
 import { getResponderTheme, saveResponderTheme } from '../../lib/victimTheme'
 import { AccountSettings } from '../../components/AccountSettings'
+import { useAlertStore } from '../../store/alertStore'
 
 const NAV = [
   { icon: Home,     label: 'Home',     path: '/responder'          },
@@ -26,6 +27,13 @@ export function ResponderSettings() {
   const [autoRelay,    setAutoRelay]    = useState(() => localStorage.getItem('resp_autoRelay')    !== 'false')
   const [offlineForce, setOfflineForce] = useState(() => localStorage.getItem('resp_offlineForce') === 'true')
   const [theme, setThemeState] = useState(() => getResponderTheme())
+
+  const {
+    soundEnabled,        toggleSound,
+    visualEnabled,       toggleVisual,
+    notificationEnabled, toggleNotification,
+    volume,              setVolume,
+  } = useAlertStore()
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark'
     setThemeState(next)
@@ -161,6 +169,68 @@ export function ResponderSettings() {
           </div>
         </GlassCard>
 
+        {/* Emergency Alert Settings */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Bell size={16} className="text-[#ef4444]" />
+            <p className="text-xs font-black text-white uppercase tracking-wider">Emergency Alert Settings</p>
+          </div>
+          <GlassCard>
+            <AlertToggleRow icon={Volume2} label="Alert Sound"   desc="Play audio alarm when new SOS arrives"           enabled={soundEnabled}        onToggle={toggleSound} />
+            <AlertToggleRow icon={Eye}     label="Visual Pulse"  desc="Red screen flash when new SOS arrives"           enabled={visualEnabled}       onToggle={toggleVisual} />
+            <AlertToggleRow icon={Bell}    label="Notification"  desc="Show notification card for incoming SOS alerts"  enabled={notificationEnabled} onToggle={toggleNotification} />
+          </GlassCard>
+
+          {/* Volume */}
+          <GlassCard className="mt-3">
+            <div className="flex items-center gap-3 mb-3">
+              <Volume2 size={14} className={soundEnabled ? 'text-[#ef4444]' : 'text-slate-600'} />
+              <p className="text-xs font-semibold text-white">Alert Volume</p>
+              <span className="ml-auto text-xs font-bold text-slate-400">{Math.round(volume * 100)}%</span>
+            </div>
+            <input type="range" min={0} max={1} step={0.05} value={volume}
+              disabled={!soundEnabled}
+              onChange={e => setVolume(+e.target.value)}
+              className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-opacity ${soundEnabled ? 'opacity-100' : 'opacity-30 cursor-not-allowed'}`}
+              style={{ background: `linear-gradient(to right, #ef4444 ${volume * 100}%, rgba(255,255,255,0.1) ${volume * 100}%)` }}
+            />
+          </GlassCard>
+
+          {/* Test / Mute */}
+          <GlassCard className="mt-3">
+            <div className="flex items-center justify-between gap-3 mb-3 pb-3 border-b border-[rgba(255,255,255,0.05)]">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-[rgba(239,68,68,0.12)] border border-[rgba(239,68,68,0.25)] flex items-center justify-center shrink-0">
+                  <Zap size={14} className="text-[#ef4444]" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">Test Alert</p>
+                  <p className="text-[10px] text-slate-500">Simulate the full visual and audio alert</p>
+                </div>
+              </div>
+              <button onClick={() => window.__triggerTestAlert?.()}
+                className="shrink-0 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-[#ef4444] to-[#f97316] text-white hover:opacity-90 transition-all">
+                Test
+              </button>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-[rgba(107,114,128,0.12)] border border-[rgba(107,114,128,0.2)] flex items-center justify-center shrink-0">
+                  <VolumeX size={14} className="text-slate-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">Mute Alert</p>
+                  <p className="text-[10px] text-slate-500">Stop active audio and visual pulse</p>
+                </div>
+              </div>
+              <button onClick={() => window.__muteCurrentAlert?.()}
+                className="shrink-0 px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 border border-[rgba(255,255,255,0.1)] hover:text-white transition-all">
+                Mute
+              </button>
+            </div>
+          </GlassCard>
+        </div>
+
         {/* Appearance */}
         <GlassCard>
           <div className="flex items-center gap-3 mb-3">
@@ -196,6 +266,31 @@ function InfoRow({ label, value, icon: Icon }) {
         <p className="text-[11px] text-slate-500 uppercase tracking-wider">{label}</p>
       </div>
       <p className="text-xs text-white font-medium">{value || '—'}</p>
+    </div>
+  )
+}
+
+function AlertToggleRow({ icon: Icon, label, desc, enabled, onToggle }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3 border-b border-[rgba(255,255,255,0.05)] last:border-0">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+          style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)' }}>
+          <Icon size={15} className="text-[#ef4444]" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-white">{label}</p>
+          {desc && <p className="text-[10px] text-slate-500 mt-0.5">{desc}</p>}
+        </div>
+      </div>
+      <button onClick={onToggle}
+        className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-all shrink-0 ${
+          enabled
+            ? 'bg-[rgba(239,68,68,0.15)] border-[rgba(239,68,68,0.4)] text-[#ef4444]'
+            : 'text-slate-500 border-[rgba(255,255,255,0.12)] hover:text-slate-300'
+        }`}>
+        {enabled ? 'ON' : 'OFF'}
+      </button>
     </div>
   )
 }
