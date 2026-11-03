@@ -38,24 +38,22 @@ export function SOSCenter() {
       } catch { /* ignore */ }
 
       // 1. Always read from IndexedDB — both confirmed (synced) and pending records.
-      //    addConfirmedSOS() stores successful online submissions here immediately,
-      //    so SOSCenter works even when Supabase SELECT is unavailable for anon victims.
+      //    No victimId guard: guest victims (no victim_id) and registered victims both
+      //    get their records. Filter: exact match OR null victim_id (guest/old submissions).
       let local = []
-      if (victimId) {
-        try {
-          const all = await db.getAllSOS()
-          local = all
-            .filter(item => item.victim_id === victimId)
-            .map(item => ({
-              ...item,
-              rescue_status: item.rescue_status ?? 'pending',
-              created_at:    item.timestamp
-                ? new Date(item.timestamp).toISOString()
-                : new Date(item.createdAt ?? Date.now()).toISOString(),
-              _fromQueue: true,
-            }))
-        } catch { /* IndexedDB unavailable */ }
-      }
+      try {
+        const all = await db.getAllSOS()
+        local = all
+          .filter(item => !victimId || item.victim_id === victimId || item.victim_id == null)
+          .map(item => ({
+            ...item,
+            rescue_status: item.rescue_status ?? 'pending',
+            created_at:    item.timestamp
+              ? new Date(item.timestamp).toISOString()
+              : new Date(item.createdAt ?? Date.now()).toISOString(),
+            _fromQueue: true,
+          }))
+      } catch { /* IndexedDB unavailable */ }
 
       // 2. Also try Supabase / PHP for live status updates (responder assigned, etc.)
       //    Confirmed records take precedence over local cache for deduplication.

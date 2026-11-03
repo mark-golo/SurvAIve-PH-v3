@@ -9,3 +9,10 @@ createRoot(document.getElementById('root')).render(
     <RouterProvider router={router} />
   </StrictMode>
 )
+
+// Auto-reload when a new service worker takes control so users always run the latest code.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    window.location.reload()
+  })
+}
