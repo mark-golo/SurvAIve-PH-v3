@@ -65,6 +65,27 @@ export const db = {
     return database.getAllFromIndex('sos_queue', 'synced', false)
   },
 
+  // Returns every record in the queue (both synced and pending).
+  // Used by SOSCenter to show confirmed online submissions immediately.
+  async getAllSOS() {
+    const database = await getDB()
+    return database.getAll('sos_queue')
+  },
+
+  // Store a successfully inserted online SOS locally so SOSCenter can display it
+  // without requiring Supabase SELECT access (anon victims have no SELECT policy).
+  async addConfirmedSOS(record) {
+    const database = await getDB()
+    return database.add('sos_queue', {
+      ...record,
+      synced:        true,
+      createdAt:     Date.now(),
+      retryCount:    0,
+      lastAttemptAt: null,
+      meshPacketId:  record.mesh_packet_id ?? record.meshPacketId ?? null,
+    })
+  },
+
   async markSOSSynced(localId, serverId) {
     const database = await getDB()
     const item = await database.get('sos_queue', localId)

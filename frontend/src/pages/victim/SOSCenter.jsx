@@ -30,37 +30,51 @@ export function SOSCenter() {
   useEffect(() => {
     let cancelled = false
     async function load() {
-      // Always check IndexedDB for submitted-but-unsynced SOS records.
-      // These exist when the Supabase insert failed (e.g. migration not yet run)
-      // or when the victim was offline — the SOS was queued locally.
-      let pending = []
+      // Read victim_id fresh from localStorage to avoid stale closure issues.
+      let victimId = null
       try {
-        const queue = await db.getPendingSOS()
-        pending = queue.map(item => ({
-          ...item,
-          rescue_status: item.rescue_status ?? 'pending',
-          created_at:    item.timestamp ? new Date(item.timestamp).toISOString()
-                                        : new Date(item.createdAt ?? Date.now()).toISOString(),
-          _fromQueue:    true,
-        }))
-      } catch { /* IndexedDB unavailable */ }
+        const stored = JSON.parse(localStorage.getItem('survAIve-auth') ?? '{}')
+        victimId = stored?.state?.user?.victim_id ?? null
+      } catch { /* ignore */ }
 
-      // Also try Supabase / PHP for server-confirmed records.
+      // 1. Always read from IndexedDB — both confirmed (synced) and pending records.
+      //    addConfirmedSOS() stores successful online submissions here immediately,
+      //    so SOSCenter works even when Supabase SELECT is unavailable for anon victims.
+      let local = []
+      if (victimId) {
+        try {
+          const all = await db.getAllSOS()
+          local = all
+            .filter(item => item.victim_id === victimId)
+            .map(item => ({
+              ...item,
+              rescue_status: item.rescue_status ?? 'pending',
+              created_at:    item.timestamp
+                ? new Date(item.timestamp).toISOString()
+                : new Date(item.createdAt ?? Date.now()).toISOString(),
+              _fromQueue: true,
+            }))
+        } catch { /* IndexedDB unavailable */ }
+      }
+
+      // 2. Also try Supabase / PHP for live status updates (responder assigned, etc.)
+      //    Confirmed records take precedence over local cache for deduplication.
       let confirmed = []
-      if (isOnline) {
+      if (isOnline && victimId) {
         try {
           const data = await api.get('/sos/mine')
           confirmed = Array.isArray(data) ? data : []
-        } catch { /* RPC not deployed or network error — show queue only */ }
+        } catch { /* RPC not deployed or network error — show local only */ }
       }
 
-      // Merge: confirmed records take precedence; exclude pending if already confirmed
+      // Merge: Supabase records take precedence (have live status updates);
+      // local records that already appear in Supabase are excluded.
       const confirmedPackets = new Set(confirmed.map(r => r.mesh_packet_id).filter(Boolean))
-      const unconfirmed = pending.filter(p => !confirmedPackets.has(p.mesh_packet_id ?? p.meshPacketId))
+      const localOnly = local.filter(p => !confirmedPackets.has(p.mesh_packet_id ?? p.meshPacketId))
 
       if (!cancelled) {
-        setHasPending(unconfirmed.length > 0 && confirmed.length === 0)
-        setReports([...confirmed, ...unconfirmed])
+        setHasPending(localOnly.length > 0 && confirmed.length === 0)
+        setReports([...confirmed, ...localOnly])
         setLoading(false)
       }
     }

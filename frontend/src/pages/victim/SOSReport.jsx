@@ -371,6 +371,15 @@ export function SOSReport() {
       if (res.id) setNewSosId(res.id)
       // Do NOT call updateACKState here — online delivery is transport confirmation only,
       // not agency acknowledgment. ACK level is driven by meshSync.js for mesh paths.
+      // Cache locally so SOSCenter can show it immediately without Supabase SELECT access.
+      db.addConfirmedSOS({
+        ...payload,
+        id:                res.id ?? null,
+        rescue_status:     'pending',
+        ai_priority_score: res.ai_priority_score ?? 50,
+        created_at:        new Date().toISOString(),
+        timestamp:         Date.now(),
+      }).catch(() => {})
       setOnlineDelivered(true)
       setSubmitted(true)
     } catch (err) {
