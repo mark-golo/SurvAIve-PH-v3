@@ -217,20 +217,42 @@ async function get(path) {
     const authState = _getAuthState()
     const victimId  = authState.user?.victim_id ?? null
     if (getNetworkOnline() && victimId) {
+      let supaRows = null
+
       // 1. Try SECURITY DEFINER RPC (bypasses RLS, requires migration SQL to be run)
       const { data: rpcData, error: rpcErr } = await supabase.rpc('get_victim_sos_reports', { p_victim_id: victimId })
-      if (!rpcErr) return (rpcData ?? []).map(normalizeSos)
+      if (!rpcErr) supaRows = (rpcData ?? []).map(normalizeSos)
 
       // 2. RPC not deployed — try direct query (requires victim_device_id column + anon SELECT policy)
-      const { data: directData, error: directErr } = await supabase
-        .from('sos_reports')
-        .select('*')
-        .eq('victim_device_id', victimId)
-        .order('created_at', { ascending: false })
-        .limit(100)
-      if (!directErr) return (directData ?? []).map(normalizeSos)
+      if (!supaRows) {
+        const { data: directData, error: directErr } = await supabase
+          .from('sos_reports')
+          .select('*')
+          .eq('victim_device_id', victimId)
+          .order('created_at', { ascending: false })
+          .limit(100)
+        if (!directErr) supaRows = (directData ?? []).map(normalizeSos)
+      }
 
-      // 3. Both Supabase paths failed — fall through to PHP/MySQL
+      if (supaRows) {
+        // Merge PHP/MySQL data: PHP rescue_status overrides stale Supabase when Strategy 3
+        // fallback wrote the status update to MySQL but Supabase wasn't yet updated.
+        try {
+          const phpRows = await localFetch('sos/mine')
+          if (Array.isArray(phpRows) && phpRows.length) {
+            const phpMap = new Map(phpRows.map(r => [String(r.id), r]))
+            supaRows = supaRows.map(r => {
+              const ph = phpMap.get(String(r.id))
+              if (ph && ph.rescue_status && ph.rescue_status !== r.rescue_status) {
+                return normalizeSos({ ...r, rescue_status: ph.rescue_status, confirmed_at: ph.confirmed_at ?? r.confirmed_at })
+              }
+              return r
+            })
+          }
+        } catch { /* PHP unreachable (e.g. Vercel) — use Supabase data as-is */ }
+        return supaRows
+      }
+      // Both Supabase paths failed — fall through to PHP/MySQL
     }
     // Offline, no victimId, or both Supabase paths failed → PHP mine.php → MySQL
     try {
@@ -972,7 +994,15 @@ async function put(path, body = {}) {
       p_status:                 body.status                  ?? null,
       p_confirmed_by_role:      body.confirmed_by_role       ?? null,
     })
-    if (rpcErr) sbThrow(rpcErr)
+    if (rpcErr) {
+      // Strategy 3: PHP/MySQL fallback (both Supabase strategies failed — migrations not yet run)
+      try {
+        await localFetch(`sos/${id}`, { method: 'PUT', body: JSON.stringify(body) })
+        return { id: Number(id) }
+      } catch {
+        sbThrow(rpcErr)
+      }
+    }
     return { id: Number(id), _old_rescue_status: oldRescueStatus ?? null }
   }
 
