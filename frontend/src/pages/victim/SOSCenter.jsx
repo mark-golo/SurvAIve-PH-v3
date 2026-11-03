@@ -109,6 +109,13 @@ export function SOSCenter() {
     return () => { supabase.removeChannel(ch) }
   }, [victimIdForSub, isOnline])
 
+  // Polling fallback — re-check tile counts every 15 s even if Realtime doesn't fire
+  useEffect(() => {
+    if (!isOnline) return
+    const interval = setInterval(() => setReloadKey(k => k + 1), 15_000)
+    return () => clearInterval(interval)
+  }, [isOnline])
+
   const active    = reports.filter(r => r.rescue_status !== 'rescued' && !r.dismissed)
   const awaiting  = reports.filter(r => r.rescue_status === 'acknowledged')
   const inprog    = reports.filter(r => ['en_route','on_scene','cannot_reach'].includes(r.rescue_status))

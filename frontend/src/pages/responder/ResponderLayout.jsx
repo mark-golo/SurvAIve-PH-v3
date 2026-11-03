@@ -43,48 +43,52 @@ export function ResponderLayout() {
   const audioCtxRef      = useRef(null)
   const soundIntervalRef = useRef(null)
   const seenIdsRef       = useRef(new Set())
+  const muteActiveRef    = useRef(false)
+
+  // Keep muteActiveRef in sync so triggerAlert can read it synchronously
+  useEffect(() => { muteActiveRef.current = muteActive }, [muteActive])
+
+  // Clean up sound/visual when the last alert is dismissed or muted
+  useEffect(() => {
+    if (alertQueue.length > 0) return
+    setAlertActive(false)
+    muteActiveRef.current = false
+    setMuteActive(false)
+    if (soundIntervalRef.current) {
+      clearInterval(soundIntervalRef.current)
+      soundIntervalRef.current = null
+    }
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close().catch(() => {})
+      audioCtxRef.current = null
+    }
+  }, [alertQueue.length])
 
   const triggerAlert = useCallback((entry) => {
     setAlertQueue(q => [...q, entry])
-    setMuteActive(prev => {
-      if (!prev) {
-        if (visualEnabled) setAlertActive(true)
-        if (soundEnabled) {
-          playAlarmTone(volume, audioCtxRef)
-          if (!soundIntervalRef.current) {
-            soundIntervalRef.current = setInterval(() => {
-              playAlarmTone(volume, audioCtxRef)
-            }, 2800)
-          }
+    // Read muteActive via ref — pure, no side effects inside a state updater
+    if (!muteActiveRef.current) {
+      if (visualEnabled) setAlertActive(true)
+      if (soundEnabled) {
+        playAlarmTone(volume, audioCtxRef)
+        if (!soundIntervalRef.current) {
+          soundIntervalRef.current = setInterval(() => {
+            playAlarmTone(volume, audioCtxRef)
+          }, 2800)
         }
       }
-      return prev
-    })
+    }
   }, [visualEnabled, soundEnabled, volume])
 
   const acknowledgeAlert = useCallback((id) => {
-    // Write acknowledged status to DB + navigate to rescue detail
     api.put('/sos/' + id, { rescue_status: 'acknowledged' }).catch(() => {})
     navigate(`/responder/rescue/${id}`)
-    setAlertQueue(prev => {
-      const next = prev.filter(a => a.id !== id)
-      if (next.length === 0) {
-        setAlertActive(false)
-        setMuteActive(false)
-        if (soundIntervalRef.current) {
-          clearInterval(soundIntervalRef.current)
-          soundIntervalRef.current = null
-        }
-        if (audioCtxRef.current) {
-          audioCtxRef.current.close().catch(() => {})
-          audioCtxRef.current = null
-        }
-      }
-      return next
-    })
+    // Cleanup is handled by the alertQueue.length effect when the queue empties
+    setAlertQueue(prev => prev.filter(a => a.id !== id))
   }, [navigate])
 
   const muteCurrentAlert = useCallback(() => {
+    muteActiveRef.current = true
     setMuteActive(true)
     setAlertActive(false)
     if (soundIntervalRef.current) {
@@ -202,9 +206,9 @@ export function ResponderLayout() {
       </AnimatePresence>
 
       {/* Notification toast cards */}
-      <AnimatePresence>
-        {notificationEnabled && alertQueue.length > 0 && (
-          <div className="fixed top-4 right-4 z-[9999] space-y-2 w-80 pointer-events-none">
+      {notificationEnabled && alertQueue.length > 0 && (
+        <div className="fixed top-4 right-4 z-[9999] space-y-2 w-80 pointer-events-none">
+          <AnimatePresence>
             {alertQueue.slice(0, 3).map((alert, i) => (
               <motion.div
                 key={alert.id}
@@ -247,9 +251,9 @@ export function ResponderLayout() {
                 </div>
               </motion.div>
             ))}
-          </div>
-        )}
-      </AnimatePresence>
+          </AnimatePresence>
+        </div>
+      )}
     </>
   )
 }
