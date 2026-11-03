@@ -217,13 +217,28 @@ async function get(path) {
     const authState = _getAuthState()
     const victimId  = authState.user?.victim_id ?? null
     if (getNetworkOnline() && victimId) {
-      const { data, error } = await supabase.rpc('get_victim_sos_reports', { p_victim_id: victimId })
-      if (!error) return (data ?? []).map(normalizeSos)
-      // If RPC not yet deployed, fall through to PHP backend
+      // 1. Try SECURITY DEFINER RPC (bypasses RLS, requires migration SQL to be run)
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('get_victim_sos_reports', { p_victim_id: victimId })
+      if (!rpcErr) return (rpcData ?? []).map(normalizeSos)
+
+      // 2. RPC not deployed — try direct query (requires victim_device_id column + anon SELECT policy)
+      const { data: directData, error: directErr } = await supabase
+        .from('sos_reports')
+        .select('*')
+        .eq('victim_device_id', victimId)
+        .order('created_at', { ascending: false })
+        .limit(100)
+      if (!directErr) return (directData ?? []).map(normalizeSos)
+
+      // 3. Both Supabase paths failed — fall through to PHP/MySQL
     }
-    // Offline path or no victimId or RPC error → PHP mine.php → MySQL
-    const rows = await localFetch('sos/mine')
-    return (Array.isArray(rows) ? rows : []).map(normalizeSos)
+    // Offline, no victimId, or both Supabase paths failed → PHP mine.php → MySQL
+    try {
+      const rows = await localFetch('sos/mine')
+      return (Array.isArray(rows) ? rows : []).map(normalizeSos)
+    } catch {
+      return []
+    }
   }
 
   const { resource, id, table, params } = parsePath(path)

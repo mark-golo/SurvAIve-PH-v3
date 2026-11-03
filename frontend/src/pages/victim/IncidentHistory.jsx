@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Clock, ChevronRight, WifiOff, Map, Radio, Settings, Home, MessageSquare, RefreshCw } from 'lucide-react'
 import { MobileNavBar, TopBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
@@ -48,6 +48,8 @@ const EMERGENCY_LABELS = {
 
 export function IncidentHistory() {
   const navigate  = useNavigate()
+  const location  = useLocation()
+  const pageTitle = location.state?.overrideTitle ?? 'Incident History'
   const { user }  = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
   const [isOnline]= useState(getNetworkOnline)
@@ -82,7 +84,7 @@ export function IncidentHistory() {
 
   return (
     <div className={`h-screen flex flex-col bg-mesh overflow-hidden${isLight ? ' light-theme' : ''}`}>
-      <TopBar title="Incident History" onBack />
+      <TopBar title={pageTitle} onBack />
 
       <div className="flex gap-1 px-4 pt-3 pb-1 overflow-x-auto shrink-0">
         {tabs.map(t => (

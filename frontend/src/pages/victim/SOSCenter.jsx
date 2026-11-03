@@ -76,7 +76,7 @@ export function SOSCenter() {
   function goToTracking() {
     const first = active[0]
     if (first) navigate(`/sos/${first.id}`)
-    else navigate('/sos/history')
+    else navigate('/sos/history', { state: { overrideTitle: 'Response Tracking' } })
   }
 
   const stats = [
@@ -87,9 +87,9 @@ export function SOSCenter() {
   ]
 
   const mgmt = [
-    { label: 'Response Tracking', sub: 'Track your active SOS incident', icon: Activity, onClick: goToTracking },
-    { label: 'Incident History',  sub: 'View all your SOS records',      icon: Clock,    onClick: () => navigate('/sos/history') },
-    { label: 'Post-Rescue Feedback', sub: 'Rate completed responses',    icon: CheckCircle, onClick: () => navigate('/sos/history') },
+    { label: 'Response Tracking',    sub: 'Track your active SOS incident', icon: Activity,    onClick: goToTracking },
+    { label: 'Incident History',     sub: 'View all your SOS records',      icon: Clock,       onClick: () => navigate('/sos/history') },
+    { label: 'Post-Rescue Feedback', sub: 'Rate completed responses',       icon: CheckCircle, onClick: () => navigate('/sos/history', { state: { overrideTitle: 'Post-Rescue Feedback' } }) },
   ]
 
   return (
