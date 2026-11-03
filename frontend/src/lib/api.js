@@ -694,6 +694,7 @@ async function post(path, body = {}) {
       .from('sos_reports')
       .insert({
         user_id:             supabaseUserId,
+        victim_device_id:    body.victim_id           ?? null,
         name:                body.name                ?? null,
         barangay:            body.barangay            || null,
         municipality:        body.municipality        || null,
