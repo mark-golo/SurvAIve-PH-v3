@@ -940,15 +940,28 @@ async function put(path, body = {}) {
     return data
   }
 
-  // ── SOS UPDATE: SECURITY DEFINER RPC to bypass RLS ──────────────────────────
-  // Staff log in via PHP JWT only — Supabase sees them as anon, so the RLS UPDATE
-  // policy would silently reject supabase.from('sos_reports').update(...). Mirror
-  // the GET pattern which already uses get_sos_with_priority (SECURITY DEFINER).
+  // ── SOS UPDATE ────────────────────────────────────────────────────────────────
+  // Two online strategies so the update works regardless of which SQL migrations
+  // have been run. Strategy 1 needs the anon UPDATE policy (migration 20261101).
+  // Strategy 2 needs the SECURITY DEFINER RPC (migration 20261031).
   if (resource === 'sos' && id) {
     if (!getNetworkOnline()) {
       return await localFetch(`sos/${id}`, { method: 'PUT', body: JSON.stringify(body) })
     }
-    const { data: oldRescueStatus, error } = await supabase.rpc('update_sos_by_id', {
+    // Strategy 1: direct table update (anon UPDATE policy — migration 20261101)
+    const updatePayload = {}
+    if (body.rescue_status !== undefined)         updatePayload.rescue_status = body.rescue_status
+    if (body.confirmed_by_name !== undefined)     updatePayload.confirmed_by_name = body.confirmed_by_name
+    if (body.confirmed_at !== undefined)          updatePayload.confirmed_at = body.confirmed_at
+    if (body.notes !== undefined)                 updatePayload.notes = body.notes
+    if (body.assigned_responder_id !== undefined) updatePayload.assigned_responder_id = body.assigned_responder_id
+    if (typeof body.dismissed === 'boolean')      updatePayload.dismissed = body.dismissed
+    if (body.status !== undefined)                updatePayload.status = body.status
+    if (body.confirmed_by_role !== undefined)     updatePayload.confirmed_by_role = body.confirmed_by_role
+    const { error: directErr } = await supabase.from('sos_reports').update(updatePayload).eq('id', Number(id))
+    if (!directErr) return { id: Number(id) }
+    // Strategy 2: SECURITY DEFINER RPC fallback (migration 20261031)
+    const { data: oldRescueStatus, error: rpcErr } = await supabase.rpc('update_sos_by_id', {
       p_id:                     Number(id),
       p_rescue_status:          body.rescue_status           ?? null,
       p_confirmed_by_name:      body.confirmed_by_name       ?? null,
@@ -959,7 +972,7 @@ async function put(path, body = {}) {
       p_status:                 body.status                  ?? null,
       p_confirmed_by_role:      body.confirmed_by_role       ?? null,
     })
-    if (error) sbThrow(error)
+    if (rpcErr) sbThrow(rpcErr)
     return { id: Number(id), _old_rescue_status: oldRescueStatus ?? null }
   }
 

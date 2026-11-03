@@ -19,6 +19,7 @@ import { LocalMap }        from './pages/victim/LocalMap'
 import { VictimSettings }  from './pages/victim/VictimSettings'
 
 // Responder pages
+import { ResponderLayout }   from './pages/responder/ResponderLayout'
 import { ResponderHome }     from './pages/responder/ResponderHome'
 import { VictimQueue }       from './pages/responder/VictimQueue'
 import { RescueDetail }      from './pages/responder/RescueDetail'
@@ -86,18 +87,22 @@ export const router = createHashRouter([
     ],
   },
 
-  // Responder routes
+  // Responder routes — wrapped in ResponderLayout so the emergency alert system
+  // (Supabase subscription, polling, toast, pulse overlay) mounts for every page.
   {
     element: <RoleGuard allowed={['responder']} />,
-    children: [
-      { path: '/responder',              element: <ResponderHome /> },
-      { path: '/responder/queue',        element: <VictimQueue /> },
-      { path: '/responder/rescue/:id',   element: <RescueDetail /> },
-      { path: '/responder/map',          element: <FieldMap /> },
-      { path: '/responder/relay',        element: <MeshCenter /> },
-      { path: '/responder/mesh',         element: <MeshCenter /> },
-      { path: '/responder/settings',     element: <ResponderSettings /> },
-    ],
+    children: [{
+      element: <ResponderLayout />,
+      children: [
+        { path: '/responder',              element: <ResponderHome /> },
+        { path: '/responder/queue',        element: <VictimQueue /> },
+        { path: '/responder/rescue/:id',   element: <RescueDetail /> },
+        { path: '/responder/map',          element: <FieldMap /> },
+        { path: '/responder/relay',        element: <MeshCenter /> },
+        { path: '/responder/mesh',         element: <MeshCenter /> },
+        { path: '/responder/settings',     element: <ResponderSettings /> },
+      ],
+    }],
   },
 
   // Admin routes — single AdminLayout instance wraps all children so alert
