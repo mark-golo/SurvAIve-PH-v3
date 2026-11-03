@@ -123,7 +123,7 @@ export function SOSCenter() {
 
   function goToTracking() {
     const first = active[0]
-    if (first) navigate(`/sos/${first.id}`)
+    if (first?.id) navigate(`/sos/${first.id}`)
     else navigate('/sos/history', { state: { overrideTitle: 'Response Tracking' } })
   }
 

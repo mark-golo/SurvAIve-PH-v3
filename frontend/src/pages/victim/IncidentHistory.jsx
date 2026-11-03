@@ -57,6 +57,7 @@ export function IncidentHistory() {
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('all')
+  const [reloadKey, setReloadKey] = useState(0)
 
   function load() {
     setLoading(true)
@@ -65,7 +66,14 @@ export function IncidentHistory() {
     }).catch(() => {}).finally(() => setLoading(false))
   }
 
-  useEffect(() => { if (isOnline) { load() } else { setLoading(false) } }, [isOnline])
+  useEffect(() => { if (isOnline) { load() } else { setLoading(false) } }, [isOnline, reloadKey])
+
+  // Auto-refresh so completed rescues appear without manual navigation
+  useEffect(() => {
+    if (!isOnline) return
+    const poll = setInterval(() => setReloadKey(k => k + 1), 15_000)
+    return () => clearInterval(poll)
+  }, [isOnline])
 
   const filtered = useMemo(() => {
     switch (tab) {

@@ -8,6 +8,7 @@ import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline } from '../../lib/capacitor'
 import api from '../../lib/api'
 import { supabase } from '../../lib/supabase'
+import { db } from '../../lib/db'
 
 const RESCUE_STATUS_META = {
   pending:      { label: 'Awaiting Acknowledgment', color: '#94a3b8' },
@@ -32,17 +33,28 @@ export function ResponseTracking() {
   const { user }  = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
   const [isOnline]= useState(getNetworkOnline)
-  const [report,  setReport]  = useState(null)
-  const [events,  setEvents]  = useState([])
-  const [loading, setLoading] = useState(true)
-  const [lastSync,setLastSync]= useState(null)
+  const [report,    setReport]  = useState(null)
+  const [events,    setEvents]  = useState([])
+  const [loading,   setLoading] = useState(true)
+  const [lastSync,  setLastSync]= useState(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   async function load() {
     setLoading(true)
     try {
-      // Fetch own SOS record
+      // Try Supabase/PHP first
       const all = await api.get('/sos/mine')
-      const r = Array.isArray(all) ? all.find(x => String(x.id) === String(id)) : null
+      let r = Array.isArray(all) ? all.find(x => String(x.id) === String(id)) : null
+
+      // Fallback to IndexedDB when API didn't return the record
+      if (!r) {
+        try {
+          const local = await db.getAllSOS()
+          const match = local.find(x => String(x.id) === String(id))
+          if (match) r = { ...match, rescue_status: match.rescue_status ?? 'pending' }
+        } catch {}
+      }
+
       setReport(r ?? null)
 
       // Fetch status events from Supabase
@@ -62,20 +74,27 @@ export function ResponseTracking() {
     }
   }
 
-  useEffect(() => { if (isOnline) { load() } else { setLoading(false) } }, [isOnline, id])
+  useEffect(() => { if (isOnline) { load() } else { setLoading(false) } }, [isOnline, id, reloadKey])
 
-  // Auto-refresh when responder updates this SOS's rescue_status
+  // Auto-refresh when responder updates this SOS's rescue_status via Realtime
   useEffect(() => {
     if (!isOnline) return
     const ch = supabase.channel(`rt-sos-${id}`)
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'sos_reports',
           filter: `id=eq.${id}` },
-        () => { load() }
+        () => { setReloadKey(k => k + 1) }
       )
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [id, isOnline])
+
+  // Polling fallback — catches status updates when Realtime is unavailable
+  useEffect(() => {
+    if (!isOnline) return
+    const poll = setInterval(() => setReloadKey(k => k + 1), 10_000)
+    return () => clearInterval(poll)
+  }, [isOnline, id])
 
   // Build timeline steps — merge system events with derived steps
   function buildTimeline(r, evts) {

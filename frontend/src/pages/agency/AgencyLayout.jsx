@@ -103,6 +103,7 @@ export function AgencyLayout() {
   }, [visualEnabled, soundEnabled, volume])
 
   const acknowledgeAlert = useCallback((id) => {
+    api.put('/sos/' + id, { rescue_status: 'acknowledged' }).catch(() => {})
     setAlertQueue(prev => {
       const next = prev.filter(a => a.id !== id)
       if (next.length === 0) {
