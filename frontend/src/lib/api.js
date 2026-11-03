@@ -234,7 +234,7 @@ async function get(path) {
         if (!directErr) supaRows = (directData ?? []).map(normalizeSos)
       }
 
-      if (supaRows) {
+      if (supaRows?.length) {
         // Merge PHP/MySQL data: PHP rescue_status overrides stale Supabase when Strategy 3
         // fallback wrote the status update to MySQL but Supabase wasn't yet updated.
         try {
