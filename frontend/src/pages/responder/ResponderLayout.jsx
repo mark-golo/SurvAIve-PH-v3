@@ -5,7 +5,7 @@ import { Bell } from 'lucide-react'
 import { useAuthStore } from '../../store/auth'
 import { useAlertStore } from '../../store/alertStore'
 import { supabase } from '../../lib/supabase'
-import api from '../../lib/api'
+import api, { localFetch } from '../../lib/api'
 
 function playAlarmTone(vol, audioCtxRef) {
   try {
@@ -124,7 +124,8 @@ export function ResponderLayout() {
         { event: 'INSERT', schema: 'public', table: 'sos_reports' },
         payload => {
           const r = payload.new
-          if (muni && r.municipality && r.municipality !== muni) return
+          const norm = s => s?.toLowerCase().trim() ?? ''
+          if (muni && r.municipality && norm(r.municipality) !== norm(muni)) return
           if (seenIdsRef.current.has(r.id)) return
           seenIdsRef.current.add(r.id)
           triggerAlert({
@@ -140,51 +141,57 @@ export function ResponderLayout() {
     return () => { supabase.removeChannel(ch) }
   }, [muni, triggerAlert])
 
-  // Polling fallback — catches SOS that bypass Realtime (< 2 min old)
+  // Polling fallback — catches SOS that bypass Realtime (< 2 min old).
+  // Queries Supabase and XAMPP PHP independently so either source failing
+  // (e.g. no internet on local hotspot, or XAMPP not running) doesn't block
+  // the other. api.get() is NOT used here because it throws before reaching
+  // its own MySQL fallback when Supabase is unreachable.
   useEffect(() => {
-    const endpoint = muni ? `/sos?municipality=${encodeURIComponent(muni)}` : '/sos'
+    const norm = s => s?.toLowerCase().trim() ?? ''
 
-    api.get(endpoint)
-      .then(rows => {
-        ;(Array.isArray(rows) ? rows : []).forEach(r => {
-          if (seenIdsRef.current.has(r.id)) return
-          seenIdsRef.current.add(r.id)
-          const ts  = r.created_at ?? r.timestamp ?? null
-          const age = ts ? Date.now() - new Date(ts).getTime() : Infinity
-          if (age < 120_000) {
-            triggerAlert({
-              id:           r.id,
-              name:         r.name ?? 'Unknown',
-              barangay:     r.barangay ?? '—',
-              municipality: r.municipality ?? '',
-              ts:           new Date().toLocaleTimeString(),
-            })
-          }
-        })
-      })
-      .catch(() => {})
+    async function fetchAndProcess() {
+      const rows = []
+      const fetched = new Set()
 
-    const poll = setInterval(async () => {
+      // Source 1: Supabase (works when internet is available)
       try {
-        const rows = await api.get(endpoint)
-        ;(Array.isArray(rows) ? rows : []).forEach(r => {
-          if (seenIdsRef.current.has(r.id)) return
-          seenIdsRef.current.add(r.id)
-          const ts  = r.created_at ?? r.timestamp ?? null
-          const age = ts ? Date.now() - new Date(ts).getTime() : Infinity
-          if (age < 120_000) {
-            triggerAlert({
-              id:           r.id,
-              name:         r.name ?? 'Unknown',
-              barangay:     r.barangay ?? '—',
-              municipality: r.municipality ?? '',
-              ts:           new Date().toLocaleTimeString(),
-            })
-          }
-        })
-      } catch { /* ignore polling errors */ }
-    }, 10_000)
+        const { data } = await supabase
+          .from('sos_reports')
+          .select('id, name, barangay, municipality, created_at, timestamp')
+          .order('created_at', { ascending: false })
+          .limit(100)
+        ;(data ?? []).forEach(r => { fetched.add(r.id); rows.push(r) })
+      } catch {}
 
+      // Source 2: XAMPP PHP (works on local hotspot when internet is unavailable)
+      try {
+        const raw = await localFetch('sos')
+        ;(Array.isArray(raw) ? raw : [])
+          .filter(r => !fetched.has(r.id))
+          .forEach(r => rows.push(r))
+      } catch {}
+
+      rows.forEach(r => {
+        if (seenIdsRef.current.has(r.id)) return
+        // Case-insensitive municipality filter — avoids silent drop on casing/spacing mismatch
+        if (muni && r.municipality && norm(r.municipality) !== norm(muni)) return
+        seenIdsRef.current.add(r.id)
+        const ts  = r.created_at ?? r.timestamp ?? null
+        const age = ts ? Date.now() - new Date(ts).getTime() : Infinity
+        if (age < 120_000) {
+          triggerAlert({
+            id:           r.id,
+            name:         r.name ?? 'Unknown',
+            barangay:     r.barangay ?? '—',
+            municipality: r.municipality ?? '',
+            ts:           new Date().toLocaleTimeString(),
+          })
+        }
+      })
+    }
+
+    fetchAndProcess()
+    const poll = setInterval(fetchAndProcess, 10_000)
     return () => clearInterval(poll)
   }, [muni, triggerAlert])
 
