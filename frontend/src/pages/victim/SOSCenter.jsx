@@ -65,13 +65,19 @@ export function SOSCenter() {
         } catch { /* RPC not deployed or network error — show local only */ }
       }
 
-      // Merge: Supabase records take precedence (have live status updates);
-      // local records that already appear in Supabase are excluded.
+      // Merge: Supabase/server records take precedence (have live status updates).
+      // Deduplicate by both id and mesh_packet_id so synced local records don't
+      // appear alongside their confirmed server counterpart.
+      const confirmedIds     = new Set(confirmed.map(r => r.id).filter(Boolean))
       const confirmedPackets = new Set(confirmed.map(r => r.mesh_packet_id).filter(Boolean))
-      const localOnly = local.filter(p => !confirmedPackets.has(p.mesh_packet_id ?? p.meshPacketId))
+      const localOnly = local.filter(p =>
+        !confirmedIds.has(p.id) &&
+        !confirmedPackets.has(p.mesh_packet_id ?? p.meshPacketId)
+      )
 
       if (!cancelled) {
-        setHasPending(localOnly.length > 0 && confirmed.length === 0)
+        // Only show the amber banner for records that haven't reached the server (synced:false).
+        setHasPending(localOnly.some(p => !p.synced) && confirmed.length === 0)
         setReports([...confirmed, ...localOnly])
         setLoading(false)
       }

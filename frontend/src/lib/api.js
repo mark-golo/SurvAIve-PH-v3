@@ -705,7 +705,7 @@ async function post(path, body = {}) {
       if (vRow?.id) supabaseUserId = vRow.id
     }
 
-    const { error } = await supabase
+    const { data: inserted, error } = await supabase
       .from('sos_reports')
       .insert({
         user_id:             supabaseUserId,
@@ -725,6 +725,7 @@ async function post(path, body = {}) {
         rescue_status:       'pending',
         is_verified:         isVerified,
         trust_score:         trustScore,
+        mesh_packet_id:      body.mesh_packet_id      ?? null,
         // dual-mode SOS: YOLO11 AI analysis fields
         sos_mode:            body.sos_mode            ?? 'status',
         ai_scene_label:      body.ai_scene_label      ?? null,
@@ -735,11 +736,16 @@ async function post(path, body = {}) {
                                : (body.service_type ? [body.service_type] : null),
         relay_source:        body.relay_source ?? null,
       })
+      .select('id')
     if (error) {
       console.error('[SOS INSERT] Supabase error:', error.code, error.message, error.details)
       sbThrow(error)
     }
-    return { ai_priority_score: score }
+    const newId = inserted?.[0]?.id ?? null
+    // Dual-write to PHP/MySQL so admin's MySQL-based queries also see this SOS immediately.
+    localFetch('sos', { method: 'POST', body: JSON.stringify({ ...body, ai_priority_score: score }) })
+      .catch(() => {})
+    return { ai_priority_score: score, id: newId }
   }
 
   // ── Responder creation: create Supabase Auth account + profiles row ──
