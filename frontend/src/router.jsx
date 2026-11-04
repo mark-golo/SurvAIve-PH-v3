@@ -12,7 +12,8 @@ import { HomeScreen }      from './pages/victim/HomeScreen'
 import { SOSReport }        from './pages/victim/SOSReport'
 import { SOSCenter }        from './pages/victim/SOSCenter'
 import { IncidentHistory }  from './pages/victim/IncidentHistory'
-import { ResponseTracking } from './pages/victim/ResponseTracking'
+import { ResponseTracking }     from './pages/victim/ResponseTracking'
+import { ResponseTrackingList } from './pages/victim/ResponseTrackingList'
 import { RescueFeedback }   from './pages/victim/RescueFeedback'
 import { MeshStatus }       from './pages/victim/MeshStatus'
 import { LocalMap }        from './pages/victim/LocalMap'
@@ -79,8 +80,9 @@ export const router = createHashRouter([
       { path: '/sos',             element: <SOSCenter /> },
       { path: '/sos/new',         element: <SOSReport /> },
       { path: '/sos/history',     element: <IncidentHistory /> },
-      { path: '/sos/:id/feedback',element: <RescueFeedback /> },
-      { path: '/sos/:id',         element: <ResponseTracking /> },
+      { path: '/sos/tracking',      element: <ResponseTrackingList /> },
+      { path: '/sos/:id/feedback', element: <RescueFeedback /> },
+      { path: '/sos/:id',          element: <ResponseTracking /> },
       { path: '/mesh',            element: <MeshStatus /> },
       { path: '/map',      element: <LocalMap /> },
       { path: '/settings', element: <VictimSettings /> },

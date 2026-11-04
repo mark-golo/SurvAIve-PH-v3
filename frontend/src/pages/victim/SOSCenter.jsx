@@ -146,13 +146,7 @@ export function SOSCenter() {
   const completed = reports.filter(r => r.rescue_status === 'rescued' || r.dismissed)
 
   function goToTracking() {
-    const first = active[0]
-    if (first?.id) navigate(`/sos/${first.id}`)
-    else {
-      const rescued = reports.find(r => r.rescue_status === 'rescued' && !r.dismissed)
-      if (rescued?.id) navigate(`/sos/${rescued.id}`)
-      else navigate('/sos/history', { state: { overrideTitle: 'Response Tracking' } })
-    }
+    navigate('/sos/tracking')
   }
 
   const stats = [
