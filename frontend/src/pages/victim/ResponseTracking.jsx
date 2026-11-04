@@ -243,7 +243,7 @@ export function ResponseTracking() {
                     whileTap={{ scale: 0.97 }}
                     onClick={() => navigate('/sos/history', { state: { overrideTitle: 'Post-Rescue Feedback' } })}
                     className="flex-1 py-2.5 rounded-xl border border-[rgba(255,255,255,0.12)]
-                               text-slate-300 text-sm font-semibold hover:bg-[rgba(255,255,255,0.05)]">
+                               text-slate-300 text-xs font-semibold hover:bg-[rgba(255,255,255,0.05)]">
                     MAYBE LATER
                   </motion.button>
                 </div>
