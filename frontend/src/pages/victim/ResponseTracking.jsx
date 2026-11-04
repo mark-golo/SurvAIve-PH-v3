@@ -155,42 +155,47 @@ export function ResponseTracking() {
           </div>
         ) : (
           <>
-            {/* Unified SOS + Timeline card — hidden when rescued and collapsed */}
-            {(report.rescue_status !== 'rescued' || !collapsed) && (
-              <div className="glass rounded-2xl p-4 space-y-3 border border-[rgba(255,255,255,0.06)]">
-                {/* SOS header row */}
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono text-slate-500">SOS #{report.id}</span>
+            {/* Summary card — always visible; chevron toggles timeline */}
+            <div className="glass rounded-2xl p-4 space-y-3 border border-[rgba(255,255,255,0.06)]">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono text-slate-500">SOS #{report.id}</span>
+                <div className="flex items-center gap-2">
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${PRIORITY_COLOR(report.ai_priority_score ?? 50)} bg-[rgba(255,255,255,0.05)]`}>
                     {PRIORITY_LABEL(report.ai_priority_score ?? 50)} · Score {report.ai_priority_score ?? '—'}
                   </span>
+                  <button
+                    onClick={() => setCollapsed(c => !c)}
+                    className="text-slate-500 hover:text-[#00d4ff] transition-colors"
+                    aria-label={collapsed ? 'Show timeline' : 'Hide timeline'}>
+                    <ChevronLeft size={14} className={`transition-transform duration-200 ${collapsed ? '-rotate-90' : 'rotate-90'}`} />
+                  </button>
                 </div>
-                {/* Details grid */}
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div><span className="text-slate-500">Status: </span><span className="text-white capitalize">{report.status}</span></div>
-                  <div><span className="text-slate-500">People: </span><span className="text-white">{report.people_count}</span></div>
-                  <div><span className="text-slate-500">Barangay: </span><span className="text-white">{report.barangay ?? '—'}</span></div>
-                  <div><span className="text-slate-500">Submitted: </span><span className="text-white">{fmtTime(report.created_at)}</span></div>
-                </div>
-                {/* Current rescue status badge */}
-                {(() => {
-                  const meta = RESCUE_STATUS_META[report.rescue_status] ?? { label: report.rescue_status, color: '#94a3b8' }
-                  return (
-                    <div className="rounded-xl p-2 text-center border" style={{ borderColor: meta.color + '44', background: meta.color + '18' }}>
-                      <p className="text-sm font-bold" style={{ color: meta.color }}>{meta.label}</p>
-                    </div>
-                  )
-                })()}
-                {/* Divider before timeline */}
-                <div className="border-t border-[rgba(255,255,255,0.06)]" />
-                {/* Timeline sub-header */}
-                <div className="flex items-center justify-between">
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div><span className="text-slate-500">Status: </span><span className="text-white capitalize">{report.status}</span></div>
+                <div><span className="text-slate-500">People: </span><span className="text-white">{report.people_count}</span></div>
+                <div><span className="text-slate-500">Barangay: </span><span className="text-white">{report.barangay ?? '—'}</span></div>
+                <div><span className="text-slate-500">Submitted: </span><span className="text-white">{fmtTime(report.created_at)}</span></div>
+              </div>
+              {(() => {
+                const meta = RESCUE_STATUS_META[report.rescue_status] ?? { label: report.rescue_status, color: '#94a3b8' }
+                return (
+                  <div className="rounded-xl p-2 text-center border" style={{ borderColor: meta.color + '44', background: meta.color + '18' }}>
+                    <p className="text-sm font-bold" style={{ color: meta.color }}>{meta.label}</p>
+                  </div>
+                )
+              })()}
+            </div>
+
+            {/* Timeline — shown when expanded */}
+            {!collapsed && (
+              <div className="glass rounded-2xl p-4 border border-[rgba(255,255,255,0.06)]">
+                <div className="flex items-center justify-between mb-4">
                   <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Response Timeline</p>
                   <button onClick={load} className="text-slate-500 hover:text-[#00d4ff] transition-colors">
                     <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
                   </button>
                 </div>
-                {/* Timeline steps */}
                 <div className="space-y-3">
                   {buildTimeline(report, events).map(({ label, done, ts }, i) => (
                     <div key={i} className="flex items-start gap-3">
@@ -216,18 +221,10 @@ export function ResponseTracking() {
               </div>
             )}
 
-            {/* Feedback CTA — visible only when rescued; chevron toggles the full entry above */}
-            {report.rescue_status === 'rescued' && (
+            {/* CTA — shown when expanded AND rescued */}
+            {!collapsed && report.rescue_status === 'rescued' && (
               <div className="glass rounded-2xl p-3 border border-green-500/30 bg-green-900/10">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-green-400 uppercase tracking-wider">Tell Us About Your Experience</span>
-                  <button
-                    onClick={() => setCollapsed(c => !c)}
-                    className="text-slate-500 hover:text-[#00d4ff] transition-colors"
-                    aria-label={collapsed ? 'Show SOS details' : 'Hide SOS details'}>
-                    <ChevronLeft size={14} className={`transition-transform duration-200 ${collapsed ? '-rotate-90' : 'rotate-90'}`} />
-                  </button>
-                </div>
+                <span className="text-xs font-bold text-green-400 uppercase tracking-wider">Tell Us About Your Experience</span>
                 <p className="text-xs text-slate-400 mt-1 leading-relaxed">Share your experience to improve emergency response</p>
                 <div className="flex gap-2 mt-2.5">
                   <motion.button
