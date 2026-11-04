@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   trust_score           VARCHAR(20) DEFAULT 'LOW',
   ai_priority_score     TINYINT UNSIGNED NOT NULL DEFAULT 50,
   assigned_responder_id INT DEFAULT NULL,
-  rescue_status         ENUM('pending','en_route','on_scene','rescued','cannot_reach') NOT NULL DEFAULT 'pending',
+  rescue_status         ENUM('pending','acknowledged','en_route','on_scene','rescued','cannot_reach') NOT NULL DEFAULT 'pending',
   field_notes           TEXT DEFAULT NULL,
   confirmed_by_name     VARCHAR(200) DEFAULT NULL,
   confirmed_at          TIMESTAMP NULL DEFAULT NULL,

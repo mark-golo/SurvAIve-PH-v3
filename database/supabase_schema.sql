@@ -135,7 +135,7 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   ai_priority_score     SMALLINT NOT NULL DEFAULT 50,
   assigned_responder_id BIGINT REFERENCES responders(id) ON DELETE SET NULL,
   rescue_status         TEXT NOT NULL DEFAULT 'pending'
-                          CHECK (rescue_status IN ('pending','en_route','on_scene','rescued','cannot_reach')),
+                          CHECK (rescue_status IN ('pending','acknowledged','en_route','on_scene','rescued','cannot_reach')),
   field_notes           TEXT,
   -- dual-mode SOS: YOLO11 AI analysis fields
   sos_mode              TEXT     NOT NULL DEFAULT 'status',
