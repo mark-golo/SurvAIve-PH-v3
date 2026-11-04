@@ -233,6 +233,18 @@ export function RescueDetail() {
         {/* Rescue status */}
         <GlassCard>
           <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-3">Rescue Actions</p>
+          {/* Confirm SOS — full-width prominence button above the action grid */}
+          <button
+            onClick={() => updateStatus('acknowledged')}
+            className={`w-full mb-2 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all border ${
+              rescueStatus === 'acknowledged'
+                ? 'bg-amber-500/20 border-amber-400/60 text-amber-200 ring-1 ring-amber-400/40'
+                : 'bg-[rgba(245,158,11,0.08)] border-[rgba(245,158,11,0.3)] text-amber-400 hover:bg-[rgba(245,158,11,0.16)] active:scale-[0.98]'
+            }`}
+          >
+            <CheckCircle size={14} />
+            Confirm SOS
+          </button>
           <div className="grid grid-cols-2 gap-2">
             {ACTIONS.map(({ label, value, variant, icon: Icon }) => (
               <NeonButton
