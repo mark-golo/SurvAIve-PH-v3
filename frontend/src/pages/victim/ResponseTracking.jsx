@@ -47,6 +47,7 @@ function fmtTime(ts) {
   return new Date(ts).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+// v2 — IncidentHistory card style
 export function ResponseTracking() {
   const { id }    = useParams()
   const navigate  = useNavigate()
