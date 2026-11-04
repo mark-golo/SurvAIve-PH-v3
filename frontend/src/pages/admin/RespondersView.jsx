@@ -73,9 +73,12 @@ export function RespondersView() {
         payload => {
           const r = payload.new
           if (muni && r.municipality !== muni) return
+          const derivedStatus = (r.rescue_status === 'pending' && r.confirmed_by_name && !r.confirmed_at)
+            ? 'acknowledged'
+            : r.rescue_status
           setSosReports(prev => prev.map(x =>
             x.id === r.id
-              ? { ...x, rescue_status: r.rescue_status, notes: r.notes, assigned_responder_id: r.assigned_responder_id }
+              ? { ...x, rescue_status: derivedStatus, notes: r.notes, assigned_responder_id: r.assigned_responder_id, confirmed_by_name: r.confirmed_by_name, confirmed_at: r.confirmed_at }
               : x
           ))
         }

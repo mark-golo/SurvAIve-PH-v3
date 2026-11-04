@@ -182,6 +182,11 @@ function normalizeSos(r) {
     timestamp:      r.timestamp ?? r.created_at,
     name:           r.name ?? joinedName,
     contact_number: r.contact_number ?? joinedContact,
+    // Derive 'acknowledged' when confirmed_by_name is set without confirmed_at.
+    // Supabase rescue_status stays 'pending' (CHECK constraint bypass); MySQL has real value.
+    rescue_status: (r.rescue_status === 'pending' && r.confirmed_by_name && !r.confirmed_at)
+      ? 'acknowledged'
+      : r.rescue_status,
     priority,
     time_ago,
     victims: undefined,
@@ -981,8 +986,14 @@ async function put(path, body = {}) {
     if (typeof body.dismissed === 'boolean')      updatePayload.dismissed = body.dismissed
     if (body.status !== undefined)                updatePayload.status = body.status
     if (body.confirmed_by_role !== undefined)     updatePayload.confirmed_by_role = body.confirmed_by_role
+    // Supabase CHECK constraint rejects 'acknowledged' — skip rescue_status and rely on
+    // confirmed_by_name as the acknowledgment marker; normalizeSos derives the status on read.
+    const supaPayload = { ...updatePayload }
+    if (supaPayload.rescue_status === 'acknowledged') {
+      delete supaPayload.rescue_status
+    }
     const [supaResult, phpResult] = await Promise.allSettled([
-      supabase.from('sos_reports').update(updatePayload).eq('id', Number(id)),
+      supabase.from('sos_reports').update(supaPayload).eq('id', Number(id)),
       localFetch(`sos/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
     ])
     const supaOk = supaResult.status === 'fulfilled' && !supaResult.value?.error

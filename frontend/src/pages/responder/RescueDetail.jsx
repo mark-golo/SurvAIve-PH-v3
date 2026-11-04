@@ -93,6 +93,9 @@ export function RescueDetail() {
         payload.confirmed_by_name = responderProfile?.name ?? null
         payload.confirmed_at = new Date().toISOString()
       }
+      if (newStatus === 'acknowledged') {
+        payload.confirmed_by_name = responderProfile?.name ?? 'responder'
+      }
       try {
         await api.put(`/sos/${victim.id}`, payload)
         // Write status event to Supabase (online only — best-effort)
