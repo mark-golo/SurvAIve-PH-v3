@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { CheckCircle, Clock, WifiOff, RefreshCw, Star, AlertOctagon, ChevronLeft } from 'lucide-react'
@@ -39,6 +39,7 @@ export function ResponseTracking() {
   const [lastSync,  setLastSync]= useState(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [collapsed, setCollapsed] = useState(false)
+  const initializedRef = useRef(false)
 
   async function load() {
     setLoading(true)
@@ -65,7 +66,10 @@ export function ResponseTracking() {
       }
 
       setReport(r ?? null)
-      if (r?.rescue_status === 'rescued') setCollapsed(true)
+      if (!initializedRef.current) {
+        if (r?.rescue_status === 'rescued') setCollapsed(true)
+        initializedRef.current = true
+      }
 
       // Fetch status events from Supabase
       if (r) {
