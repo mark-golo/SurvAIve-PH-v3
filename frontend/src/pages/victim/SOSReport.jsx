@@ -907,10 +907,10 @@ export function SOSReport() {
                 key={opt.value}
                 type="button"
                 onClick={() => setAgeGroup(opt.value)}
-                className={`glass rounded-xl py-3 flex flex-col items-center gap-1 transition-all border ${
+                className={`rounded-xl py-3 flex flex-col items-center gap-1 transition-all border ${
                   ageGroup === opt.value
-                    ? 'bg-[#00d4ff] border-[#00d4ff]'
-                    : 'border-[rgba(255,255,255,0.08)] hover:border-[rgba(255,255,255,0.2)]'
+                    ? 'bg-gradient-to-r from-[#00d4ff] to-[#0ea5e9] border-[#00d4ff]'
+                    : 'glass border-[rgba(255,255,255,0.08)] hover:border-[rgba(255,255,255,0.2)]'
                 }`}
               >
                 <span
