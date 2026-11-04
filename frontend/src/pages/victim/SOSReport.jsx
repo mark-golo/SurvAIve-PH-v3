@@ -909,17 +909,17 @@ export function SOSReport() {
                 onClick={() => setAgeGroup(opt.value)}
                 className={`glass rounded-xl py-3 flex flex-col items-center gap-1 transition-all border ${
                   ageGroup === opt.value
-                    ? 'border-[rgba(0,212,255,0.5)] bg-[rgba(0,212,255,0.08)]'
+                    ? 'bg-[#00d4ff] border-[#00d4ff]'
                     : 'border-[rgba(255,255,255,0.08)] hover:border-[rgba(255,255,255,0.2)]'
                 }`}
               >
                 <span
                   className="text-sm font-bold"
-                  style={{ color: ageGroup === opt.value ? '#00d4ff' : '#94a3b8' }}
+                  style={{ color: ageGroup === opt.value ? '#050a18' : '#94a3b8' }}
                 >
                   {opt.label}
                 </span>
-                <span className="text-[10px] text-slate-500">{opt.sub}</span>
+                <span className={`text-[10px] ${ageGroup === opt.value ? 'text-[#1e293b]' : 'text-slate-500'}`}>{opt.sub}</span>
               </button>
             ))}
           </div>
