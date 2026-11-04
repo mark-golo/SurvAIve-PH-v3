@@ -4,6 +4,32 @@ require_once __DIR__ . '/../middleware/auth.php';
 
 applyCors();
 
+// Auto-apply pending DB schema migrations on first request after deployment.
+// Uses a _migrations tracking table so each migration runs exactly once.
+_runPendingMigrations();
+
+function _runPendingMigrations(): void {
+    try {
+        require_once __DIR__ . '/../config/database.php';
+        $db = getDB();
+        $db->exec("CREATE TABLE IF NOT EXISTS _migrations (
+            name       VARCHAR(100) PRIMARY KEY,
+            applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB");
+        $name = '20261104_add_acknowledged_rescue_status';
+        $st = $db->prepare("SELECT 1 FROM _migrations WHERE name = ?");
+        $st->execute([$name]);
+        if (!$st->fetch()) {
+            $db->exec("ALTER TABLE sos_reports MODIFY COLUMN rescue_status
+                ENUM('pending','acknowledged','en_route','on_scene','rescued','cannot_reach')
+                NOT NULL DEFAULT 'pending'");
+            $db->prepare("INSERT INTO _migrations (name) VALUES (?)")->execute([$name]);
+        }
+    } catch (\Throwable $e) {
+        // Never break an API request over a migration check
+    }
+}
+
 $path   = trim($_GET['path'] ?? '', '/');
 $method = $_SERVER['REQUEST_METHOD'];
 
