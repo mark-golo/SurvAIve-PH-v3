@@ -75,6 +75,30 @@ export function SOSCenter() {
         } catch { /* RPC not deployed or network error — show local only */ }
       }
 
+      // Guest path: no victim_id but local SOS records exist → check live status in Supabase
+      // by mesh_packet_id. The 15-second poll re-runs load() so the tile updates within 15 s.
+      if (isOnline && !victimId && local.length > 0) {
+        try {
+          const meshIds = local
+            .map(r => r.mesh_packet_id ?? r.meshPacketId)
+            .filter(Boolean)
+          if (meshIds.length > 0) {
+            const { data } = await supabase
+              .from('sos_reports')
+              .select('id, mesh_packet_id, rescue_status, confirmed_by_name, confirmed_at, notes, assigned_responder_id')
+              .in('mesh_packet_id', meshIds)
+            if (Array.isArray(data) && data.length > 0) {
+              confirmed = data.map(r => ({
+                ...r,
+                rescue_status: (r.rescue_status === 'pending' && r.confirmed_by_name && !r.confirmed_at)
+                  ? 'acknowledged'
+                  : r.rescue_status,
+              }))
+            }
+          }
+        } catch { /* Supabase not reachable — keep local data */ }
+      }
+
       // Merge: Supabase/server records take precedence (have live status updates).
       // Deduplicate by both id and mesh_packet_id so synced local records don't
       // appear alongside their confirmed server counterpart.

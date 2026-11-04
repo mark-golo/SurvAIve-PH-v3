@@ -224,19 +224,22 @@ async function get(path) {
     if (getNetworkOnline() && victimId) {
       let supaRows = null
 
-      // 1. Try SECURITY DEFINER RPC (bypasses RLS, requires migration SQL to be run)
+      // 1. Try SECURITY DEFINER RPC — only trust result when it returns rows
+      //    (the RPC filters by victim_device_id which may not match the integer victimId)
       const { data: rpcData, error: rpcErr } = await supabase.rpc('get_victim_sos_reports', { p_victim_id: victimId })
-      if (!rpcErr) supaRows = (rpcData ?? []).map(normalizeSos)
+      if (!rpcErr && rpcData?.length) supaRows = rpcData.map(normalizeSos)
 
-      // 2. RPC not deployed — try direct query (requires victim_device_id column + anon SELECT policy)
-      if (!supaRows) {
+      // 2. Direct query by user_id — runs if RPC failed OR returned empty rows.
+      //    Uses user_id (PHP MySQL integer) which is reliably populated; returns SELECT *
+      //    so confirmed_by_name is always present for normalizeSos to derive 'acknowledged'.
+      if (!supaRows?.length) {
         const { data: directData, error: directErr } = await supabase
           .from('sos_reports')
           .select('*')
-          .eq('victim_device_id', victimId)
+          .eq('user_id', victimId)
           .order('created_at', { ascending: false })
           .limit(100)
-        if (!directErr) supaRows = (directData ?? []).map(normalizeSos)
+        if (!directErr && directData?.length) supaRows = directData.map(normalizeSos)
       }
 
       if (supaRows?.length) {
