@@ -148,7 +148,11 @@ export function SOSCenter() {
   function goToTracking() {
     const first = active[0]
     if (first?.id) navigate(`/sos/${first.id}`)
-    else navigate('/sos/history', { state: { overrideTitle: 'Response Tracking' } })
+    else {
+      const rescued = reports.find(r => r.rescue_status === 'rescued' && !r.dismissed)
+      if (rescued?.id) navigate(`/sos/${rescued.id}`)
+      else navigate('/sos/history', { state: { overrideTitle: 'Response Tracking' } })
+    }
   }
 
   const stats = [

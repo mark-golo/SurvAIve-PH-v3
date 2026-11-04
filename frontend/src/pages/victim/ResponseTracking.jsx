@@ -38,6 +38,7 @@ export function ResponseTracking() {
   const [loading,   setLoading] = useState(true)
   const [lastSync,  setLastSync]= useState(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [collapsed, setCollapsed] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -64,6 +65,7 @@ export function ResponseTracking() {
       }
 
       setReport(r ?? null)
+      if (r?.rescue_status === 'rescued') setCollapsed(true)
 
       // Fetch status events from Supabase
       if (r) {
@@ -178,50 +180,74 @@ export function ResponseTracking() {
               })()}
             </div>
 
-            {/* Timeline */}
-            <div className="glass rounded-2xl p-4 border border-[rgba(255,255,255,0.06)]">
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Response Timeline</p>
-                <button onClick={load} className="text-slate-500 hover:text-[#00d4ff] transition-colors">
-                  <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-                </button>
-              </div>
-              <div className="space-y-3">
-                {buildTimeline(report, events).map(({ label, done, ts }, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <div className="flex flex-col items-center mt-0.5">
-                      {done ? (
-                        <div className="w-5 h-5 rounded-full bg-[rgba(34,197,94,0.2)] border-2 border-green-500 flex items-center justify-center">
-                          <CheckCircle size={12} className="text-green-400" />
-                        </div>
-                      ) : (
-                        <div className="w-5 h-5 rounded-full border-2 border-slate-700 bg-[rgba(255,255,255,0.03)]" />
-                      )}
-                      {i < 6 && <div className={`w-0.5 h-5 mt-1 ${done ? 'bg-green-800' : 'bg-slate-800'}`} />}
+            {/* Timeline — hidden when rescue is complete and card is collapsed */}
+            {(report.rescue_status !== 'rescued' || !collapsed) && (
+              <div className="glass rounded-2xl p-4 border border-[rgba(255,255,255,0.06)]">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Response Timeline</p>
+                  <button onClick={load} className="text-slate-500 hover:text-[#00d4ff] transition-colors">
+                    <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {buildTimeline(report, events).map(({ label, done, ts }, i) => (
+                    <div key={i} className="flex items-start gap-3">
+                      <div className="flex flex-col items-center mt-0.5">
+                        {done ? (
+                          <div className="w-5 h-5 rounded-full bg-[rgba(34,197,94,0.2)] border-2 border-green-500 flex items-center justify-center">
+                            <CheckCircle size={12} className="text-green-400" />
+                          </div>
+                        ) : (
+                          <div className="w-5 h-5 rounded-full border-2 border-slate-700 bg-[rgba(255,255,255,0.03)]" />
+                        )}
+                        {i < 6 && <div className={`w-0.5 h-5 mt-1 ${done ? 'bg-green-800' : 'bg-slate-800'}`} />}
+                      </div>
+                      <div className="flex-1 pb-2">
+                        <p className={`text-sm font-medium ${done ? 'text-white' : 'text-slate-600'}`}>{label}</p>
+                        <p className="text-[10px] text-slate-600 mt-0.5">
+                          {ts ? fmtTime(ts) : <span className="italic">Pending</span>}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1 pb-2">
-                      <p className={`text-sm font-medium ${done ? 'text-white' : 'text-slate-600'}`}>{label}</p>
-                      <p className="text-[10px] text-slate-600 mt-0.5">
-                        {ts ? fmtTime(ts) : <span className="italic">Pending</span>}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Feed back button if rescued */}
+            {/* Rescue completed card — collapsed by default, expandable */}
             {report.rescue_status === 'rescued' && (
-              <motion.button
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                onClick={() => navigate(`/sos/${report.id}/feedback`)}
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-600 to-amber-700
-                           border border-amber-500/40 shadow-[0_0_20px_rgba(245,158,11,0.2)]
-                           flex items-center justify-center gap-2 text-white font-semibold text-sm">
-                <Star size={16} />
-                Rate Your Response
-              </motion.button>
+              <div className="glass rounded-2xl p-4 border border-green-500/30 bg-green-900/10">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle size={16} className="text-green-400" />
+                    <span className="text-sm font-bold text-green-400">Rescue Completed</span>
+                  </div>
+                  <button
+                    onClick={() => setCollapsed(c => !c)}
+                    className="text-slate-500 hover:text-[#00d4ff] transition-colors"
+                    aria-label={collapsed ? 'Show timeline' : 'Hide timeline'}>
+                    <ChevronLeft size={16} className={`transition-transform duration-200 ${collapsed ? '-rotate-90' : 'rotate-90'}`} />
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">How was your rescue experience?</p>
+                <div className="flex gap-2 mt-3">
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => navigate(`/sos/${report.id}/feedback`)}
+                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600
+                               border border-amber-400/60 text-black text-sm font-bold
+                               shadow-[0_0_16px_rgba(245,158,11,0.25)]">
+                    NOW
+                  </motion.button>
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => navigate('/sos/history', { state: { overrideTitle: 'Post-Rescue Feedback' } })}
+                    className="flex-1 py-2.5 rounded-xl border border-[rgba(255,255,255,0.12)]
+                               text-slate-300 text-sm font-semibold hover:bg-[rgba(255,255,255,0.05)]">
+                    LATER
+                  </motion.button>
+                </div>
+              </div>
             )}
 
             {/* Last sync footer */}
