@@ -58,7 +58,10 @@ export function RescueFeedback() {
     async function load() {
       try {
         const all = await api.get('/sos/mine')
-        const r = Array.isArray(all) ? all.find(x => String(x.id) === String(id)) : null
+        let r = Array.isArray(all) ? all.find(x => String(x.id) === String(id)) : null
+        if (!r && isOnline) {
+          try { r = await api.get(`/sos/${id}`) } catch {}
+        }
         setReport(r ?? null)
 
         // Check existing feedback to prevent duplicates

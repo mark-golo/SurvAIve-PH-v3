@@ -6,6 +6,8 @@ import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline } from '../../lib/capacitor'
 import api from '../../lib/api'
+import { supabase } from '../../lib/supabase'
+import { db } from '../../lib/db'
 
 const NAV = [
   { icon: Home,          label: 'Home',    path: '/home'     },
@@ -59,11 +61,53 @@ export function IncidentHistory() {
   const [tab, setTab] = useState('all')
   const [reloadKey, setReloadKey] = useState(0)
 
-  function load() {
+  async function load() {
     setLoading(true)
-    api.get('/sos/mine').then(data => {
-      setReports(Array.isArray(data) ? data : [])
-    }).catch(() => {}).finally(() => setLoading(false))
+    try {
+      let rows = []
+
+      // Stage A — authenticated victim path
+      try {
+        const data = await api.get('/sos/mine')
+        rows = Array.isArray(data) ? data : []
+      } catch {}
+
+      // Stage B — guest victim: query Supabase by mesh_packet_id from IndexedDB
+      if (rows.length === 0 && isOnline) {
+        try {
+          const local = await db.getAllSOS()
+          const meshIds = local.map(r => r.mesh_packet_id ?? r.meshPacketId).filter(Boolean)
+          if (meshIds.length > 0) {
+            const { data } = await supabase
+              .from('sos_reports')
+              .select('*')
+              .in('mesh_packet_id', meshIds)
+              .order('created_at', { ascending: false })
+            if (Array.isArray(data) && data.length > 0) {
+              rows = data.map(r => ({
+                ...r,
+                rescue_status: (r.rescue_status === 'pending' && r.confirmed_by_name && !r.confirmed_at)
+                  ? 'acknowledged' : r.rescue_status,
+              }))
+            }
+          }
+          // Stage C — unsynced local records only
+          if (rows.length === 0 && local.length > 0) {
+            rows = local.map(r => ({
+              ...r,
+              rescue_status: r.rescue_status ?? 'pending',
+              created_at: r.timestamp
+                ? new Date(r.timestamp).toISOString()
+                : new Date(r.createdAt ?? Date.now()).toISOString(),
+            }))
+          }
+        } catch {}
+      }
+
+      setReports(rows)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { if (isOnline) { load() } else { setLoading(false) } }, [isOnline, reloadKey])
