@@ -963,14 +963,15 @@ async function put(path, body = {}) {
   }
 
   // ── SOS UPDATE ────────────────────────────────────────────────────────────────
-  // Two online strategies so the update works regardless of which SQL migrations
-  // have been run. Strategy 1 needs the anon UPDATE policy (migration 20261101).
-  // Strategy 2 needs the SECURITY DEFINER RPC (migration 20261031).
+  // Dual-write: Supabase direct + PHP/MySQL run in parallel. PHP/MySQL must always
+  // be written because the victim's mine.php read path queries MySQL, not Supabase
+  // (Supabase queries use victim_device_id UUID but auth state carries an integer
+  // victim_id — type mismatch means they always fall through to PHP). If both
+  // parallel writes fail, Supabase RPC is tried as a last resort.
   if (resource === 'sos' && id) {
     if (!getNetworkOnline()) {
       return await localFetch(`sos/${id}`, { method: 'PUT', body: JSON.stringify(body) })
     }
-    // Strategy 1: direct table update (anon UPDATE policy — migration 20261101)
     const updatePayload = {}
     if (body.rescue_status !== undefined)         updatePayload.rescue_status = body.rescue_status
     if (body.confirmed_by_name !== undefined)     updatePayload.confirmed_by_name = body.confirmed_by_name
@@ -980,9 +981,14 @@ async function put(path, body = {}) {
     if (typeof body.dismissed === 'boolean')      updatePayload.dismissed = body.dismissed
     if (body.status !== undefined)                updatePayload.status = body.status
     if (body.confirmed_by_role !== undefined)     updatePayload.confirmed_by_role = body.confirmed_by_role
-    const { error: directErr } = await supabase.from('sos_reports').update(updatePayload).eq('id', Number(id))
-    if (!directErr) return { id: Number(id) }
-    // Strategy 2: SECURITY DEFINER RPC fallback (migration 20261031)
+    const [supaResult, phpResult] = await Promise.allSettled([
+      supabase.from('sos_reports').update(updatePayload).eq('id', Number(id)),
+      localFetch(`sos/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+    ])
+    const supaOk = supaResult.status === 'fulfilled' && !supaResult.value?.error
+    const phpOk  = phpResult.status === 'fulfilled'
+    if (supaOk || phpOk) return { id: Number(id) }
+    // Both parallel writes failed — Supabase RPC as last resort
     const { data: oldRescueStatus, error: rpcErr } = await supabase.rpc('update_sos_by_id', {
       p_id:                     Number(id),
       p_rescue_status:          body.rescue_status           ?? null,
@@ -994,17 +1000,9 @@ async function put(path, body = {}) {
       p_status:                 body.status                  ?? null,
       p_confirmed_by_role:      body.confirmed_by_role       ?? null,
     })
-    if (rpcErr) {
-      // Strategy 3: PHP/MySQL fallback (both Supabase strategies failed — migrations not yet run)
-      try {
-        await localFetch(`sos/${id}`, { method: 'PUT', body: JSON.stringify(body) })
-        return { id: Number(id) }
-      } catch {
-        console.warn('[api.put] all strategies failed for SOS', id)
-        return { id: Number(id), _offline: true }
-      }
-    }
-    return { id: Number(id), _old_rescue_status: oldRescueStatus ?? null }
+    if (!rpcErr) return { id: Number(id), _old_rescue_status: oldRescueStatus ?? null }
+    console.warn('[api.put] all strategies failed for SOS', id)
+    return { id: Number(id), _offline: true }
   }
 
   if (!id) throwErr('ID required for update')

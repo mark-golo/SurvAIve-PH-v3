@@ -10,7 +10,7 @@ import { useAuthStore } from '../../store/auth'
 import { supabase } from '../../lib/supabase'
 import { getBarangays } from '../../lib/philippineLocations'
 
-const RESCUE_LABEL = { pending: 'Pending', en_route: 'En Route', on_scene: 'On Scene', rescued: 'Rescued', cannot_reach: 'Cannot Reach' }
+const RESCUE_LABEL = { pending: 'Pending', acknowledged: 'Acknowledged', en_route: 'En Route', on_scene: 'On Scene', rescued: 'Rescued', cannot_reach: 'Cannot Reach' }
 
 export function VictimTable() {
   const navigate = useNavigate()
@@ -266,8 +266,9 @@ export function VictimTable() {
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${
-                        r.rescue === 'rescued'  ? 'bg-[rgba(34,197,94,0.1)] border-[rgba(34,197,94,0.3)] text-[#22c55e]' :
-                        r.rescue === 'en_route' ? 'bg-[rgba(0,212,255,0.1)] border-[rgba(0,212,255,0.3)] text-[#00d4ff]' :
+                        r.rescue === 'rescued'      ? 'bg-[rgba(34,197,94,0.1)] border-[rgba(34,197,94,0.3)] text-[#22c55e]' :
+                        r.rescue === 'en_route'     ? 'bg-[rgba(0,212,255,0.1)] border-[rgba(0,212,255,0.3)] text-[#00d4ff]' :
+                        r.rescue === 'acknowledged' ? 'bg-[rgba(245,158,11,0.1)] border-[rgba(245,158,11,0.3)] text-[#f59e0b]' :
                         'bg-[rgba(107,114,128,0.1)] border-[rgba(107,114,128,0.3)] text-[#9ca3af]'
                       }`}>{RESCUE_LABEL[r.rescue]}</span>
                     </td>
