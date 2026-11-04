@@ -46,6 +46,14 @@ export function ResponseTracking() {
       const all = await api.get('/sos/mine')
       let r = Array.isArray(all) ? all.find(x => String(x.id) === String(id)) : null
 
+      // Mine list didn't include this record (guest victims have no victimId so the list
+      // is empty; registered victims may also miss it on Vercel). Fetch directly by id —
+      // api.get('/sos/:id') queries Supabase SELECT * with normalizeSos, deriving
+      // 'acknowledged' from confirmed_by_name without needing victim auth.
+      if (!r && isOnline) {
+        try { r = await api.get(`/sos/${id}`) } catch { /* id not found in Supabase */ }
+      }
+
       // Fallback to IndexedDB when API didn't return the record
       if (!r) {
         try {
