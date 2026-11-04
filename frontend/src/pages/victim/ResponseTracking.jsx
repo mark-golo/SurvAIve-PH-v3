@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { CheckCircle, Clock, WifiOff, RefreshCw, Star, AlertOctagon, ChevronLeft } from 'lucide-react'
+import { CheckCircle, Clock, WifiOff, RefreshCw, AlertOctagon, ChevronDown } from 'lucide-react'
 import { TopBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
@@ -10,17 +10,37 @@ import api from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { db } from '../../lib/db'
 
-const RESCUE_STATUS_META = {
-  pending:      { label: 'Awaiting Acknowledgment', color: '#94a3b8' },
-  acknowledged: { label: 'Acknowledged',             color: '#f59e0b' },
-  en_route:     { label: 'In Progress',              color: '#60a5fa' },
-  on_scene:     { label: 'In Progress',              color: '#a78bfa' },
-  cannot_reach: { label: 'In Progress',              color: '#f59e0b' },
-  rescued:      { label: 'Completed',                color: '#22c55e' },
+const RESCUE_STATUS_LABELS = {
+  pending:      { label: 'Awaiting Acknowledgment', color: 'text-slate-400',  bg: 'bg-slate-700'     },
+  acknowledged: { label: 'Acknowledged',            color: 'text-amber-400',  bg: 'bg-amber-900/40'  },
+  en_route:     { label: 'In Progress',             color: 'text-blue-400',   bg: 'bg-blue-900/40'   },
+  on_scene:     { label: 'In Progress',             color: 'text-violet-400', bg: 'bg-violet-900/40' },
+  cannot_reach: { label: 'In Progress',             color: 'text-amber-400',  bg: 'bg-amber-900/40'  },
+  rescued:      { label: 'Completed',               color: 'text-green-400',  bg: 'bg-green-900/40'  },
 }
 
-const PRIORITY_LABEL = s => s >= 80 ? 'CRITICAL' : s >= 60 ? 'HIGH' : s >= 40 ? 'MODERATE' : 'LOW'
-const PRIORITY_COLOR = s => s >= 80 ? 'text-red-400' : s >= 60 ? 'text-orange-400' : s >= 40 ? 'text-amber-400' : 'text-slate-400'
+const PRIORITY_LABELS = {
+  CRITICAL: 'bg-red-900/40 text-red-400',
+  HIGH:     'bg-orange-900/40 text-orange-400',
+  MODERATE: 'bg-amber-900/40 text-amber-400',
+  LOW:      'bg-slate-700 text-slate-400',
+}
+
+function priorityLabel(score) {
+  if (score >= 80) return 'CRITICAL'
+  if (score >= 60) return 'HIGH'
+  if (score >= 40) return 'MODERATE'
+  return 'LOW'
+}
+
+function fmtDate(ts) {
+  if (!ts) return '—'
+  return new Date(ts).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+const EMERGENCY_LABELS = {
+  injured: 'Injured', trapped: 'Trapped', safe: 'Safe', missing: 'Missing', unknown: 'Unknown',
+}
 
 function fmtTime(ts) {
   if (!ts) return null
@@ -159,37 +179,42 @@ export function ResponseTracking() {
           </div>
         ) : (
           <>
-            {/* Summary card — always visible; chevron toggles timeline */}
-            <div className="glass rounded-2xl p-4 space-y-3 border border-[rgba(255,255,255,0.06)]">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono text-slate-500">SOS #{report.id}</span>
+            {/* Summary card — IncidentHistory style; ChevronDown toggles timeline */}
+            <button
+              onClick={() => setCollapsed(c => !c)}
+              className="w-full glass rounded-2xl p-4 border border-[rgba(255,255,255,0.06)]
+                         hover:bg-[rgba(255,255,255,0.04)] active:scale-[0.99] transition-all text-left">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <span className="text-xs font-mono text-slate-500">#{report.id}</span>
                 <div className="flex items-center gap-2">
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${PRIORITY_COLOR(report.ai_priority_score ?? 50)} bg-[rgba(255,255,255,0.05)]`}>
-                    {PRIORITY_LABEL(report.ai_priority_score ?? 50)} · Score {report.ai_priority_score ?? '—'}
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${PRIORITY_LABELS[priorityLabel(report.ai_priority_score ?? 50)]}`}>
+                    {priorityLabel(report.ai_priority_score ?? 50)}
                   </span>
-                  <button
-                    onClick={() => setCollapsed(c => !c)}
-                    className="text-slate-500 hover:text-[#00d4ff] transition-colors"
-                    aria-label={collapsed ? 'Show timeline' : 'Hide timeline'}>
-                    <ChevronLeft size={14} className={`transition-transform duration-200 ${collapsed ? '-rotate-90' : 'rotate-90'}`} />
-                  </button>
+                  <ChevronDown size={14} className={`text-slate-500 transition-transform duration-200 ${!collapsed ? 'rotate-180' : ''}`} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div><span className="text-slate-500">Status: </span><span className="text-white capitalize">{report.status}</span></div>
-                <div><span className="text-slate-500">People: </span><span className="text-white">{report.people_count}</span></div>
-                <div><span className="text-slate-500">Barangay: </span><span className="text-white">{report.barangay ?? '—'}</span></div>
-                <div><span className="text-slate-500">Submitted: </span><span className="text-white">{fmtTime(report.created_at)}</span></div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm font-semibold text-white">
+                  {EMERGENCY_LABELS[report.status] ?? report.status}
+                </span>
+                {report.barangay && <span className="text-xs text-slate-500">· {report.barangay}</span>}
               </div>
-              {(() => {
-                const meta = RESCUE_STATUS_META[report.rescue_status] ?? { label: report.rescue_status, color: '#94a3b8' }
-                return (
-                  <div className="rounded-xl p-2 text-center border" style={{ borderColor: meta.color + '44', background: meta.color + '18' }}>
-                    <p className="text-sm font-bold" style={{ color: meta.color }}>{meta.label}</p>
-                  </div>
-                )
-              })()}
-            </div>
+              <div className="flex items-center justify-between mt-2">
+                <div className="flex items-center gap-2">
+                  {(() => {
+                    const st = RESCUE_STATUS_LABELS[report.rescue_status] ?? { label: report.rescue_status, color: 'text-slate-400', bg: 'bg-slate-700' }
+                    return <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${st.bg} ${st.color}`}>{st.label}</span>
+                  })()}
+                  {report.rescue_status === 'rescued' && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-900/30 text-amber-400 font-semibold">Rate Response</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 text-xs text-slate-500">
+                  <Clock size={11} />
+                  {fmtDate(report.created_at)}
+                </div>
+              </div>
+            </button>
 
             {/* Timeline — shown when expanded */}
             {!collapsed && (
