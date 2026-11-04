@@ -17,7 +17,7 @@ const ACTIONS = [
   { label: 'En Route',     value: 'en_route',    variant: 'blue',   icon: Navigation  },
   { label: 'On Scene',     value: 'on_scene',    variant: 'orange', icon: MapPin      },
   { label: 'Rescued',      value: 'rescued',     variant: 'green',  icon: CheckCircle },
-  { label: 'Cannot Reach', value: 'cannot_reach',variant: 'ghost',  icon: XCircle     },
+  { label: 'Cannot Reach', value: 'cannot_reach',variant: 'red',    icon: XCircle     },
 ]
 
 const STATUS_MESSAGE = {
@@ -254,7 +254,7 @@ export function RescueDetail() {
                 key={value}
                 variant={rescueStatus === value ? variant : 'ghost'}
                 onClick={() => updateStatus(value)}
-                className={`flex items-center justify-center gap-2 ${rescueStatus === value ? 'ring-1 ring-offset-0' : ''}`}
+                className="flex items-center justify-center gap-2"
                 size="sm"
               >
                 <Icon size={13} />
