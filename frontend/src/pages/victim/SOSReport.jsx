@@ -602,20 +602,20 @@ export function SOSReport() {
                 key={opt.mode}
                 type="button"
                 onClick={() => switchMode(opt.mode)}
-                className={`glass rounded-xl py-3 flex flex-col items-center gap-1 transition-all border ${
+                className={`rounded-xl py-3 flex flex-col items-center gap-1 transition-all border ${
                   sosMode === opt.mode
-                    ? 'border-[rgba(139,92,246,0.5)] bg-[rgba(139,92,246,0.08)]'
-                    : 'border-[rgba(255,255,255,0.08)] hover:border-[rgba(255,255,255,0.2)]'
+                    ? 'bg-gradient-to-r from-[#00d4ff] to-[#0ea5e9] border-[#00d4ff]'
+                    : 'glass border-[rgba(255,255,255,0.08)] hover:border-[rgba(255,255,255,0.2)]'
                 }`}
               >
                 <span className="text-lg">{opt.emoji}</span>
                 <span
                   className="text-xs font-bold"
-                  style={{ color: sosMode === opt.mode ? '#8b5cf6' : '#94a3b8' }}
+                  style={{ color: sosMode === opt.mode ? '#050a18' : '#94a3b8' }}
                 >
                   {opt.label}
                 </span>
-                <span className="text-[10px] text-slate-500 text-center px-2 leading-tight">
+                <span className={`text-[10px] text-center px-2 leading-tight ${sosMode === opt.mode ? 'text-[#1e293b]' : 'text-slate-500'}`}>
                   {opt.sub}
                 </span>
               </button>
