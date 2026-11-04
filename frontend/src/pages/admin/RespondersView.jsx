@@ -7,11 +7,12 @@ import { useAuthStore } from '../../store/auth'
 import { supabase } from '../../lib/supabase'
 
 const RESCUE_STATUS = {
-  on_scene:     { label: 'On Scene',     color: '#f59e0b', bg: 'rgba(245,158,11,0.15)'  },
-  en_route:     { label: 'En Route',     color: '#00d4ff', bg: 'rgba(0,212,255,0.15)'   },
-  cannot_reach: { label: 'Cannot Reach', color: '#ef4444', bg: 'rgba(239,68,68,0.15)'   },
-  rescued:      { label: 'Rescued',      color: '#22c55e', bg: 'rgba(34,197,94,0.15)'   },
   pending:      { label: 'Pending',      color: '#6b7280', bg: 'rgba(107,114,128,0.12)' },
+  acknowledged: { label: 'Acknowledged', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)'  },
+  en_route:     { label: 'En Route',     color: '#00d4ff', bg: 'rgba(0,212,255,0.15)'   },
+  on_scene:     { label: 'On Scene',     color: '#f59e0b', bg: 'rgba(245,158,11,0.15)'  },
+  rescued:      { label: 'Rescued',      color: '#22c55e', bg: 'rgba(34,197,94,0.15)'   },
+  cannot_reach: { label: 'Cannot Reach', color: '#ef4444', bg: 'rgba(239,68,68,0.15)'   },
 }
 
 export function RespondersView() {
@@ -169,7 +170,7 @@ export function RespondersView() {
           )}
 
           {filteredReports.map(r => {
-            const rs = RESCUE_STATUS[r.rescue_status ?? 'pending']
+            const rs = RESCUE_STATUS[r.rescue_status ?? 'pending'] ?? RESCUE_STATUS.pending
             const teamName = r.assigned_responder_id
               ? (responders.find(t => t.id === r.assigned_responder_id)?.name ?? null)
               : null
