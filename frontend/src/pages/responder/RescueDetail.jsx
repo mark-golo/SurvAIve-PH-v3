@@ -233,7 +233,7 @@ export function RescueDetail() {
         {/* Rescue status */}
         <GlassCard>
           <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-3">Rescue Actions</p>
-          {/* Confirm SOS — full-width prominence button above the action grid */}
+          {/* Acknowledge SOS — full-width prominence button above the action grid */}
           <button
             onClick={() => updateStatus('acknowledged')}
             className={`w-full mb-2 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all border ${
@@ -243,7 +243,7 @@ export function RescueDetail() {
             }`}
           >
             <CheckCircle size={14} />
-            Confirm SOS
+            Acknowledge SOS
           </button>
           <div className="grid grid-cols-2 gap-2">
             {ACTIONS.map(({ label, value, variant, icon: Icon }) => (

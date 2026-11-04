@@ -129,7 +129,7 @@ export function SOSCenter() {
 
   const stats = [
     { label: 'Active',           value: active.length,    icon: AlertOctagon, color: 'text-red-400',   bg: 'from-red-900/30 to-red-800/20' },
-    { label: 'Confirmed',         value: awaiting.length,  icon: Clock,        color: 'text-amber-400', bg: 'from-amber-900/30 to-amber-800/20' },
+    { label: 'Acknowledged',      value: awaiting.length,  icon: Clock,        color: 'text-amber-400', bg: 'from-amber-900/30 to-amber-800/20' },
     { label: 'In Progress',      value: inprog.length,    icon: Activity,     color: 'text-blue-400',  bg: 'from-blue-900/30 to-blue-800/20' },
     { label: 'Completed',        value: completed.length, icon: CheckCircle,  color: 'text-green-400', bg: 'from-green-900/30 to-green-800/20' },
   ]

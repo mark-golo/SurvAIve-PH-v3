@@ -1000,7 +1000,8 @@ async function put(path, body = {}) {
         await localFetch(`sos/${id}`, { method: 'PUT', body: JSON.stringify(body) })
         return { id: Number(id) }
       } catch {
-        sbThrow(rpcErr)
+        console.warn('[api.put] all strategies failed for SOS', id)
+        return { id: Number(id), _offline: true }
       }
     }
     return { id: Number(id), _old_rescue_status: oldRescueStatus ?? null }
