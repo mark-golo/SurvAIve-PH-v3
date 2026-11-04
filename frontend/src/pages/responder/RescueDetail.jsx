@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { getResponderTheme } from '../../lib/victimTheme'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MapPin, Users, Phone, Navigation, CheckCircle, XCircle, AlertTriangle, FileText, Scan } from 'lucide-react'
+import { MapPin, Users, Phone, Navigation, CheckCircle, XCircle, AlertTriangle, Scan } from 'lucide-react'
 import { TopBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -241,7 +241,7 @@ export function RescueDetail() {
             onClick={() => updateStatus('acknowledged')}
             className={`w-full mb-2 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all border ${
               rescueStatus === 'acknowledged'
-                ? 'bg-amber-500/20 border-amber-400/60 text-amber-200 ring-1 ring-amber-400/40'
+                ? 'bg-amber-400 border-amber-400 text-black'
                 : 'bg-[rgba(245,158,11,0.08)] border-[rgba(245,158,11,0.3)] text-amber-400 hover:bg-[rgba(245,158,11,0.16)] active:scale-[0.98]'
             }`}
           >
@@ -289,12 +289,7 @@ export function RescueDetail() {
           disabled={submitting}
           className="w-full"
         >
-          {submitted
-            ? <><CheckCircle size={14} className="mr-2" />Submitted</>
-            : submitting
-            ? 'Submitting…'
-            : <><FileText size={14} className="mr-2" />Submit Report</>
-          }
+          {submitted ? 'Submitted' : submitting ? 'Submitting…' : 'Submit Report'}
         </NeonButton>
       </main>
     </div>
