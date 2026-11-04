@@ -219,7 +219,6 @@ export function ResponseTracking() {
               <div className="glass rounded-2xl p-3 border border-green-500/30 bg-green-900/10">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <CheckCircle size={14} className="text-green-400" />
                     <span className="text-xs font-bold text-green-400 uppercase tracking-wider">Tell Us About Your Experience</span>
                   </div>
                   <button
@@ -229,7 +228,7 @@ export function ResponseTracking() {
                     <ChevronLeft size={14} className={`transition-transform duration-200 ${collapsed ? '-rotate-90' : 'rotate-90'}`} />
                   </button>
                 </div>
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">Help us improve emergency response services by sharing your experience.</p>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">Share your experience to improve emergency response</p>
                 <div className="flex gap-2 mt-2.5">
                   <motion.button
                     whileTap={{ scale: 0.97 }}
@@ -237,14 +236,14 @@ export function ResponseTracking() {
                     className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600
                                border border-amber-400/60 text-black text-xs font-bold
                                shadow-[0_0_16px_rgba(245,158,11,0.25)]">
-                    RATE EXPERIENCE
+                    REVIEW NOW
                   </motion.button>
                   <motion.button
                     whileTap={{ scale: 0.97 }}
                     onClick={() => navigate('/sos/history', { state: { overrideTitle: 'Post-Rescue Feedback' } })}
                     className="flex-1 py-2.5 rounded-xl border border-[rgba(255,255,255,0.12)]
                                text-slate-300 text-sm font-semibold hover:bg-[rgba(255,255,255,0.05)]">
-                    LATER
+                    MAYBE LATER
                   </motion.button>
                 </div>
               </div>
