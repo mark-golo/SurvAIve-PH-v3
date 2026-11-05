@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { getResponderTheme } from '../../lib/victimTheme'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MapPin, Users, Phone, Navigation, CheckCircle, XCircle, AlertTriangle, Scan } from 'lucide-react'
-import { TopBar } from '../../components/ui/NavBar'
+import { MapPin, Users, Phone, Navigation, CheckCircle, XCircle, AlertTriangle, Scan, Home, List, Map, Radio, Settings } from 'lucide-react'
+import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { NeonButton } from '../../components/ui/NeonButton'
@@ -26,6 +26,14 @@ const STATUS_MESSAGE = {
   rescued:      'Rescue / assistance completed',
   cannot_reach: 'Responder was unable to reach the location',
 }
+
+const NAV = [
+  { icon: Home,     label: 'Home',     path: '/responder'          },
+  { icon: List,     label: 'Queue',    path: '/responder/queue'    },
+  { icon: Map,      label: 'Map',      path: '/responder/map'      },
+  { icon: Radio,    label: 'Mesh',     path: '/responder/relay'    },
+  { icon: Settings, label: 'Settings', path: '/responder/settings' },
+]
 
 export function RescueDetail() {
   const { id } = useParams()
@@ -141,6 +149,7 @@ export function RescueDetail() {
     <div className={`min-h-screen bg-mesh flex flex-col pb-6${isLight ? ' light-theme' : ''}`}>
       <TopBar title="Rescue Detail" subtitle="Loading…" onBack />
       <div className="flex items-center justify-center flex-1 text-slate-400 text-sm">Loading…</div>
+      <MobileNavBar items={NAV} />
     </div>
   )
 
@@ -148,14 +157,15 @@ export function RescueDetail() {
     <div className={`min-h-screen bg-mesh flex flex-col pb-6${isLight ? ' light-theme' : ''}`}>
       <TopBar title="Rescue Detail" subtitle="Not found" onBack />
       <div className="flex items-center justify-center flex-1 text-slate-400 text-sm">Victim not found</div>
+      <MobileNavBar items={NAV} />
     </div>
   )
 
   return (
-    <div className={`min-h-screen bg-mesh flex flex-col pb-6${isLight ? ' light-theme' : ''}`}>
+    <div className={`min-h-screen bg-mesh flex flex-col${isLight ? ' light-theme' : ''}`}>
       <TopBar title="Rescue Detail" subtitle={`Victim #${victim.id}`} onBack />
 
-      <main className="flex-1 p-4 space-y-4">
+      <main className="flex-1 p-4 pb-nav space-y-4">
         {/* Priority banner */}
         <div className={`glass rounded-xl p-3 border ${
           victim.priority === 'CRITICAL' ? 'border-[rgba(239,68,68,0.5)]' :
@@ -292,6 +302,7 @@ export function RescueDetail() {
           {submitted ? 'Submitted' : submitting ? 'Submitting…' : 'Submit Report'}
         </NeonButton>
       </main>
+      <MobileNavBar items={NAV} />
     </div>
   )
 }

@@ -1,13 +1,21 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Star, CheckCircle, WifiOff, AlertOctagon, Send, ChevronLeft } from 'lucide-react'
-import { TopBar } from '../../components/ui/NavBar'
+import { Star, CheckCircle, WifiOff, AlertOctagon, Send, ChevronLeft, Home, MessageSquare, Map, Radio, Settings } from 'lucide-react'
+import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline } from '../../lib/capacitor'
 import api, { localFetch } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
+
+const NAV = [
+  { icon: Home,          label: 'Home',     path: '/home'     },
+  { icon: MessageSquare, label: 'SOS',      path: '/sos'      },
+  { icon: Map,           label: 'Map',      path: '/map'      },
+  { icon: Radio,         label: 'Mesh',     path: '/mesh'     },
+  { icon: Settings,      label: 'Settings', path: '/settings' },
+]
 
 // ── Star picker ───────────────────────────────────────────────────────────────
 function StarPicker({ value, onChange, disabled }) {
@@ -150,6 +158,7 @@ export function RescueFeedback() {
           <WifiOff size={28} />
           <p className="text-sm text-center">Feedback submission requires an internet connection.</p>
         </div>
+        <MobileNavBar items={NAV} />
       </div>
     )
   }
@@ -161,6 +170,7 @@ export function RescueFeedback() {
         <div className="flex-1 flex items-center justify-center">
           <div className="w-8 h-8 rounded-full border-2 border-[#00d4ff] border-t-transparent animate-spin" />
         </div>
+        <MobileNavBar items={NAV} />
       </div>
     )
   }
@@ -176,6 +186,7 @@ export function RescueFeedback() {
           </p>
           <button onClick={() => navigate(`/sos/${id}`)} className="text-xs text-[#00d4ff] underline">Back to Tracking</button>
         </div>
+        <MobileNavBar items={NAV} />
       </div>
     )
   }
@@ -203,6 +214,7 @@ export function RescueFeedback() {
             View All Reports
           </button>
         </div>
+        <MobileNavBar items={NAV} />
       </div>
     )
   }
@@ -211,7 +223,7 @@ export function RescueFeedback() {
     <div className={`h-screen flex flex-col bg-mesh overflow-hidden${isLight ? ' light-theme' : ''}`}>
       <TopBar title="Tell Us About Your Experience" onBack />
 
-      <main className="flex-1 overflow-y-auto p-4 pb-8 space-y-4">
+      <main className="flex-1 overflow-y-auto p-4 pb-nav space-y-4">
         <p className="text-xs text-slate-500 text-center">SOS #{report.id}</p>
 
         {/* Responder rating */}
@@ -293,6 +305,7 @@ export function RescueFeedback() {
           Skip for now
         </button>
       </main>
+      <MobileNavBar items={NAV} />
     </div>
   )
 }

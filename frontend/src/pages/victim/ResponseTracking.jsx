@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { CheckCircle, Clock, WifiOff, RefreshCw, AlertOctagon } from 'lucide-react'
-import { TopBar } from '../../components/ui/NavBar'
+import { CheckCircle, Clock, WifiOff, RefreshCw, AlertOctagon, Home, MessageSquare, Map, Radio, Settings } from 'lucide-react'
+import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline } from '../../lib/capacitor'
@@ -41,6 +41,14 @@ function fmtDate(ts) {
 const EMERGENCY_LABELS = {
   injured: 'Injured', trapped: 'Trapped', safe: 'Safe', missing: 'Missing', unknown: 'Unknown',
 }
+
+const NAV = [
+  { icon: Home,          label: 'Home',     path: '/home'     },
+  { icon: MessageSquare, label: 'SOS',      path: '/sos'      },
+  { icon: Map,           label: 'Map',      path: '/map'      },
+  { icon: Radio,         label: 'Mesh',     path: '/mesh'     },
+  { icon: Settings,      label: 'Settings', path: '/settings' },
+]
 
 function fmtTime(ts) {
   if (!ts) return null
@@ -156,6 +164,7 @@ export function ResponseTracking() {
           <WifiOff size={28} />
           <p className="text-sm text-center">Response tracking requires an internet connection.</p>
         </div>
+        <MobileNavBar items={NAV} />
       </div>
     )
   }
@@ -164,7 +173,7 @@ export function ResponseTracking() {
     <div className={`h-screen flex flex-col bg-mesh overflow-hidden${isLight ? ' light-theme' : ''}`}>
       <TopBar title={pageTitle} onBack />
 
-      <main className="flex-1 overflow-y-auto p-4 pb-8 space-y-4">
+      <main className="flex-1 overflow-y-auto p-4 pb-nav space-y-4">
 
         {loading ? (
           <div className="flex-1 flex items-center justify-center py-20">
@@ -287,6 +296,7 @@ export function ResponseTracking() {
           </>
         )}
       </main>
+      <MobileNavBar items={NAV} />
     </div>
   )
 }
