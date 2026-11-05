@@ -188,9 +188,10 @@ export function RescueFeedback() {
           <p className="text-sm text-slate-400 text-center">
             Thank you for rating your response. Your feedback helps improve emergency services.
           </p>
-          <button onClick={() => navigate(`/sos/${id}`)}
+          <button
+            onClick={() => navigate('/sos/history', { state: { overrideTitle: 'Post-Rescue Feedback', overrideTab: 'completed' } })}
             className="px-6 py-3 rounded-2xl bg-[rgba(0,212,255,0.15)] border border-[rgba(0,212,255,0.3)] text-[#00d4ff] text-sm font-semibold">
-            Back to Tracking
+            Review Another
           </button>
           <button onClick={() => navigate('/sos/history')} className="text-xs text-slate-500 underline">
             View All Reports
