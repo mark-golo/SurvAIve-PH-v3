@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Map, Radio, Settings, MessageSquare, Battery, Satellite, Home, Wifi, WifiOff, ShieldCheck, ShieldAlert, CheckCircle } from 'lucide-react'
+import { Map, Radio, Settings, MessageSquare, Battery, Satellite, Home, Wifi, WifiOff, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { SOSButton } from '../../components/ui/SOSButton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { MobileNavBar } from '../../components/ui/NavBar'
@@ -149,10 +149,7 @@ function HoldStatusButton({ option, onConfirm, disabled }) {
           opacity: saving ? 0.7 : 1,
         }}
       >
-        {submitted
-          ? <CheckCircle size={20} color="white" strokeWidth={2.5} />
-          : <option.Icon size={20} color="white" strokeWidth={2.5} />
-        }
+        <option.Icon size={20} color="white" strokeWidth={2.5} />
       </div>
 
       {/* Label */}
@@ -167,7 +164,7 @@ function HoldStatusButton({ option, onConfirm, disabled }) {
           : saving
             ? '…'
             : submitted
-              ? '✓ Confirmed'
+              ? 'Confirmed'
               : pressing
                 ? `${Math.ceil(((100 - progress) / 100) * 3)}s…`
                 : 'Hold 3s'
