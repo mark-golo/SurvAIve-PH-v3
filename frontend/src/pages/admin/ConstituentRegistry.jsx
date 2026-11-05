@@ -15,6 +15,7 @@ const STATUS_COLORS = {
   rescued:  { bg: 'bg-[rgba(34,197,94,0.1)]',  text: 'text-[#22c55e]',  label: 'Safe'     },
   unknown:  { bg: 'bg-[rgba(107,114,128,0.1)]',text: 'text-[#9ca3af]',  label: 'Unknown'  },
 }
+const SAFETY_STATUSES = new Set(['sos_sent', 'rescued', 'unknown'])
 
 export function ConstituentRegistry() {
   const { scope } = useAuthStore()
@@ -41,7 +42,7 @@ export function ConstituentRegistry() {
           contact:         r.contact_number,
           barangay:        r.barangay,
           household:       r.household_count,
-          status:          r.status,
+          status:          SAFETY_STATUSES.has(r.status) ? r.status : 'unknown',
           verified:        !!r.is_verified,
           vulnerabilities: r.vulnerabilities ?? [],
           account_status:  r.account_status,   // null | 'active' | 'inactive'

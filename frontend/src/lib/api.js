@@ -672,7 +672,7 @@ async function post(path, body = {}) {
         .maybeSingle()
       if (qe) sbThrow(qe)
       if (!victim) throwErr('Invalid Victim ID or PIN', 401)
-      if (victim.status !== 'active') throwErr('Account is not active. Contact your local DRRM office.', 403)
+      if (victim.status === 'inactive') throwErr('Account is not active. Contact your local DRRM office.', 403)
 
       // Verify PIN via PBKDF2 (same hash stored in pin_hash)
       const computed = victim.pin_salt

@@ -191,7 +191,6 @@ export function HomeScreen() {
   const navigate = useNavigate()
   const { user, isGuest } = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
-  const [quickStatus, setQuickStatus] = useState(null)
   const [peerCount, setPeerCount] = useState(0)
   const [isOnline, setIsOnline] = useState(getNetworkOnline())
   const [gpsState, setGpsState] = useState('unknown') // 'active' | 'denied' | 'unknown'
@@ -313,7 +312,6 @@ export function HomeScreen() {
                     const dbStatus = s.value === 'safe' ? 'rescued' : 'sos_sent'
                     const { error } = await supabase.from('victims').update({ status: dbStatus }).eq('victim_id', user.victim_id)
                     if (error) throw error
-                    setQuickStatus(s.value)
                   }}
                 />
               ))}
