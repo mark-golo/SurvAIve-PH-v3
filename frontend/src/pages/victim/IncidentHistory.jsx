@@ -236,7 +236,7 @@ export function IncidentHistory() {
                     </span>
                     {feedbackEligible && (
                       reviewedIds.has(Number(r.id))
-                        ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-900/30 text-green-400 font-semibold">Reviewed ✓</span>
+                        ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-900/30 text-green-400 font-semibold">Reviewed</span>
                         : <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-900/30 text-amber-400 font-semibold">Rate Response</span>
                     )}
                   </div>
