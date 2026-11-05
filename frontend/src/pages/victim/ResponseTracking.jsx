@@ -163,8 +163,8 @@ export function ResponseTracking() {
       <main className="flex-1 overflow-y-auto p-4 pb-8 space-y-4">
 
         {loading ? (
-          <div className="space-y-3">
-            {[1,2,3].map(i => <div key={i} className="glass rounded-2xl h-20 animate-pulse" />)}
+          <div className="flex-1 flex items-center justify-center py-20">
+            <div className="w-8 h-8 rounded-full border-2 border-[#00d4ff] border-t-transparent animate-spin" />
           </div>
         ) : !report ? (
           <div className="flex flex-col items-center gap-3 mt-12 text-slate-500">
