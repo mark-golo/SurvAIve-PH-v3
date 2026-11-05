@@ -243,7 +243,7 @@ export function ResponseTracking() {
             {report.rescue_status === 'rescued' && (
               <div className="glass rounded-2xl p-3 border border-green-500/30 bg-green-900/10">
                 <span className="text-xs font-bold text-green-400 uppercase tracking-wider">Tell Us About Your Experience</span>
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">Share your experience to improve emergency response</p>
+                <p className="text-[10px] text-slate-400 mt-1">Share your experience to improve emergency response</p>
                 <div className="flex gap-2 mt-2.5">
                   <motion.button
                     whileTap={{ scale: 0.97 }}
