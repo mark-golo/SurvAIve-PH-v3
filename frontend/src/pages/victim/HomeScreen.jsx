@@ -1,17 +1,160 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Map, Radio, Settings, MessageSquare, Battery, Satellite, Home, Wifi, WifiOff, ShieldCheck, ShieldAlert } from 'lucide-react'
+import { Map, Radio, Settings, MessageSquare, Battery, Satellite, Home, Wifi, WifiOff, ShieldCheck, ShieldAlert, CheckCircle } from 'lucide-react'
 import { SOSButton } from '../../components/ui/SOSButton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { MobileNavBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { mesh } from '../../lib/mesh'
 import { autoSOS } from '../../lib/autoSOS'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
 import { WeatherCard } from '../../components/ui/WeatherCard'
 import { supabase } from '../../lib/supabase'
+
+const HOLD_MS = 3000
+const SW = 2.5 // SVG stroke width
+
+function HoldStatusButton({ option, onConfirm, disabled }) {
+  const [pressing,  setPressing]  = useState(false)
+  const [progress,  setProgress]  = useState(0)
+  const [saving,    setSaving]    = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [error,     setError]     = useState(null)
+  const [dims,      setDims]      = useState({ w: 150, h: 88 })
+  const [pathLen,   setPathLen]   = useState(0)
+  const intervalRef = useRef(null)
+  const wrapRef     = useRef(null)
+  const rectRef     = useRef(null)
+
+  // Measure container + compute SVG path length after mount
+  useEffect(() => {
+    if (wrapRef.current) {
+      const { width, height } = wrapRef.current.getBoundingClientRect()
+      setDims({ w: width, h: height })
+    }
+  }, [])
+
+  useEffect(() => {
+    if (rectRef.current && rectRef.current.getTotalLength) {
+      setPathLen(rectRef.current.getTotalLength())
+    }
+  }, [dims])
+
+  useEffect(() => () => clearInterval(intervalRef.current), [])
+
+  const startPress = (e) => {
+    e.preventDefault()
+    if (disabled || saving || submitted) return
+    setPressing(true)
+    setError(null)
+    const start = Date.now()
+    intervalRef.current = setInterval(() => {
+      const elapsed = Date.now() - start
+      const pct = Math.min((elapsed / HOLD_MS) * 100, 100)
+      setProgress(pct)
+      if (pct >= 100) {
+        clearInterval(intervalRef.current)
+        setPressing(false)
+        setProgress(0)
+        setSaving(true)
+        onConfirm()
+          .then(() => setSubmitted(true))
+          .catch(err => setError(err?.message ?? 'Failed to update'))
+          .finally(() => setSaving(false))
+      }
+    }, 30)
+  }
+
+  const cancelPress = () => {
+    if (!pressing) return
+    clearInterval(intervalRef.current)
+    setPressing(false)
+    setProgress(0)
+  }
+
+  const isActive = pressing || saving
+  const dashOffset = pathLen > 0 ? pathLen * (1 - progress / 100) : 0
+
+  return (
+    <div
+      ref={wrapRef}
+      onPointerDown={startPress}
+      onPointerUp={cancelPress}
+      onPointerLeave={cancelPress}
+      onPointerCancel={cancelPress}
+      style={{ position: 'relative', touchAction: 'none', userSelect: 'none', cursor: disabled ? 'not-allowed' : 'pointer' }}
+      className={`glass rounded-xl py-3 flex flex-col items-center gap-1.5 transition-all ${
+        submitted ? 'border border-white/20' : 'border border-[rgba(255,255,255,0.08)]'
+      } ${disabled ? 'opacity-50' : ''}`}
+      title={submitted ? `${option.label} confirmed` : `Hold 3s to report ${option.label}`}
+    >
+      {/* SVG animated border overlay */}
+      <svg
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}
+        aria-hidden="true"
+      >
+        {/* Background stroke (measurement anchor + dim guide) */}
+        <rect
+          ref={rectRef}
+          x={SW / 2} y={SW / 2}
+          width={Math.max(dims.w - SW, 1)} height={Math.max(dims.h - SW, 1)}
+          rx="12" ry="12"
+          fill="none"
+          stroke={submitted ? option.colorFrom : 'rgba(255,255,255,0.06)'}
+          strokeWidth={SW}
+          opacity={submitted ? 0.4 : 1}
+        />
+        {/* Animated progress stroke */}
+        {isActive && pathLen > 0 && (
+          <rect
+            x={SW / 2} y={SW / 2}
+            width={Math.max(dims.w - SW, 1)} height={Math.max(dims.h - SW, 1)}
+            rx="12" ry="12"
+            fill="none"
+            stroke={option.colorFrom}
+            strokeWidth={SW}
+            strokeDasharray={pathLen}
+            strokeDashoffset={dashOffset}
+            strokeLinecap="round"
+            style={{ transition: 'stroke-dashoffset 0.03s linear' }}
+          />
+        )}
+      </svg>
+
+      {/* Icon */}
+      <div
+        className="w-10 h-10 rounded-xl flex items-center justify-center transition-all"
+        style={{ background: `linear-gradient(135deg, ${option.colorFrom}, ${option.colorTo})`, opacity: saving ? 0.7 : 1 }}
+      >
+        {submitted
+          ? <CheckCircle size={20} color="white" strokeWidth={2.5} />
+          : <option.Icon size={20} color="white" strokeWidth={2.5} />
+        }
+      </div>
+
+      {/* Label */}
+      <span className="text-xs font-medium transition-colors" style={{ color: (submitted || pressing) ? option.colorFrom : '#94a3b8' }}>
+        {submitted ? option.label : option.label}
+      </span>
+
+      {/* Hint / progress text */}
+      <span className="text-[10px] leading-none" style={{ color: pressing ? option.colorFrom : error ? '#ef4444' : '#475569' }}>
+        {error
+          ? 'Error'
+          : saving
+            ? '…'
+            : submitted
+              ? '✓ Confirmed'
+              : pressing
+                ? `${Math.ceil(((100 - progress) / 100) * 3)}s…`
+                : 'Hold 3s'
+        }
+      </span>
+    </div>
+  )
+}
 
 const STATUS_OPTIONS = [
   { label: 'SAFE',   colorFrom: 'rgb(34,197,94)',  colorTo: 'rgb(21,128,61)',  Icon: ShieldCheck, value: 'safe'   },
@@ -31,7 +174,6 @@ export function HomeScreen() {
   const { user, isGuest } = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
   const [quickStatus, setQuickStatus] = useState(null)
-  const [savingStatus, setSavingStatus] = useState(false)
   const [peerCount, setPeerCount] = useState(0)
   const [isOnline, setIsOnline] = useState(getNetworkOnline())
   const [gpsState, setGpsState] = useState('unknown') // 'active' | 'denied' | 'unknown'
@@ -146,36 +288,16 @@ export function HomeScreen() {
             <p className="text-xs text-slate-500 uppercase tracking-wider mb-2 font-medium">Quick Safety Status</p>
             <div className="grid grid-cols-2 gap-2">
               {STATUS_OPTIONS.map(s => (
-                <button
+                <HoldStatusButton
                   key={s.value}
-                  disabled={savingStatus}
-                  onClick={async () => {
-                    if (savingStatus) return
+                  option={s}
+                  onConfirm={async () => {
+                    const dbStatus = s.value === 'safe' ? 'rescued' : 'sos_sent'
+                    const { error } = await supabase.from('victims').update({ status: dbStatus }).eq('victim_id', user.victim_id)
+                    if (error) throw error
                     setQuickStatus(s.value)
-                    setSavingStatus(true)
-                    try {
-                      const dbStatus = s.value === 'safe' ? 'rescued' : 'sos_sent'
-                      await supabase.from('victims').update({ status: dbStatus }).eq('victim_id', user.victim_id)
-                    } catch { /* non-critical — UI selection still visible */ }
-                    finally { setSavingStatus(false) }
                   }}
-                  className={`glass rounded-xl py-3 flex flex-col items-center gap-1.5 transition-all border ${
-                    quickStatus === s.value
-                      ? 'border-white/20'
-                      : 'border-[rgba(255,255,255,0.08)] hover:border-[rgba(255,255,255,0.2)]'
-                  } ${savingStatus ? 'opacity-60 cursor-not-allowed' : ''}`}
-                  style={quickStatus === s.value ? { boxShadow: `0 0 14px ${s.colorFrom}50` } : {}}
-                >
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center"
-                    style={{ background: `linear-gradient(135deg, ${s.colorFrom}, ${s.colorTo})` }}
-                  >
-                    <s.Icon size={20} color="white" strokeWidth={2.5} />
-                  </div>
-                  <span className="text-xs font-medium" style={{ color: quickStatus === s.value ? s.colorFrom : '#94a3b8' }}>
-                    {s.label}
-                  </span>
-                </button>
+                />
               ))}
             </div>
           </div>
