@@ -6,9 +6,8 @@ import { TopBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline } from '../../lib/capacitor'
-import api from '../../lib/api'
+import api, { localFetch } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
-import { logActivity } from '../../lib/api'
 
 // ── Star picker ───────────────────────────────────────────────────────────────
 function StarPicker({ value, onChange, disabled }) {
@@ -94,7 +93,6 @@ export function RescueFeedback() {
       entries.push({ target_type: 'responder', target_id: String(report.assigned_responder_id), rating: respRating, comments: respComment.trim() || null })
     }
     if (!agencyAlreadyRated && agcRating > 0) {
-      // Use first service_type as the agency identifier (target_id = service_type label)
       const agencyType = Array.isArray(report.service_type) ? report.service_type[0] : report.service_type
       if (agencyType) {
         entries.push({ target_type: 'agency', target_id: agencyType, rating: agcRating, comments: agcComment.trim() || null })
@@ -105,24 +103,28 @@ export function RescueFeedback() {
 
     try {
       for (const entry of entries) {
-        const { data, error: err } = await supabase
-          .from('response_feedback')
-          .insert({
-            sos_id:              id,
-            victim_id:           user.id,
-            target_type:         entry.target_type,
-            target_id:           entry.target_id,
-            rating:              entry.rating,
-            comments:            entry.comments,
-            display_anonymously: false,
-          })
-          .select('id')
-          .single()
-        if (err) throw err
-        if (data?.id) {
-          logActivity('POST', 'response_feedback', 'response_feedback', data.id, {
-            sos_id: id, target_type: entry.target_type, rating: entry.rating,
-          })
+        const payload = {
+          sos_id:              Number(id),
+          target_type:         entry.target_type,
+          target_id:           entry.target_id,
+          rating:              entry.rating,
+          comments:            entry.comments,
+          display_anonymously: false,
+        }
+
+        // Try PHP backend first (XAMPP dev + hotspot mode)
+        let phpOk = false
+        try {
+          await localFetch('feedback', { method: 'POST', body: JSON.stringify(payload) })
+          phpOk = true
+        } catch { /* PHP unavailable (Vercel) — fall through to Supabase */ }
+
+        if (!phpOk) {
+          // Supabase direct insert — no .select().single() to avoid false RLS read-back error
+          const { error: err } = await supabase
+            .from('response_feedback')
+            .insert({ ...payload, victim_id: user?.id ?? null })
+          if (err) throw err
         }
       }
       setDone(true)
