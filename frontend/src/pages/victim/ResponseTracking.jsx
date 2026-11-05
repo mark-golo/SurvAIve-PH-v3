@@ -196,7 +196,7 @@ export function ResponseTracking() {
                     const st = RESCUE_STATUS_LABELS[report.rescue_status] ?? { label: report.rescue_status, color: 'text-slate-400', bg: 'bg-slate-700' }
                     return <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${st.bg} ${st.color}`}>{st.label}</span>
                   })()}
-                  {report.rescue_status === 'rescued' && (
+                  {pageTitle === 'Post-Rescue Feedback' && report.rescue_status === 'rescued' && (
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-900/30 text-amber-400 font-semibold">Rate Response</span>
                   )}
                 </div>
@@ -239,8 +239,8 @@ export function ResponseTracking() {
                 </div>
               </div>
 
-            {/* CTA — shown when rescued */}
-            {report.rescue_status === 'rescued' && (
+            {/* CTA — only shown when arriving from Post-Rescue Feedback */}
+            {pageTitle === 'Post-Rescue Feedback' && report.rescue_status === 'rescued' && (
               <div className="glass rounded-2xl p-3 border border-green-500/30 bg-green-900/10">
                 <span className="text-xs font-bold text-green-400 uppercase tracking-wider">Tell Us About Your Experience</span>
                 <p className="text-[10px] text-slate-400 mt-1">Share your experience to improve emergency response</p>

@@ -52,7 +52,8 @@ const EMERGENCY_LABELS = {
 export function IncidentHistory() {
   const navigate  = useNavigate()
   const location  = useLocation()
-  const pageTitle = location.state?.overrideTitle ?? 'Incident History'
+  const pageTitle   = location.state?.overrideTitle ?? 'Incident History'
+  const isPostRescue = pageTitle === 'Post-Rescue Feedback'
   const { user }  = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
   const [isOnline]= useState(getNetworkOnline)
@@ -120,13 +121,14 @@ export function IncidentHistory() {
   }, [isOnline])
 
   const filtered = useMemo(() => {
+    if (isPostRescue) return reports.filter(r => r.rescue_status === 'rescued')
     switch (tab) {
       case 'active':    return reports.filter(r => r.rescue_status !== 'rescued' && !r.dismissed)
       case 'completed': return reports.filter(r => r.rescue_status === 'rescued' || r.dismissed)
       case 'awaiting':  return reports.filter(r => ['pending','acknowledged'].includes(r.rescue_status))
       default:          return reports
     }
-  }, [reports, tab])
+  }, [reports, tab, isPostRescue])
 
   const tabs = [
     { key: 'all',       label: 'All' },
@@ -139,21 +141,30 @@ export function IncidentHistory() {
     <div className={`h-screen flex flex-col bg-mesh overflow-hidden${isLight ? ' light-theme' : ''}`}>
       <TopBar title={pageTitle} onBack />
 
-      <div className="flex gap-1 px-4 pt-3 pb-1 overflow-x-auto shrink-0">
-        {tabs.map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
-              tab === t.key
-                ? 'bg-[rgba(0,212,255,0.15)] text-[#00d4ff] border border-[rgba(0,212,255,0.3)]'
-                : 'text-slate-400 border border-transparent hover:text-white'
-            }`}>
-            {t.label}
+      {!isPostRescue && (
+        <div className="flex gap-1 px-4 pt-3 pb-1 overflow-x-auto shrink-0">
+          {tabs.map(t => (
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+                tab === t.key
+                  ? 'bg-[rgba(0,212,255,0.15)] text-[#00d4ff] border border-[rgba(0,212,255,0.3)]'
+                  : 'text-slate-400 border border-transparent hover:text-white'
+              }`}>
+              {t.label}
+            </button>
+          ))}
+          <button onClick={load} className="ml-auto text-slate-500 hover:text-[#00d4ff] transition-colors">
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
-        ))}
-        <button onClick={load} className="ml-auto text-slate-500 hover:text-[#00d4ff] transition-colors">
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-        </button>
-      </div>
+        </div>
+      )}
+      {isPostRescue && (
+        <div className="flex justify-end px-4 pt-3 pb-1 shrink-0">
+          <button onClick={load} className="text-slate-500 hover:text-[#00d4ff] transition-colors">
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+      )}
 
       <main className="flex-1 overflow-y-auto px-4 pb-nav space-y-2 pt-2">
         {!isOnline ? (
@@ -178,7 +189,7 @@ export function IncidentHistory() {
           filtered.map(r => {
             const st    = RESCUE_STATUS_LABELS[r.rescue_status] ?? { label: r.rescue_status, color: 'text-slate-400', bg: 'bg-slate-700' }
             const pLbl  = priorityLabel(r.ai_priority_score ?? 50)
-            const feedbackEligible = r.rescue_status === 'rescued'
+            const feedbackEligible = isPostRescue && r.rescue_status === 'rescued'
             return (
               <button key={r.id} onClick={() => navigate(`/sos/${r.id}`, { state: { fromSection: pageTitle } })}
                 className="w-full glass rounded-2xl p-4 border border-[rgba(255,255,255,0.06)]

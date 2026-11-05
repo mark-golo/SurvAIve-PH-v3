@@ -61,7 +61,6 @@ export function ResponseTrackingList() {
 
   const [reports,   setReports]  = useState([])
   const [loading,   setLoading]  = useState(true)
-  const [tab,       setTab]      = useState('active')
   const [reloadKey, setReloadKey]= useState(0)
 
   // ── List fetch (3-stage, same as IncidentHistory) ─────────────────────
@@ -122,39 +121,17 @@ export function ResponseTrackingList() {
     return () => clearInterval(poll)
   }, [isOnline])
 
-  const filtered = useMemo(() => {
-    switch (tab) {
-      case 'active':    return reports.filter(r => r.rescue_status !== 'rescued' && !r.dismissed)
-      case 'completed': return reports.filter(r => r.rescue_status === 'rescued' || r.dismissed)
-      case 'awaiting':  return reports.filter(r => ['pending','acknowledged'].includes(r.rescue_status))
-      default:          return reports
-    }
-  }, [reports, tab])
-
-  const tabs = [
-    { key: 'all',       label: 'All'          },
-    { key: 'active',    label: 'Active'        },
-    { key: 'awaiting',  label: 'Acknowledged'  },
-    { key: 'completed', label: 'Completed'     },
-  ]
+  const displayed = useMemo(
+    () => reports.filter(r => r.rescue_status !== 'rescued' && !r.dismissed),
+    [reports]
+  )
 
   return (
     <div className={`h-screen flex flex-col bg-mesh overflow-hidden${isLight ? ' light-theme' : ''}`}>
       <TopBar title="Response Tracking" onBack />
 
-      {/* Tabs */}
-      <div className="flex gap-1 px-4 pt-3 pb-1 overflow-x-auto shrink-0">
-        {tabs.map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
-              tab === t.key
-                ? 'bg-[rgba(0,212,255,0.15)] text-[#00d4ff] border border-[rgba(0,212,255,0.3)]'
-                : 'text-slate-400 border border-transparent hover:text-white'
-            }`}>
-            {t.label}
-          </button>
-        ))}
-        <button onClick={load} className="ml-auto text-slate-500 hover:text-[#00d4ff] transition-colors">
+      <div className="flex justify-end px-4 pt-3 pb-1 shrink-0">
+        <button onClick={load} className="text-slate-500 hover:text-[#00d4ff] transition-colors">
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
@@ -171,15 +148,13 @@ export function ResponseTrackingList() {
               <div key={i} className="glass rounded-2xl p-4 h-24 animate-pulse bg-[rgba(255,255,255,0.03)]" />
             ))}
           </div>
-        ) : filtered.length === 0 ? (
+        ) : displayed.length === 0 ? (
           <div className="flex flex-col items-center gap-3 mt-12 text-slate-500">
             <AlertOctagon size={28} />
-            <p className="text-sm text-center">
-              {tab === 'all' ? 'No SOS reports found.' : `No ${tab} incidents.`}
-            </p>
+            <p className="text-sm text-center">No active incidents.</p>
           </div>
         ) : (
-          filtered.map(r => {
+          displayed.map(r => {
             const st   = RESCUE_STATUS_LABELS[r.rescue_status] ?? { label: r.rescue_status, color: 'text-slate-400', bg: 'bg-slate-700' }
             const pLbl = priorityLabel(r.ai_priority_score ?? 50)
             return (
@@ -195,12 +170,7 @@ export function ResponseTrackingList() {
                   {r.barangay && <span className="text-xs text-slate-500">· {r.barangay}</span>}
                 </div>
                 <div className="flex items-center justify-between mt-2">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${st.bg} ${st.color}`}>{st.label}</span>
-                    {r.rescue_status === 'rescued' && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-900/30 text-amber-400 font-semibold">Rate Response</span>
-                    )}
-                  </div>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${st.bg} ${st.color}`}>{st.label}</span>
                   <div className="flex items-center gap-1 text-xs text-slate-500">
                     <Clock size={11} />
                     {fmtDate(r.created_at)}
