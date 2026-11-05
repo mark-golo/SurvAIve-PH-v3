@@ -100,8 +100,8 @@ function HoldStatusButton({ option, onConfirm, disabled }) {
       onPointerCancel={cancelPress}
       style={{ position: 'relative', touchAction: 'none', userSelect: 'none', cursor: disabled ? 'not-allowed' : 'pointer' }}
       className={`glass rounded-xl py-3 flex flex-col items-center gap-1.5 transition-all ${
-        submitted ? 'border border-white/20' : 'border border-[rgba(255,255,255,0.08)]'
-      } ${disabled ? 'opacity-50' : ''}`}
+        disabled ? 'opacity-50' : ''
+      }`}
       title={submitted ? `${option.label} confirmed` : `Hold 3s to report ${option.label}`}
     >
       {/* SVG animated border overlay */}
@@ -119,21 +119,20 @@ function HoldStatusButton({ option, onConfirm, disabled }) {
           stroke="rgba(255,255,255,0.06)"
           strokeWidth={SW}
         />
-        {/* Animated progress stroke — during hold, saving, and 5-second final state */}
-        {(isActive || submitted) && pathLen > 0 && (
-          <rect
-            x={SW / 2} y={SW / 2}
-            width={Math.max(dims.w - SW, 1)} height={Math.max(dims.h - SW, 1)}
-            rx="12" ry="12"
-            fill="none"
-            stroke={option.colorFrom}
-            strokeWidth={SW}
-            strokeDasharray={pathLen}
-            strokeDashoffset={submitted ? 0 : dashOffset}
-            strokeLinecap="round"
-            style={{ transition: 'stroke-dashoffset 0.03s linear' }}
-          />
-        )}
+        {/* Progress stroke — always in DOM, strokeOpacity drives visibility */}
+        <rect
+          x={SW / 2} y={SW / 2}
+          width={Math.max(dims.w - SW, 1)} height={Math.max(dims.h - SW, 1)}
+          rx="12" ry="12"
+          fill="none"
+          stroke={option.colorFrom}
+          strokeWidth={SW}
+          strokeDasharray={pathLen > 0 ? pathLen : 9999}
+          strokeDashoffset={submitted ? 0 : (pathLen > 0 ? pathLen * (1 - progress / 100) : 9999)}
+          strokeLinecap="round"
+          strokeOpacity={isActive || submitted ? 1 : 0}
+          style={{ transition: 'stroke-dashoffset 0.03s linear, stroke-opacity 0.15s ease' }}
+        />
       </svg>
 
       {/* Icon */}
