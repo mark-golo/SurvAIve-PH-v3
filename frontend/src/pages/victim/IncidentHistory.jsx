@@ -52,8 +52,12 @@ const EMERGENCY_LABELS = {
 export function IncidentHistory() {
   const navigate  = useNavigate()
   const location  = useLocation()
-  const pageTitle   = location.state?.overrideTitle ?? 'Incident History'
+  const pageTitle    = location.state?.overrideTitle ?? 'Incident History'
   const isPostRescue = pageTitle === 'Post-Rescue Feedback'
+  const [reviewedIds] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('survAIve-reviewed-sos') || '[]')) }
+    catch { return new Set() }
+  })
   const { user }  = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
   const [isOnline]= useState(getNetworkOnline)
@@ -208,9 +212,9 @@ export function IncidentHistory() {
                       {st.label}
                     </span>
                     {feedbackEligible && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-900/30 text-amber-400 font-semibold">
-                        Rate Response
-                      </span>
+                      reviewedIds.has(Number(r.id))
+                        ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-900/30 text-green-400 font-semibold">Reviewed ✓</span>
+                        : <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-900/30 text-amber-400 font-semibold">Rate Response</span>
                     )}
                   </div>
                   <div className="flex items-center gap-1 text-xs text-slate-500">

@@ -128,6 +128,12 @@ export function RescueFeedback() {
         }
       }
       setDone(true)
+      try {
+        const prev = JSON.parse(localStorage.getItem('survAIve-reviewed-sos') || '[]')
+        if (!prev.includes(Number(id))) {
+          localStorage.setItem('survAIve-reviewed-sos', JSON.stringify([...prev, Number(id)]))
+        }
+      } catch {}
     } catch (err) {
       console.error('[RescueFeedback] submit failed:', err)
       setError('Failed to submit feedback. Please try again.')
@@ -283,7 +289,7 @@ export function RescueFeedback() {
           }
         </button>
 
-        <button onClick={() => navigate(`/sos/${id}`)} className="w-full text-xs text-slate-500 underline text-center py-2">
+        <button onClick={() => navigate('/sos')} className="w-full text-xs text-slate-500 underline text-center py-2">
           Skip for now
         </button>
       </main>

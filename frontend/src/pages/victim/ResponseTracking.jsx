@@ -52,7 +52,11 @@ export function ResponseTracking() {
   const { id }    = useParams()
   const navigate  = useNavigate()
   const location  = useLocation()
-  const pageTitle = location.state?.fromSection ?? 'Response Tracking'
+  const pageTitle  = location.state?.fromSection ?? 'Response Tracking'
+  const [isReviewed] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('survAIve-reviewed-sos') || '[]').includes(Number(id)) }
+    catch { return false }
+  })
   const { user }  = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
   const [isOnline]= useState(getNetworkOnline)
@@ -241,27 +245,37 @@ export function ResponseTracking() {
 
             {/* CTA — only shown when arriving from Post-Rescue Feedback */}
             {pageTitle === 'Post-Rescue Feedback' && report.rescue_status === 'rescued' && (
-              <div className="glass rounded-2xl p-3 border border-green-500/30 bg-green-900/10">
-                <span className="text-xs font-bold text-green-400 uppercase tracking-wider">Tell Us About Your Experience</span>
-                <p className="text-[10px] text-slate-400 mt-1">Share your experience to improve emergency response</p>
-                <div className="flex gap-2 mt-2.5">
-                  <motion.button
-                    whileTap={{ scale: 0.97 }}
-                    onClick={() => navigate(`/sos/${report.id}/feedback`)}
-                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600
-                               border border-amber-400/60 text-black text-xs font-bold
-                               shadow-[0_0_16px_rgba(245,158,11,0.25)]">
-                    REVIEW NOW
-                  </motion.button>
-                  <motion.button
-                    whileTap={{ scale: 0.97 }}
-                    onClick={() => navigate('/sos/history', { state: { overrideTitle: 'Post-Rescue Feedback' } })}
-                    className="flex-1 py-2.5 rounded-xl border border-[rgba(255,255,255,0.12)]
-                               text-slate-300 text-xs font-semibold hover:bg-[rgba(255,255,255,0.05)]">
-                    MAYBE LATER
-                  </motion.button>
+              isReviewed ? (
+                <div className="glass rounded-2xl p-3 border border-green-500/30 bg-green-900/10 flex items-center gap-3">
+                  <CheckCircle size={16} className="text-green-400 shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-green-400">Feedback Submitted</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">You've already reviewed this incident</p>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="glass rounded-2xl p-3 border border-green-500/30 bg-green-900/10">
+                  <span className="text-xs font-bold text-green-400 uppercase tracking-wider">Tell Us About Your Experience</span>
+                  <p className="text-[10px] text-slate-400 mt-1">Share your experience to improve emergency response</p>
+                  <div className="flex gap-2 mt-2.5">
+                    <motion.button
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => navigate(`/sos/${report.id}/feedback`)}
+                      className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600
+                                 border border-amber-400/60 text-black text-xs font-bold
+                                 shadow-[0_0_16px_rgba(245,158,11,0.25)]">
+                      REVIEW NOW
+                    </motion.button>
+                    <motion.button
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => navigate('/sos/history', { state: { overrideTitle: 'Post-Rescue Feedback' } })}
+                      className="flex-1 py-2.5 rounded-xl border border-[rgba(255,255,255,0.12)]
+                                 text-slate-300 text-xs font-semibold hover:bg-[rgba(255,255,255,0.05)]">
+                      MAYBE LATER
+                    </motion.button>
+                  </div>
+                </div>
+              )
             )}
 
             {/* Last sync footer */}
