@@ -351,6 +351,35 @@ CREATE POLICY "staff delete victims"
     (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin')
   );
 
+-- Allow anon (unauthenticated) to read victims — required for:
+--   1. api.get('/constituents') to use Supabase as primary source
+--   2. Supabase Realtime postgres_changes delivery to admin subscribers
+-- The anon key is already embedded in the frontend bundle, so this
+-- matches the existing PHP GET /api/constituents read surface.
+CREATE POLICY "anon read victims"
+  ON victims FOR SELECT TO anon
+  USING (true);
+
+-- SECURITY DEFINER function so victims (anon role, no Supabase Auth
+-- session) can update their own safety status bypassing RLS.
+CREATE OR REPLACE FUNCTION update_victim_safety_status(
+  p_victim_id TEXT,
+  p_new_status TEXT
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF p_new_status NOT IN ('sos_sent', 'rescued', 'unknown') THEN
+    RAISE EXCEPTION 'Invalid safety status: %', p_new_status;
+  END IF;
+  UPDATE victims SET status = p_new_status WHERE victim_id = p_victim_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION update_victim_safety_status(TEXT, TEXT) TO anon;
+
 -- ── welfare_checks policies ──────────────────────────────────
 ALTER TABLE welfare_checks ENABLE ROW LEVEL SECURITY;
 

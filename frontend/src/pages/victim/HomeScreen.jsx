@@ -310,7 +310,10 @@ export function HomeScreen() {
                   option={s}
                   onConfirm={async () => {
                     const dbStatus = s.value === 'safe' ? 'rescued' : 'sos_sent'
-                    const { error } = await supabase.from('victims').update({ status: dbStatus }).eq('victim_id', user.victim_id)
+                    const { error } = await supabase.rpc('update_victim_safety_status', {
+                      p_victim_id: user.victim_id,
+                      p_new_status: dbStatus,
+                    })
                     if (error) throw error
                   }}
                 />
