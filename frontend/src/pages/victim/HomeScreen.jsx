@@ -25,6 +25,7 @@ function HoldStatusButton({ option, onConfirm, disabled }) {
   const [dims,      setDims]      = useState({ w: 150, h: 88 })
   const [pathLen,   setPathLen]   = useState(0)
   const intervalRef = useRef(null)
+  const timeoutRef  = useRef(null)
   const wrapRef     = useRef(null)
   const rectRef     = useRef(null)
 
@@ -42,7 +43,10 @@ function HoldStatusButton({ option, onConfirm, disabled }) {
     }
   }, [dims])
 
-  useEffect(() => () => clearInterval(intervalRef.current), [])
+  useEffect(() => () => {
+    clearInterval(intervalRef.current)
+    clearTimeout(timeoutRef.current)
+  }, [])
 
   const startPress = (e) => {
     e.preventDefault()
@@ -57,12 +61,22 @@ function HoldStatusButton({ option, onConfirm, disabled }) {
       if (pct >= 100) {
         clearInterval(intervalRef.current)
         setPressing(false)
-        setProgress(0)
+        setProgress(100)
         setSaving(true)
         onConfirm()
-          .then(() => setSubmitted(true))
-          .catch(err => setError(err?.message ?? 'Failed to update'))
-          .finally(() => setSaving(false))
+          .then(() => {
+            setSubmitted(true)
+            setSaving(false)
+            timeoutRef.current = setTimeout(() => {
+              setSubmitted(false)
+              setProgress(0)
+            }, 5000)
+          })
+          .catch(err => {
+            setError(err?.message ?? 'Failed to update')
+            setSaving(false)
+            setProgress(0)
+          })
       }
     }, 30)
   }
@@ -95,19 +109,18 @@ function HoldStatusButton({ option, onConfirm, disabled }) {
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}
         aria-hidden="true"
       >
-        {/* Background stroke (measurement anchor + dim guide) */}
+        {/* Background stroke — measurement anchor + dim guide */}
         <rect
           ref={rectRef}
           x={SW / 2} y={SW / 2}
           width={Math.max(dims.w - SW, 1)} height={Math.max(dims.h - SW, 1)}
           rx="12" ry="12"
           fill="none"
-          stroke={submitted ? option.colorFrom : 'rgba(255,255,255,0.06)'}
+          stroke="rgba(255,255,255,0.06)"
           strokeWidth={SW}
-          opacity={submitted ? 0.4 : 1}
         />
-        {/* Animated progress stroke */}
-        {isActive && pathLen > 0 && (
+        {/* Animated progress stroke — during hold, saving, and 5-second final state */}
+        {(isActive || submitted) && pathLen > 0 && (
           <rect
             x={SW / 2} y={SW / 2}
             width={Math.max(dims.w - SW, 1)} height={Math.max(dims.h - SW, 1)}
@@ -116,7 +129,7 @@ function HoldStatusButton({ option, onConfirm, disabled }) {
             stroke={option.colorFrom}
             strokeWidth={SW}
             strokeDasharray={pathLen}
-            strokeDashoffset={dashOffset}
+            strokeDashoffset={submitted ? 0 : dashOffset}
             strokeLinecap="round"
             style={{ transition: 'stroke-dashoffset 0.03s linear' }}
           />
