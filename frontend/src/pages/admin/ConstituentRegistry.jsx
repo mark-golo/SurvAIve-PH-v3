@@ -154,8 +154,8 @@ export function ConstituentRegistry() {
         {/* Summary cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <SummaryChip label="Registered"   value={summary.total}   color="#00d4ff" />
-          <SummaryChip label="Unsafe"   value={summary.sos}     color="#ef4444" />
           <SummaryChip label="Safe"     value={summary.rescued} color="#22c55e" />
+          <SummaryChip label="Unsafe"   value={summary.sos}     color="#ef4444" />
           <SummaryChip label="Unknown"  value={summary.unknown} color="#9ca3af" />
         </div>
 
