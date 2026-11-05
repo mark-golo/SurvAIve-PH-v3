@@ -157,9 +157,35 @@ export function SOSCenter() {
   ]
 
   const mgmt = [
-    { label: 'Response Tracking',    sub: 'Track your active SOS incident', icon: Activity,    onClick: goToTracking },
-    { label: 'Incident History',     sub: 'View all your SOS records',      icon: Clock,       onClick: () => navigate('/sos/history') },
-    { label: 'Post-Rescue Feedback', sub: 'Rate completed responses',       icon: CheckCircle, onClick: () => navigate('/sos/history', { state: { overrideTitle: 'Post-Rescue Feedback' } }) },
+    {
+      label: 'Response Tracking',
+      sub: 'Track your active SOS incidents',
+      icon: Activity,
+      badge: active.length > 0
+        ? { text: `${active.length} Active SOS`, cls: 'bg-green-900/40 text-green-400' }
+        : null,
+      onClick: goToTracking,
+    },
+    {
+      label: 'Incident History',
+      sub: 'View all your SOS records',
+      icon: Clock,
+      badge: reports.length > 0
+        ? { text: `${reports.length} Records`, cls: 'bg-blue-900/40 text-blue-400' }
+        : null,
+      onClick: () => navigate('/sos/history'),
+    },
+    {
+      label: 'Post-Rescue Feedback',
+      sub: 'Rate completed responses',
+      icon: CheckCircle,
+      badge: completed.length > 0
+        ? { text: `${completed.length} Pending Reviews`, cls: 'bg-amber-900/40 text-amber-400' }
+        : null,
+      onClick: () => navigate('/sos/history', {
+        state: { overrideTitle: 'Post-Rescue Feedback', overrideTab: 'completed' }
+      }),
+    },
   ]
 
   return (
@@ -221,7 +247,7 @@ export function SOSCenter() {
         <div>
           <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-2">SOS Management</p>
           <div className="space-y-2">
-            {mgmt.map(({ label, sub, icon: Icon, onClick }) => (
+            {mgmt.map(({ label, sub, icon: Icon, badge, onClick }) => (
               <button key={label} onClick={onClick}
                 className="w-full glass rounded-2xl p-4 flex items-center gap-4 border border-[rgba(255,255,255,0.06)]
                            hover:bg-[rgba(255,255,255,0.04)] active:scale-[0.99] transition-all text-left">
@@ -233,6 +259,11 @@ export function SOSCenter() {
                   <p className="text-sm font-semibold text-white">{label}</p>
                   <p className="text-xs text-slate-500 mt-0.5">{sub}</p>
                 </div>
+                {badge && !loading && (
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${badge.cls}`}>
+                    {badge.text}
+                  </span>
+                )}
                 <ChevronRight size={16} className="text-slate-600 shrink-0" />
               </button>
             ))}

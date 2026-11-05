@@ -61,7 +61,7 @@ export function ResponseTrackingList() {
 
   const [reports,   setReports]  = useState([])
   const [loading,   setLoading]  = useState(true)
-  const [tab,       setTab]      = useState('all')
+  const [tab,       setTab]      = useState('active')
   const [reloadKey, setReloadKey]= useState(0)
 
   // ── List fetch (3-stage, same as IncidentHistory) ─────────────────────

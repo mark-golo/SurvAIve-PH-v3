@@ -58,7 +58,7 @@ export function IncidentHistory() {
   const [isOnline]= useState(getNetworkOnline)
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState('all')
+  const [tab, setTab] = useState(location.state?.overrideTab ?? 'all')
   const [reloadKey, setReloadKey] = useState(0)
 
   async function load() {
