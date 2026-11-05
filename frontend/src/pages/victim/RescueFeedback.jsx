@@ -50,8 +50,6 @@ export function RescueFeedback() {
   // Agency feedback state
   const [agcRating,    setAgcRating]    = useState(0)
   const [agcComment,   setAgcComment]   = useState('')
-  // Anonymous preference
-  const [anonymous,    setAnonymous]    = useState(false)
 
   useEffect(() => {
     if (!isOnline) { setLoading(false); return }
@@ -116,7 +114,7 @@ export function RescueFeedback() {
             target_id:           entry.target_id,
             rating:              entry.rating,
             comments:            entry.comments,
-            display_anonymously: anonymous,
+            display_anonymously: false,
           })
           .select('id')
           .single()
@@ -139,7 +137,7 @@ export function RescueFeedback() {
   if (!isOnline) {
     return (
       <div className={`h-screen flex flex-col bg-mesh${isLight ? ' light-theme' : ''}`}>
-        <TopBar title="Rate Your Response" onBack />
+        <TopBar title="Tell Us About Your Experience" onBack />
         <div className="flex flex-col items-center gap-3 mt-16 text-slate-500 p-4">
           <WifiOff size={28} />
           <p className="text-sm text-center">Feedback submission requires an internet connection.</p>
@@ -151,7 +149,7 @@ export function RescueFeedback() {
   if (loading) {
     return (
       <div className={`h-screen flex flex-col bg-mesh${isLight ? ' light-theme' : ''}`}>
-        <TopBar title="Rate Your Response" onBack />
+        <TopBar title="Tell Us About Your Experience" onBack />
         <div className="flex-1 flex items-center justify-center">
           <div className="w-8 h-8 rounded-full border-2 border-[#00d4ff] border-t-transparent animate-spin" />
         </div>
@@ -162,7 +160,7 @@ export function RescueFeedback() {
   if (!report || report.rescue_status !== 'rescued') {
     return (
       <div className={`h-screen flex flex-col bg-mesh${isLight ? ' light-theme' : ''}`}>
-        <TopBar title="Rate Your Response" onBack />
+        <TopBar title="Tell Us About Your Experience" onBack />
         <div className="flex flex-col items-center gap-3 mt-16 text-slate-500 p-4">
           <AlertOctagon size={28} />
           <p className="text-sm text-center">
@@ -202,10 +200,10 @@ export function RescueFeedback() {
 
   return (
     <div className={`h-screen flex flex-col bg-mesh overflow-hidden${isLight ? ' light-theme' : ''}`}>
-      <TopBar title="Rate Your Response" onBack />
+      <TopBar title="Tell Us About Your Experience" onBack />
 
       <main className="flex-1 overflow-y-auto p-4 pb-8 space-y-4">
-        <p className="text-xs text-slate-500 text-center">SOS #{report.id} · Your feedback is anonymous to the public by default.</p>
+        <p className="text-xs text-slate-500 text-center">SOS #{report.id}</p>
 
         {/* Responder rating */}
         {report.assigned_responder_id ? (
@@ -220,7 +218,7 @@ export function RescueFeedback() {
                 {respRating > 0 && <p className="text-xs text-amber-400 font-medium">{RATING_LABEL(respRating)}</p>}
                 <textarea
                   value={respComment} onChange={e => setRespComment(e.target.value)}
-                  placeholder="Optional comment about the responder…"
+                  placeholder="Write your feedback here…"
                   rows={2}
                   className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-xl px-3 py-2 text-sm text-slate-200 placeholder-slate-600 resize-none"
                 />
@@ -251,7 +249,7 @@ export function RescueFeedback() {
                 {agcRating > 0 && <p className="text-xs text-amber-400 font-medium">{RATING_LABEL(agcRating)}</p>}
                 <textarea
                   value={agcComment} onChange={e => setAgcComment(e.target.value)}
-                  placeholder="Optional comment about the agency's response…"
+                  placeholder="Write your feedback here…"
                   rows={2}
                   className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-xl px-3 py-2 text-sm text-slate-200 placeholder-slate-600 resize-none"
                 />
@@ -262,14 +260,9 @@ export function RescueFeedback() {
           </div>
         ) : null}
 
-        {/* Anonymous toggle */}
-        <label className="flex items-center gap-3 cursor-pointer">
-          <div className={`w-10 h-6 rounded-full transition-colors ${anonymous ? 'bg-[#00d4ff]' : 'bg-slate-700'} relative`}
-            onClick={() => setAnonymous(a => !a)}>
-            <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${anonymous ? 'left-5' : 'left-1'}`} />
-          </div>
-          <span className="text-xs text-slate-400">Submit anonymously (hides your name from public view)</span>
-        </label>
+        <p className="text-[10px] text-slate-500 text-center leading-relaxed px-2">
+          Your feedback helps improve the quality, responsiveness, and effectiveness of emergency services
+        </p>
 
         {error && <p className="text-xs text-red-400 text-center">{error}</p>}
 
