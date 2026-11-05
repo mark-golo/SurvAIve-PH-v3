@@ -144,6 +144,11 @@ export function SOSCenter() {
   const awaiting  = reports.filter(r => r.rescue_status === 'acknowledged')
   const inprog    = reports.filter(r => ['en_route','on_scene','cannot_reach'].includes(r.rescue_status))
   const completed = reports.filter(r => r.rescue_status === 'rescued' || r.dismissed)
+  const reviewedIds = (() => {
+    try { return new Set(JSON.parse(localStorage.getItem('survAIve-reviewed-sos') || '[]')) }
+    catch { return new Set() }
+  })()
+  const pendingReview = reports.filter(r => r.rescue_status === 'rescued' && !reviewedIds.has(Number(r.id)))
 
   function goToTracking() {
     navigate('/sos/tracking')
@@ -179,8 +184,8 @@ export function SOSCenter() {
       label: 'Post-Rescue Feedback',
       sub: 'Rate completed responses',
       icon: CheckCircle,
-      badge: completed.length > 0
-        ? { text: `${completed.length} Pending Reviews`, cls: 'bg-amber-900/40 text-amber-400' }
+      badge: pendingReview.length > 0
+        ? { text: `${pendingReview.length} Pending Reviews`, cls: 'bg-amber-900/40 text-amber-400' }
         : null,
       onClick: () => navigate('/sos/history', {
         state: { overrideTitle: 'Post-Rescue Feedback', overrideTab: 'completed' }

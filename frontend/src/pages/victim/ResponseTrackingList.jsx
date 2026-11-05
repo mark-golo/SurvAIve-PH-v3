@@ -108,6 +108,28 @@ export function ResponseTrackingList() {
         } catch {}
       }
 
+      // Also include unsynced local records not yet on the server
+      // (authenticated users may have offline SOS alongside confirmed server records)
+      if (isOnline) {
+        try {
+          const allLocal = await db.getAllSOS()
+          const serverIds     = new Set(rows.map(r => r.id).filter(Boolean))
+          const serverPackets = new Set(rows.map(r => r.mesh_packet_id).filter(Boolean))
+          const localOnly = allLocal
+            .filter(p =>
+              !serverIds.has(p.id) &&
+              !serverPackets.has(p.mesh_packet_id ?? p.meshPacketId)
+            )
+            .map(p => ({
+              ...p,
+              rescue_status: p.rescue_status ?? 'pending',
+              created_at: p.timestamp
+                ? new Date(p.timestamp).toISOString()
+                : new Date(p.createdAt ?? Date.now()).toISOString(),
+            }))
+          rows = [...rows, ...localOnly]
+        } catch {}
+      }
       setReports(rows)
     } finally {
       setLoading(false)
