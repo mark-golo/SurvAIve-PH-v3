@@ -68,7 +68,7 @@ export function ConstituentRegistry() {
         { event: 'UPDATE', schema: 'public', table: 'victims' },
         payload => {
           const v = payload.new
-          setData(d => d.map(r => r.id === v.id ? { ...r, status: v.status } : r))
+          setData(d => d.map(r => r.victim_id && r.victim_id === v.victim_id ? { ...r, status: v.status } : r))
         }
       )
       .on('postgres_changes',
