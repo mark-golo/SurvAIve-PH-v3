@@ -211,7 +211,9 @@ export function ResponseTracking() {
                     return <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${st.bg} ${st.color}`}>{st.label}</span>
                   })()}
                   {pageTitle === 'Post-Rescue Feedback' && report.rescue_status === 'rescued' && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-900/30 text-amber-400 font-semibold">Rate Response</span>
+                    isReviewed
+                      ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-900/30 text-green-400 font-semibold">Reviewed ✓</span>
+                      : <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-900/30 text-amber-400 font-semibold">Rate Response</span>
                   )}
                 </div>
                 <div className="flex items-center gap-1 text-xs text-slate-500">
