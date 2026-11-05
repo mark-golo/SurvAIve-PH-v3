@@ -8,6 +8,7 @@ import { getNetworkOnline } from '../../lib/capacitor'
 import api from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { db } from '../../lib/db'
+import { fmtSosId } from '../../lib/format'
 
 const NAV = [
   { icon: Home,          label: 'Home',    path: '/home'     },
@@ -197,7 +198,7 @@ export function IncidentHistory() {
                 className="w-full glass rounded-2xl p-4 border border-[rgba(255,255,255,0.06)]
                            hover:bg-[rgba(255,255,255,0.04)] active:scale-[0.99] transition-all text-left">
                 <div className="flex items-start justify-between gap-2 mb-2">
-                  <span className="text-xs font-mono text-slate-500">#{r.id}</span>
+                  <span className="text-xs font-mono text-slate-500">{fmtSosId(r.id)}</span>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${PRIORITY_LABELS[pLbl]}`}>{pLbl}</span>
                 </div>
                 <div className="flex items-center gap-2 mb-1">

@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { getNetworkOnline } from '../../lib/capacitor'
 import { useAuthStore } from '../../store/auth'
 import { logActivity } from '../../lib/api'
+import { fmtSosId } from '../../lib/format'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -256,7 +257,7 @@ export function ResponseFeedback() {
                       className={`border-b border-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.03)] transition-colors ${
                         i % 2 === 0 ? '' : 'bg-[rgba(255,255,255,0.01)]'
                       }`}>
-                      <td className="px-4 py-3 text-slate-300 font-mono">#{row.sos_id}</td>
+                      <td className="px-4 py-3 text-slate-300 font-mono">{fmtSosId(row.sos_id)}</td>
                       <td className="px-4 py-3 text-slate-400 whitespace-nowrap">{fmtDate(row.sos?.created_at)}</td>
                       <td className="px-4 py-3 text-slate-300">
                         {row.display_anonymously ? (

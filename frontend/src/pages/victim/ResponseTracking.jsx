@@ -9,6 +9,7 @@ import { getNetworkOnline } from '../../lib/capacitor'
 import api from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { db } from '../../lib/db'
+import { fmtSosId } from '../../lib/format'
 
 const RESCUE_STATUS_LABELS = {
   pending:      { label: 'Awaiting Acknowledgment', color: 'text-slate-400',  bg: 'bg-slate-700'     },
@@ -192,7 +193,7 @@ export function ResponseTracking() {
             {/* Summary card */}
             <div className="w-full glass rounded-2xl p-4 border border-[rgba(255,255,255,0.06)]">
               <div className="flex items-start justify-between gap-2 mb-2">
-                <span className="text-xs font-mono text-slate-500">#{report.id}</span>
+                <span className="text-xs font-mono text-slate-500">{fmtSosId(report.id)}</span>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${PRIORITY_LABELS[priorityLabel(report.ai_priority_score ?? 50)]}`}>
                   {priorityLabel(report.ai_priority_score ?? 50)}
                 </span>

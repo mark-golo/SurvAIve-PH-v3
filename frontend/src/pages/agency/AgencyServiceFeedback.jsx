@@ -3,6 +3,7 @@ import { Star, WifiOff, RefreshCw } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { getNetworkOnline } from '../../lib/capacitor'
 import { useAuthStore } from '../../store/auth'
+import { fmtSosId } from '../../lib/format'
 
 function StarDisplay({ rating }) {
   if (!rating) return <span className="text-slate-500">—</span>
@@ -124,7 +125,7 @@ export function AgencyServiceFeedback() {
                 </p>
               )}
               {r.sos?.id && (
-                <p className="text-[10px] text-slate-600">SOS #{r.sos.id} · {r.sos?.barangay ?? '—'}</p>
+                <p className="text-[10px] text-slate-600">{fmtSosId(r.sos.id)} · {r.sos?.barangay ?? '—'}</p>
               )}
             </div>
           ))}

@@ -11,6 +11,7 @@ import { GlassTextarea } from '../../components/ui/GlassInput'
 import api from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { getNetworkOnline } from '../../lib/capacitor'
+import { fmtSosId } from '../../lib/format'
 
 
 const ACTIONS = [
@@ -163,7 +164,7 @@ export function RescueDetail() {
 
   return (
     <div className={`min-h-screen bg-mesh flex flex-col${isLight ? ' light-theme' : ''}`}>
-      <TopBar title="Rescue Detail" subtitle={`Victim #${victim.id}`} onBack />
+      <TopBar title="Rescue Detail" subtitle={`SOS ${fmtSosId(victim.id)}`} onBack />
 
       <main className="flex-1 p-4 pb-nav space-y-4">
         {/* Priority banner */}

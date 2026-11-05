@@ -4,6 +4,7 @@ import { CheckCircle, XCircle, Users, RefreshCw } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { getNetworkOnline } from '../../lib/capacitor'
 import { useAuthStore } from '../../store/auth'
+import { fmtSosId } from '../../lib/format'
 
 // ── Acknowledgment Panel ──────────────────────────────────────────────────────
 // Shows agency-level acknowledgment actions for each pending SOS.
@@ -91,7 +92,7 @@ function AcknowledgmentPanel({ agencyType, agencyId }) {
             <div key={sos.id} className="px-4 py-3 flex items-center justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-white truncate">
-                  SOS #{sos.id} · {sos.name ?? 'Guest'}
+                  {fmtSosId(sos.id)} · {sos.name ?? 'Guest'}
                 </p>
                 <p className="text-xs text-slate-500">
                   {sos.barangay ?? '—'} · {new Date(sos.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}

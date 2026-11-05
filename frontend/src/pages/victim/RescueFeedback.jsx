@@ -8,6 +8,7 @@ import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline } from '../../lib/capacitor'
 import api, { localFetch } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
+import { fmtSosId } from '../../lib/format'
 
 const NAV = [
   { icon: Home,          label: 'Home',     path: '/home'     },
@@ -69,13 +70,15 @@ export function RescueFeedback() {
         }
         setReport(r ?? null)
 
-        // Check existing feedback to prevent duplicates
-        if (r && user?.id) {
+        // Check existing feedback to prevent duplicates (use Supabase Auth UUID, not user.id integer)
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        const supabaseUid = authUser?.id ?? null
+        if (r && supabaseUid) {
           const { data } = await supabase
             .from('response_feedback')
             .select('id,target_type,target_id')
             .eq('sos_id', id)
-            .eq('victim_id', user.id)
+            .eq('victim_id', supabaseUid)
           setExisting(data ?? [])
         }
       } catch (err) {
@@ -128,10 +131,12 @@ export function RescueFeedback() {
         } catch { /* PHP unavailable (Vercel) — fall through to Supabase */ }
 
         if (!phpOk) {
-          // Supabase direct insert — no .select().single() to avoid false RLS read-back error
+          // Supabase direct insert — victim_id must be Supabase Auth UUID (profiles FK), not user.id integer
+          const { data: { user: authUser } } = await supabase.auth.getUser()
+          const supabaseUid = authUser?.id ?? null
           const { error: err } = await supabase
             .from('response_feedback')
-            .insert({ ...payload, victim_id: user?.id ?? null })
+            .insert({ ...payload, victim_id: supabaseUid })
           if (err) throw err
         }
       }
@@ -224,7 +229,7 @@ export function RescueFeedback() {
       <TopBar title="Tell Us About Your Experience" onBack />
 
       <main className="flex-1 overflow-y-auto p-4 pb-nav space-y-4">
-        <p className="text-xs text-slate-500 text-center">SOS #{report.id}</p>
+        <p className="text-xs text-slate-500 text-center">{fmtSosId(report.id)}</p>
 
         {/* Responder rating */}
         {report.assigned_responder_id ? (
