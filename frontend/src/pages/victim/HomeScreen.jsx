@@ -98,7 +98,11 @@ function HoldStatusButton({ option, onConfirm, disabled }) {
       onPointerUp={cancelPress}
       onPointerLeave={cancelPress}
       onPointerCancel={cancelPress}
-      style={{ position: 'relative', touchAction: 'none', userSelect: 'none', cursor: disabled ? 'not-allowed' : 'pointer' }}
+      style={{
+        position: 'relative', touchAction: 'none', userSelect: 'none', cursor: disabled ? 'not-allowed' : 'pointer',
+        background: submitted ? `linear-gradient(135deg, ${option.colorFrom}, ${option.colorTo})` : undefined,
+        transition: 'background 0.3s ease',
+      }}
       className={`glass rounded-xl py-3 flex flex-col items-center gap-1.5 transition-all ${
         disabled ? 'opacity-50' : ''
       }`}
@@ -130,7 +134,7 @@ function HoldStatusButton({ option, onConfirm, disabled }) {
           strokeDasharray={pathLen > 0 ? pathLen : 9999}
           strokeDashoffset={submitted ? 0 : (pathLen > 0 ? pathLen * (1 - progress / 100) : 9999)}
           strokeLinecap="round"
-          strokeOpacity={isActive || submitted ? 1 : 0}
+          strokeOpacity={isActive && !submitted ? 1 : 0}
           style={{ transition: 'stroke-dashoffset 0.03s linear, stroke-opacity 0.15s ease' }}
         />
       </svg>
@@ -138,7 +142,12 @@ function HoldStatusButton({ option, onConfirm, disabled }) {
       {/* Icon */}
       <div
         className="w-10 h-10 rounded-xl flex items-center justify-center transition-all"
-        style={{ background: `linear-gradient(135deg, ${option.colorFrom}, ${option.colorTo})`, opacity: saving ? 0.7 : 1 }}
+        style={{
+          background: submitted
+            ? 'rgba(255,255,255,0.25)'
+            : `linear-gradient(135deg, ${option.colorFrom}, ${option.colorTo})`,
+          opacity: saving ? 0.7 : 1,
+        }}
       >
         {submitted
           ? <CheckCircle size={20} color="white" strokeWidth={2.5} />
@@ -147,12 +156,12 @@ function HoldStatusButton({ option, onConfirm, disabled }) {
       </div>
 
       {/* Label */}
-      <span className="text-xs font-medium transition-colors" style={{ color: (submitted || pressing) ? option.colorFrom : '#94a3b8' }}>
+      <span className="text-xs font-medium transition-colors" style={{ color: submitted ? 'white' : (pressing ? option.colorFrom : '#94a3b8') }}>
         {submitted ? option.label : option.label}
       </span>
 
       {/* Hint / progress text */}
-      <span className="text-[10px] leading-none" style={{ color: pressing ? option.colorFrom : error ? '#ef4444' : '#475569' }}>
+      <span className="text-[10px] leading-none" style={{ color: submitted ? 'white' : (pressing ? option.colorFrom : error ? '#ef4444' : '#475569') }}>
         {error
           ? 'Error'
           : saving
