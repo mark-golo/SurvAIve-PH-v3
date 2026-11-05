@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { CheckCircle, Clock, WifiOff, RefreshCw, AlertOctagon, ChevronDown } from 'lucide-react'
+import { CheckCircle, Clock, WifiOff, RefreshCw, AlertOctagon } from 'lucide-react'
 import { TopBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
@@ -61,8 +61,6 @@ export function ResponseTracking() {
   const [loading,   setLoading] = useState(true)
   const [lastSync,  setLastSync]= useState(null)
   const [reloadKey, setReloadKey] = useState(0)
-  const [collapsed, setCollapsed] = useState(false)
-  const initializedRef = useRef(false)
 
   async function load() {
     setLoading(true)
@@ -89,10 +87,6 @@ export function ResponseTracking() {
       }
 
       setReport(r ?? null)
-      if (!initializedRef.current) {
-        if (r?.rescue_status === 'rescued') setCollapsed(true)
-        initializedRef.current = true
-      }
 
       // Fetch status events from Supabase
       if (r) {
@@ -182,19 +176,13 @@ export function ResponseTracking() {
           </div>
         ) : (
           <>
-            {/* Summary card — IncidentHistory style; ChevronDown toggles timeline */}
-            <button
-              onClick={() => setCollapsed(c => !c)}
-              className="w-full glass rounded-2xl p-4 border border-[rgba(255,255,255,0.06)]
-                         hover:bg-[rgba(255,255,255,0.04)] active:scale-[0.99] transition-all text-left">
+            {/* Summary card */}
+            <div className="w-full glass rounded-2xl p-4 border border-[rgba(255,255,255,0.06)]">
               <div className="flex items-start justify-between gap-2 mb-2">
                 <span className="text-xs font-mono text-slate-500">#{report.id}</span>
-                <div className="flex items-center gap-2">
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${PRIORITY_LABELS[priorityLabel(report.ai_priority_score ?? 50)]}`}>
-                    {priorityLabel(report.ai_priority_score ?? 50)}
-                  </span>
-                  <ChevronDown size={14} className={`text-slate-500 transition-transform duration-200 ${!collapsed ? 'rotate-180' : ''}`} />
-                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${PRIORITY_LABELS[priorityLabel(report.ai_priority_score ?? 50)]}`}>
+                  {priorityLabel(report.ai_priority_score ?? 50)}
+                </span>
               </div>
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-sm font-semibold text-white">
@@ -217,11 +205,10 @@ export function ResponseTracking() {
                   {fmtDate(report.created_at)}
                 </div>
               </div>
-            </button>
+            </div>
 
-            {/* Timeline — shown when expanded */}
-            {!collapsed && (
-              <div className="glass rounded-2xl p-4 border border-[rgba(255,255,255,0.06)]">
+            {/* Timeline */}
+            <div className="glass rounded-2xl p-4 border border-[rgba(255,255,255,0.06)]">
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Response Timeline</p>
                   <button onClick={load} className="text-slate-500 hover:text-[#00d4ff] transition-colors">
@@ -251,10 +238,9 @@ export function ResponseTracking() {
                   ))}
                 </div>
               </div>
-            )}
 
-            {/* CTA — shown when expanded AND rescued */}
-            {!collapsed && report.rescue_status === 'rescued' && (
+            {/* CTA — shown when rescued */}
+            {report.rescue_status === 'rescued' && (
               <div className="glass rounded-2xl p-3 border border-green-500/30 bg-green-900/10">
                 <span className="text-xs font-bold text-green-400 uppercase tracking-wider">Tell Us About Your Experience</span>
                 <p className="text-xs text-slate-400 mt-1 leading-relaxed">Share your experience to improve emergency response</p>
