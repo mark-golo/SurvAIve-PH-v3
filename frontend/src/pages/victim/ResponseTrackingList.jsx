@@ -183,7 +183,7 @@ export function ResponseTrackingList() {
             const st   = RESCUE_STATUS_LABELS[r.rescue_status] ?? { label: r.rescue_status, color: 'text-slate-400', bg: 'bg-slate-700' }
             const pLbl = priorityLabel(r.ai_priority_score ?? 50)
             return (
-              <button key={r.id} onClick={() => navigate(`/sos/${r.id}`)}
+              <button key={r.id} onClick={() => navigate(`/sos/${r.id}`, { state: { fromSection: 'Response Tracking' } })}
                 className="w-full glass rounded-2xl p-4 border border-[rgba(255,255,255,0.06)]
                            hover:bg-[rgba(255,255,255,0.04)] active:scale-[0.99] transition-all text-left">
                 <div className="flex items-start justify-between gap-2 mb-2">

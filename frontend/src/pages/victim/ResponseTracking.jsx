@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { CheckCircle, Clock, WifiOff, RefreshCw, AlertOctagon, ChevronDown } from 'lucide-react'
 import { TopBar } from '../../components/ui/NavBar'
@@ -51,6 +51,8 @@ function fmtTime(ts) {
 export function ResponseTracking() {
   const { id }    = useParams()
   const navigate  = useNavigate()
+  const location  = useLocation()
+  const pageTitle = location.state?.fromSection ?? 'Response Tracking'
   const { user }  = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
   const [isOnline]= useState(getNetworkOnline)
@@ -151,7 +153,7 @@ export function ResponseTracking() {
   if (!isOnline) {
     return (
       <div className={`h-screen flex flex-col bg-mesh${isLight ? ' light-theme' : ''}`}>
-        <TopBar title="Response Tracking" onBack />
+        <TopBar title={pageTitle} onBack />
         <div className="flex flex-col items-center gap-3 mt-16 text-slate-500 p-4">
           <WifiOff size={28} />
           <p className="text-sm text-center">Response tracking requires an internet connection.</p>
@@ -162,7 +164,7 @@ export function ResponseTracking() {
 
   return (
     <div className={`h-screen flex flex-col bg-mesh overflow-hidden${isLight ? ' light-theme' : ''}`}>
-      <TopBar title="Response Tracking" onBack />
+      <TopBar title={pageTitle} onBack />
 
       <main className="flex-1 overflow-y-auto p-4 pb-8 space-y-4">
 

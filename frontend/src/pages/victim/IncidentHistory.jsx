@@ -180,7 +180,7 @@ export function IncidentHistory() {
             const pLbl  = priorityLabel(r.ai_priority_score ?? 50)
             const feedbackEligible = r.rescue_status === 'rescued'
             return (
-              <button key={r.id} onClick={() => navigate(`/sos/${r.id}`)}
+              <button key={r.id} onClick={() => navigate(`/sos/${r.id}`, { state: { fromSection: pageTitle } })}
                 className="w-full glass rounded-2xl p-4 border border-[rgba(255,255,255,0.06)]
                            hover:bg-[rgba(255,255,255,0.04)] active:scale-[0.99] transition-all text-left">
                 <div className="flex items-start justify-between gap-2 mb-2">
