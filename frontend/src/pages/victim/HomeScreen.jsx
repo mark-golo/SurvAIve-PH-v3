@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Map, Radio, Settings, MessageSquare, Battery, Satellite, Home, Wifi, WifiOff, HeartPulse, AlertOctagon, ShieldCheck } from 'lucide-react'
+import { Map, Radio, Settings, MessageSquare, Battery, Satellite, Home, Wifi, WifiOff, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { SOSButton } from '../../components/ui/SOSButton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { MobileNavBar } from '../../components/ui/NavBar'
@@ -11,11 +11,11 @@ import { useState, useEffect } from 'react'
 import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
 import { WeatherCard } from '../../components/ui/WeatherCard'
+import { supabase } from '../../lib/supabase'
 
 const STATUS_OPTIONS = [
-  { label: 'Injured', colorFrom: 'rgb(239,68,68)',  colorTo: 'rgb(185,28,28)',  Icon: HeartPulse,   value: 'injured' },
-  { label: 'Trapped', colorFrom: 'rgb(249,115,22)', colorTo: 'rgb(194,65,12)',  Icon: AlertOctagon, value: 'trapped' },
-  { label: 'Safe',    colorFrom: 'rgb(34,197,94)',  colorTo: 'rgb(21,128,61)',  Icon: ShieldCheck,  value: 'safe'    },
+  { label: 'SAFE',   colorFrom: 'rgb(34,197,94)',  colorTo: 'rgb(21,128,61)',  Icon: ShieldCheck, value: 'safe'   },
+  { label: 'UNSAFE', colorFrom: 'rgb(239,68,68)',  colorTo: 'rgb(185,28,28)', Icon: ShieldAlert, value: 'unsafe' },
 ]
 
 const NAV = [
@@ -31,6 +31,7 @@ export function HomeScreen() {
   const { user, isGuest } = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
   const [quickStatus, setQuickStatus] = useState(null)
+  const [savingStatus, setSavingStatus] = useState(false)
   const [peerCount, setPeerCount] = useState(0)
   const [isOnline, setIsOnline] = useState(getNetworkOnline())
   const [gpsState, setGpsState] = useState('unknown') // 'active' | 'denied' | 'unknown'
@@ -71,7 +72,7 @@ export function HomeScreen() {
     return () => { handlePromise.then(h => h.remove()).catch(() => {}) }
   }, [])
 
-  const handleSOS = () => navigate('/sos/new', { state: { status: quickStatus } })
+  const handleSOS = () => navigate('/sos/new')
 
   return (
     <div className={`h-screen bg-mesh flex flex-col overflow-hidden${isLight ? ' light-theme' : ''}`}>
@@ -139,34 +140,46 @@ export function HomeScreen() {
         {/* Weather */}
         <WeatherCard user={user} isGuest={isGuest} />
 
-        {/* Quick status */}
-        <div>
-          <p className="text-xs text-slate-500 uppercase tracking-wider mb-2 font-medium">Quick Status Update</p>
-          <div className="grid grid-cols-3 gap-2">
-            {STATUS_OPTIONS.map(s => (
-              <button
-                key={s.value}
-                onClick={() => setQuickStatus(s.value)}
-                className={`glass rounded-xl py-3 flex flex-col items-center gap-1.5 transition-all border ${
-                  quickStatus === s.value
-                    ? 'border-white/20'
-                    : 'border-[rgba(255,255,255,0.08)] hover:border-[rgba(255,255,255,0.2)]'
-                }`}
-                style={quickStatus === s.value ? { boxShadow: `0 0 14px ${s.colorFrom}50` } : {}}
-              >
-                <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center"
-                  style={{ background: `linear-gradient(135deg, ${s.colorFrom}, ${s.colorTo})` }}
+        {/* Quick Safety Status — only for registered (non-guest) victims */}
+        {!isGuest && user?.victim_id && (
+          <div>
+            <p className="text-xs text-slate-500 uppercase tracking-wider mb-2 font-medium">Quick Safety Status</p>
+            <div className="grid grid-cols-2 gap-2">
+              {STATUS_OPTIONS.map(s => (
+                <button
+                  key={s.value}
+                  disabled={savingStatus}
+                  onClick={async () => {
+                    if (savingStatus) return
+                    setQuickStatus(s.value)
+                    setSavingStatus(true)
+                    try {
+                      const dbStatus = s.value === 'safe' ? 'rescued' : 'sos_sent'
+                      await supabase.from('victims').update({ status: dbStatus }).eq('victim_id', user.victim_id)
+                    } catch { /* non-critical — UI selection still visible */ }
+                    finally { setSavingStatus(false) }
+                  }}
+                  className={`glass rounded-xl py-3 flex flex-col items-center gap-1.5 transition-all border ${
+                    quickStatus === s.value
+                      ? 'border-white/20'
+                      : 'border-[rgba(255,255,255,0.08)] hover:border-[rgba(255,255,255,0.2)]'
+                  } ${savingStatus ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  style={quickStatus === s.value ? { boxShadow: `0 0 14px ${s.colorFrom}50` } : {}}
                 >
-                  <s.Icon size={20} color="white" strokeWidth={2.5} />
-                </div>
-                <span className="text-xs font-medium" style={{ color: quickStatus === s.value ? s.colorFrom : '#94a3b8' }}>
-                  {s.label}
-                </span>
-              </button>
-            ))}
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center"
+                    style={{ background: `linear-gradient(135deg, ${s.colorFrom}, ${s.colorTo})` }}
+                  >
+                    <s.Icon size={20} color="white" strokeWidth={2.5} />
+                  </div>
+                  <span className="text-xs font-medium" style={{ color: quickStatus === s.value ? s.colorFrom : '#94a3b8' }}>
+                    {s.label}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Info cards */}
         <div className="grid grid-cols-2 gap-3">

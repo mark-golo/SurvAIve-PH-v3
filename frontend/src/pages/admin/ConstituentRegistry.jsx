@@ -11,7 +11,7 @@ import { useAuthStore } from '../../store/auth'
 import { getBarangays } from '../../lib/philippineLocations'
 
 const STATUS_COLORS = {
-  sos_sent: { bg: 'bg-[rgba(239,68,68,0.1)]',  text: 'text-[#ef4444]',  label: 'Not Safe' },
+  sos_sent: { bg: 'bg-[rgba(239,68,68,0.1)]',  text: 'text-[#ef4444]',  label: 'Unsafe'   },
   rescued:  { bg: 'bg-[rgba(34,197,94,0.1)]',  text: 'text-[#22c55e]',  label: 'Safe'     },
   unknown:  { bg: 'bg-[rgba(107,114,128,0.1)]',text: 'text-[#9ca3af]',  label: 'Unknown'  },
 }
@@ -153,9 +153,9 @@ export function ConstituentRegistry() {
         {/* Summary cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <SummaryChip label="Registered"   value={summary.total}   color="#00d4ff" />
-          <SummaryChip label="Not Safe"     value={summary.sos}     color="#ef4444" />
-          <SummaryChip label="Safe"         value={summary.rescued} color="#22c55e" />
-          <SummaryChip label="Status Unknown" value={summary.unknown} color="#9ca3af" />
+          <SummaryChip label="Unsafe"   value={summary.sos}     color="#ef4444" />
+          <SummaryChip label="Safe"     value={summary.rescued} color="#22c55e" />
+          <SummaryChip label="Unknown"  value={summary.unknown} color="#9ca3af" />
         </div>
 
         {/* Controls */}
@@ -169,7 +169,7 @@ export function ConstituentRegistry() {
           </GlassSelect>
           <GlassSelect value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-40">
             <option value="all">All Status</option>
-            <option value="sos_sent">Not Safe</option>
+            <option value="sos_sent">Unsafe</option>
             <option value="rescued">Safe</option>
             <option value="unknown">Unknown</option>
           </GlassSelect>
@@ -294,7 +294,7 @@ export function ConstituentRegistry() {
                                 </GlassSelect>
                                 <GlassInput label="Household Count" type="number" value={editForm.household_count} onChange={e => setEditForm(p => ({ ...p, household_count: e.target.value }))} />
                                 <GlassSelect label="Status" value={editForm.status} onChange={e => setEditForm(p => ({ ...p, status: e.target.value }))}>
-                                  <option value="sos_sent">Not Safe</option>
+                                  <option value="sos_sent">Unsafe</option>
                                   <option value="rescued">Safe</option>
                                   <option value="unknown">Unknown</option>
                                 </GlassSelect>
