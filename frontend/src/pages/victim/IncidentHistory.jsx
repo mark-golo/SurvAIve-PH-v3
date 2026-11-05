@@ -173,10 +173,8 @@ export function IncidentHistory() {
             <p className="text-sm">Incident history requires an internet connection.</p>
           </div>
         ) : loading ? (
-          <div className="space-y-2 mt-2">
-            {[1,2,3].map(i => (
-              <div key={i} className="glass rounded-2xl p-4 h-24 animate-pulse bg-[rgba(255,255,255,0.03)]" />
-            ))}
+          <div className="flex items-center justify-center py-20">
+            <div className="w-8 h-8 rounded-full border-2 border-[#00d4ff] border-t-transparent animate-spin" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center gap-3 mt-12 text-slate-500">
