@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getResponderTheme } from '../../lib/victimTheme'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Home, List, Map, Radio, Settings, RefreshCw, SortAsc } from 'lucide-react'
@@ -19,6 +20,7 @@ const NAV = [
 ]
 
 export function VictimQueue() {
+  const navigate = useNavigate()
   const { scope } = useAuthStore()
   const [isLight] = useState(() => getResponderTheme() === 'light')
   const [queue, setQueue] = useState([])
@@ -79,6 +81,21 @@ export function VictimQueue() {
           </NeonButton>
         }
       />
+
+      {/* Section switcher */}
+      <div className="flex gap-1 px-4 pt-3 pb-0 shrink-0">
+        <button
+          className="px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all bg-[rgba(0,212,255,0.15)] text-[#00d4ff] border border-[rgba(0,212,255,0.3)]"
+        >
+          Response Tracking
+        </button>
+        <button
+          onClick={() => navigate('/responder/queue/history')}
+          className="px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all text-slate-400 border border-transparent hover:text-white"
+        >
+          Incident History
+        </button>
+      </div>
 
       {/* Filter chips */}
       <div className="px-4 py-2 flex gap-2">

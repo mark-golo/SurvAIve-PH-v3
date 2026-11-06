@@ -27,6 +27,7 @@ import { RescueDetail }      from './pages/responder/RescueDetail'
 import { FieldMap }          from './pages/responder/FieldMap'
 import { MeshCenter }        from './pages/responder/MeshCenter'
 import { ResponderSettings } from './pages/responder/ResponderSettings'
+import { ResponderHistory }  from './pages/responder/ResponderHistory'
 
 // Admin pages
 import { AdminLayout }         from './pages/admin/AdminLayout'
@@ -97,7 +98,8 @@ export const router = createHashRouter([
       element: <ResponderLayout />,
       children: [
         { path: '/responder',              element: <ResponderHome /> },
-        { path: '/responder/queue',        element: <VictimQueue /> },
+        { path: '/responder/queue',         element: <VictimQueue /> },
+        { path: '/responder/queue/history', element: <ResponderHistory /> },
         { path: '/responder/rescue/:id',   element: <RescueDetail /> },
         { path: '/responder/map',          element: <FieldMap /> },
         { path: '/responder/relay',        element: <MeshCenter /> },
