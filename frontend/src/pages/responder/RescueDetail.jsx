@@ -293,15 +293,17 @@ export function RescueDetail() {
           />
         </GlassCard>
 
-        {/* Submit report */}
-        <NeonButton
-          variant={submitted ? 'green' : 'violet'}
-          onClick={submitReport}
-          disabled={submitting}
-          className="w-full"
-        >
-          {submitted ? 'Submitted' : submitting ? 'Submitting…' : 'Submit Report'}
-        </NeonButton>
+        {/* Submit report — hidden for already-completed rescues */}
+        {victim?.rescue_status !== 'rescued' && (
+          <NeonButton
+            variant={submitted ? 'green' : 'violet'}
+            onClick={submitReport}
+            disabled={submitting}
+            className="w-full"
+          >
+            {submitted ? 'Submitted' : submitting ? 'Submitting…' : 'Submit Report'}
+          </NeonButton>
+        )}
       </main>
       <MobileNavBar items={NAV} />
     </div>
