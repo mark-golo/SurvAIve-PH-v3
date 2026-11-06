@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User, MapPin, Radio, List, Map, Settings, Home, Sun, Bell, Volume2, Eye, Zap, VolumeX } from 'lucide-react'
+import { User, MapPin, Radio, List, Map, Settings, Home, Server, Check, Sun, Bell, Volume2, Eye, Zap, VolumeX } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { useAuthStore } from '../../store/auth'
 import { supabase } from '../../lib/supabase'
+import { setXamppHost } from '../../lib/api'
 import { getResponderTheme, saveResponderTheme } from '../../lib/victimTheme'
 import { AccountSettings } from '../../components/AccountSettings'
 import { useAlertStore } from '../../store/alertStore'
@@ -23,6 +24,8 @@ export function ResponderSettings() {
   const navigate = useNavigate()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [autoRelay,    setAutoRelay]    = useState(() => localStorage.getItem('resp_autoRelay')    !== 'false')
+  const [offlineForce, setOfflineForce] = useState(() => localStorage.getItem('resp_offlineForce') === 'true')
   const [theme, setThemeState] = useState(() => getResponderTheme())
 
   const {
@@ -35,6 +38,34 @@ export function ResponderSettings() {
     const next = theme === 'dark' ? 'light' : 'dark'
     setThemeState(next)
     saveResponderTheme(next)
+  }
+
+  // XAMPP / local server IP — persisted via Capacitor Preferences
+  const [xamppHost,  setXamppHostState] = useState('192.168.43.1')
+  const [xamppSaved, setXamppSaved]     = useState(false)
+
+  // Load persisted XAMPP host on mount
+  useEffect(() => {
+    async function loadXamppHost() {
+      try {
+        const { Preferences } = await import('@capacitor/preferences')
+        const { value } = await Preferences.get({ key: 'survAIve-xampp-host' })
+        if (value) setXamppHostState(value)
+      } catch { /* web build */ }
+    }
+    loadXamppHost()
+  }, [])
+
+  async function handleSaveXamppHost() {
+    const trimmed = xamppHost.trim()
+    if (!trimmed) return
+    setXamppHost(trimmed)
+    try {
+      const { Preferences } = await import('@capacitor/preferences')
+      await Preferences.set({ key: 'survAIve-xampp-host', value: trimmed })
+    } catch { /* web build */ }
+    setXamppSaved(true)
+    setTimeout(() => setXamppSaved(false), 2000)
   }
 
   useEffect(() => {
@@ -91,6 +122,50 @@ export function ResponderSettings() {
             <InfoRow label="Barangay"      value={profile?.assigned_barangay ?? profile?.barangay} />
             <InfoRow label="Municipality"  value={profile?.municipality} />
             <InfoRow label="Province"      value={profile?.province} />
+          </div>
+        </GlassCard>
+
+        {/* Network Settings */}
+        <GlassCard>
+          <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-3">Network Settings</p>
+          <div className="space-y-3">
+            <ToggleRow label="Auto-Relay Mode"    sub="Background mesh forwarding"  on={autoRelay}
+              onToggle={() => setAutoRelay(v => { const n = !v; localStorage.setItem('resp_autoRelay', String(n)); return n })} />
+            <ToggleRow label="Force Offline Mode" sub="Disable all network requests" on={offlineForce}
+              onToggle={() => setOfflineForce(v => { const n = !v; localStorage.setItem('resp_offlineForce', String(n)); return n })} />
+          </div>
+        </GlassCard>
+
+        {/* XAMPP / Local server config */}
+        <GlassCard>
+          <div className="flex items-center gap-3 mb-3">
+            <Server size={16} className="text-[#00d4ff]" />
+            <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider">Local Server (XAMPP)</p>
+          </div>
+          <p className="text-xs text-slate-400 leading-relaxed mb-3">
+            IP address of the admin device running XAMPP. Used to submit SOS reports and
+            sync data when there is no internet. Default is the Android hotspot gateway (192.168.43.1).
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={xamppHost}
+              onChange={(e) => setXamppHostState(e.target.value)}
+              placeholder="192.168.43.1"
+              className="flex-1 bg-[rgba(255,255,255,0.05)] border border-[rgba(0,212,255,0.2)] rounded-lg
+                         px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none
+                         focus:border-[rgba(0,212,255,0.5)] transition-colors"
+            />
+            <button
+              onClick={handleSaveXamppHost}
+              className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5
+                ${xamppSaved
+                  ? 'bg-[rgba(34,197,94,0.2)] text-[#22c55e] border border-[rgba(34,197,94,0.3)]'
+                  : 'bg-[rgba(0,212,255,0.15)] text-[#00d4ff] border border-[rgba(0,212,255,0.3)] hover:bg-[rgba(0,212,255,0.25)]'
+                }`}
+            >
+              {xamppSaved ? <><Check size={12} /> Saved</> : 'Save'}
+            </button>
           </div>
         </GlassCard>
 
