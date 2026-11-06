@@ -6,7 +6,6 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { MobileNavBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { mesh } from '../../lib/mesh'
-import { autoSOS } from '../../lib/autoSOS'
 import { useState, useEffect, useRef } from 'react'
 import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
@@ -208,7 +207,6 @@ export function HomeScreen() {
 
   useEffect(() => {
     document.title = 'SurvAIve PH – Home'
-    autoSOS.init()
 
     const handlePromise = onNetworkChange(connected => setIsOnline(connected))
 
