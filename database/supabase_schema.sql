@@ -148,6 +148,8 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   confirmed_at          TIMESTAMPTZ DEFAULT NULL,
   confirmed_by_role     TEXT DEFAULT NULL,
   dismissed             BOOLEAN NOT NULL DEFAULT FALSE,
+  flagged               BOOLEAN NOT NULL DEFAULT FALSE,
+  removed_from_view     BOOLEAN NOT NULL DEFAULT FALSE,
   service_type          TEXT[],
   mesh_packet_id        TEXT DEFAULT NULL,
   relay_source          TEXT DEFAULT NULL,
@@ -559,6 +561,7 @@ $$;
 -- ============================================================
 DROP FUNCTION IF EXISTS update_sos_by_id(bigint,text,text,timestamp with time zone,text,bigint,boolean,text);
 DROP FUNCTION IF EXISTS update_sos_by_id(bigint,text,text,timestamp with time zone,text,bigint,boolean,text,text);
+DROP FUNCTION IF EXISTS update_sos_by_id(bigint,text,text,timestamp with time zone,text,bigint,boolean,text,text,boolean,boolean);
 CREATE OR REPLACE FUNCTION update_sos_by_id(
   p_id                    BIGINT,
   p_rescue_status         TEXT        DEFAULT NULL,
@@ -568,7 +571,9 @@ CREATE OR REPLACE FUNCTION update_sos_by_id(
   p_assigned_responder_id BIGINT      DEFAULT NULL,
   p_dismissed             BOOLEAN     DEFAULT NULL,
   p_status                TEXT        DEFAULT NULL,
-  p_confirmed_by_role     TEXT        DEFAULT NULL
+  p_confirmed_by_role     TEXT        DEFAULT NULL,
+  p_flagged               BOOLEAN     DEFAULT NULL,
+  p_removed_from_view     BOOLEAN     DEFAULT NULL
 )
 RETURNS TEXT   -- returns the old rescue_status (for audit trail)
 LANGUAGE plpgsql
@@ -588,7 +593,9 @@ BEGIN
     notes                 = COALESCE(p_notes,                 notes),
     assigned_responder_id = COALESCE(p_assigned_responder_id, assigned_responder_id),
     dismissed             = COALESCE(p_dismissed,             dismissed),
-    status                = COALESCE(p_status,                status)
+    status                = COALESCE(p_status,                status),
+    flagged               = COALESCE(p_flagged,               flagged),
+    removed_from_view     = COALESCE(p_removed_from_view,     removed_from_view)
   WHERE id = p_id;
 
   RETURN old_rescue;

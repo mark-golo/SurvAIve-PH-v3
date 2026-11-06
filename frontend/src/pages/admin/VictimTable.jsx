@@ -35,7 +35,7 @@ export function VictimTable() {
         status:         r.status,
         barangay:       r.barangay,
         timestamp:      r.time_ago,
-        score:          r.ai_priority_score,
+        score:          r.flagged ? Math.max(0, (r.ai_priority_score ?? 50) - 20) : (r.ai_priority_score ?? 50),
         priority:       r.priority,
         verified:       !!r.is_verified,
         rescue:         r.rescue_status,
@@ -43,7 +43,9 @@ export function VictimTable() {
         ai_scene_label: r.ai_scene_label ?? null,
         lat:            r.lat ?? null,
         lng:            r.lng ?? null,
-        dismissed:         r.dismissed ?? false,
+        flagged:           r.flagged           ?? false,
+        dismissed:         r.dismissed         ?? false,
+        removed_from_view: r.removed_from_view ?? false,
         minutes_ago:       r.minutes_ago ?? 0,
         confirmed_by_name: r.confirmed_by_name ?? null,
         confirmed_at:      r.confirmed_at ?? null,
@@ -153,6 +155,7 @@ export function VictimTable() {
 
   const flagSuspicious = (id) => {
     setData(d => d.map(r => r.id === id ? { ...r, flagged: true, score: Math.max(0, r.score - 20) } : r))
+    api.put(`/sos/${id}`, { flagged: true }).catch(console.error)
   }
 
   const dismissSOS = (id) => {
@@ -160,10 +163,10 @@ export function VictimTable() {
     api.put(`/sos/${id}`, { dismissed: true }).catch(() => {})
   }
 
-  // Remove a row from the UI only — no database call; record stays intact for reporting
   const removeFromUI = (id) => {
     setData(d => d.filter(r => r.id !== id))
     setConfirmRemoveId(null)
+    api.put(`/sos/${id}`, { removed_from_view: true }).catch(console.error)
   }
 
   // Navigate to Command Center and fly to this victim's pin

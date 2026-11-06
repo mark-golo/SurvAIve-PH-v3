@@ -6,7 +6,7 @@ $db     = getDB();
 $method = $_SERVER['REQUEST_METHOD'];
 
 if ($method === 'GET') {
-    $where  = [];
+    $where  = ['r.removed_from_view = 0'];
     $params = [];
 
     if (!empty($_GET['municipality']))  { $where[] = 'municipality=?';  $params[] = $_GET['municipality']; }

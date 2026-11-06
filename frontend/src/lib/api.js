@@ -340,6 +340,7 @@ async function get(path) {
       .select('*')
       .order('created_at', { ascending: false })
       .limit(200)
+    q = q.eq('removed_from_view', false)
     if (muni)    q = q.or(`municipality.eq.${muni},municipality.is.null`)
     if (prov)    q = q.or(`province.eq.${prov},province.is.null`)
     if (svcType) q = q.contains('service_type', [svcType])
@@ -986,9 +987,11 @@ async function put(path, body = {}) {
     if (body.confirmed_at !== undefined)          updatePayload.confirmed_at = body.confirmed_at
     if (body.notes !== undefined)                 updatePayload.notes = body.notes
     if (body.assigned_responder_id !== undefined) updatePayload.assigned_responder_id = body.assigned_responder_id
-    if (typeof body.dismissed === 'boolean')      updatePayload.dismissed = body.dismissed
-    if (body.status !== undefined)                updatePayload.status = body.status
-    if (body.confirmed_by_role !== undefined)     updatePayload.confirmed_by_role = body.confirmed_by_role
+    if (typeof body.dismissed === 'boolean')           updatePayload.dismissed = body.dismissed
+    if (typeof body.flagged === 'boolean')             updatePayload.flagged = body.flagged
+    if (typeof body.removed_from_view === 'boolean')   updatePayload.removed_from_view = body.removed_from_view
+    if (body.status !== undefined)                     updatePayload.status = body.status
+    if (body.confirmed_by_role !== undefined)          updatePayload.confirmed_by_role = body.confirmed_by_role
     // Supabase CHECK constraint rejects 'acknowledged' — skip rescue_status and rely on
     // confirmed_by_name as the acknowledgment marker; normalizeSos derives the status on read.
     const supaPayload = { ...updatePayload }
@@ -1010,9 +1013,11 @@ async function put(path, body = {}) {
       p_confirmed_at:           body.confirmed_at            ?? null,
       p_notes:                  body.notes                   ?? null,
       p_assigned_responder_id:  body.assigned_responder_id   ?? null,
-      p_dismissed:              typeof body.dismissed === 'boolean' ? body.dismissed : null,
-      p_status:                 body.status                  ?? null,
-      p_confirmed_by_role:      body.confirmed_by_role       ?? null,
+      p_dismissed:              typeof body.dismissed === 'boolean'           ? body.dismissed           : null,
+      p_status:                 body.status                                   ?? null,
+      p_confirmed_by_role:      body.confirmed_by_role                        ?? null,
+      p_flagged:                typeof body.flagged === 'boolean'             ? body.flagged             : null,
+      p_removed_from_view:      typeof body.removed_from_view === 'boolean'   ? body.removed_from_view   : null,
     })
     if (!rpcErr) return { id: Number(id), _old_rescue_status: oldRescueStatus ?? null }
     console.warn('[api.put] all strategies failed for SOS', id)

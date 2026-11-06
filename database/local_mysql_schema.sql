@@ -176,6 +176,8 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   relay_source           VARCHAR(50)      DEFAULT NULL,
   -- offline-tracking columns (not in Supabase)
   dismissed              TINYINT(1)       NOT NULL DEFAULT 0,
+  flagged                TINYINT(1)       NOT NULL DEFAULT 0,
+  removed_from_view      TINYINT(1)       NOT NULL DEFAULT 0,
   synced_to_cloud        TINYINT(1)       NOT NULL DEFAULT 0,
   timestamp              TIMESTAMP        DEFAULT CURRENT_TIMESTAMP,
   synced_at              TIMESTAMP        NULL DEFAULT NULL,
