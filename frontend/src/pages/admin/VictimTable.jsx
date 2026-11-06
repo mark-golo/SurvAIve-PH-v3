@@ -170,7 +170,7 @@ export function VictimTable() {
   const viewOnMap = (r) => {
     if (!r.lat || !r.lng) return
     sessionStorage.setItem('cc-focus-sos', JSON.stringify({ lat: r.lat, lng: r.lng, id: r.id }))
-    navigate('/admin')
+    navigate(role === 'response_agency' ? '/agency' : '/admin')
   }
 
   if (loading) return (
