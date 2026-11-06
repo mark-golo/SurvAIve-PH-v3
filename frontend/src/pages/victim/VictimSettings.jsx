@@ -28,7 +28,7 @@ function Toggle({ on, onToggle, label, sub }) {
       </div>
       <button
         onClick={onToggle}
-        className={`w-11 h-6 rounded-full transition-all duration-200 relative ${on ? 'bg-[#00d4ff]' : 'bg-slate-700'}`}
+        className={`w-11 h-6 rounded-full overflow-hidden transition-all duration-200 relative ${on ? 'bg-[#00d4ff]' : 'bg-slate-700'}`}
       >
         <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-200 ${on ? 'left-5.5' : 'left-0.5'}`}
           style={{ left: on ? '22px' : '2px' }} />
