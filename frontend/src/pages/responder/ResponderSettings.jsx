@@ -24,8 +24,6 @@ export function ResponderSettings() {
   const navigate = useNavigate()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [autoRelay,    setAutoRelay]    = useState(() => localStorage.getItem('resp_autoRelay')    !== 'false')
-  const [offlineForce, setOfflineForce] = useState(() => localStorage.getItem('resp_offlineForce') === 'true')
   const [theme, setThemeState] = useState(() => getResponderTheme())
 
   const {
@@ -122,17 +120,6 @@ export function ResponderSettings() {
             <InfoRow label="Barangay"      value={profile?.assigned_barangay ?? profile?.barangay} />
             <InfoRow label="Municipality"  value={profile?.municipality} />
             <InfoRow label="Province"      value={profile?.province} />
-          </div>
-        </GlassCard>
-
-        {/* Network Settings */}
-        <GlassCard>
-          <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-3">Network Settings</p>
-          <div className="space-y-3">
-            <ToggleRow label="Auto-Relay Mode"    sub="Background mesh forwarding"  on={autoRelay}
-              onToggle={() => setAutoRelay(v => { const n = !v; localStorage.setItem('resp_autoRelay', String(n)); return n })} />
-            <ToggleRow label="Force Offline Mode" sub="Disable all network requests" on={offlineForce}
-              onToggle={() => setOfflineForce(v => { const n = !v; localStorage.setItem('resp_offlineForce', String(n)); return n })} />
           </div>
         </GlassCard>
 

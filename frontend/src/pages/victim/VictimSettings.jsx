@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { deviceSettings } from '../../lib/deviceSettings'
 import { setXamppHost } from '../../lib/api'
-import { Bell, Shield, Battery, LogOut, Phone, User, Radio, ChevronRight, Home, Map, Settings, MessageSquare, Server, Check, Sun } from 'lucide-react'
+import { Bell, Shield, LogOut, Phone, User, Radio, ChevronRight, Home, Map, Settings, MessageSquare, Server, Check, Sun } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { NeonButton } from '../../components/ui/NeonButton'
@@ -44,15 +43,9 @@ export function VictimSettings() {
   const navigate = useNavigate()
   const { user, isGuest, logout } = useAuthStore()
 
-  const { meshRelay: initRelay, batterySaver: initBattery } = deviceSettings.getSettings()
-  const [batterySaver, setBatterySaver] = useState(initBattery)
-  const [meshRelay, setMeshRelay]       = useState(initRelay)
-
   // XAMPP / local server IP — saved via Capacitor Preferences for native builds
   const [xamppHost,     setXamppHostState] = useState('192.168.43.1')
   const [xamppSaved,    setXamppSaved]     = useState(false)
-
-  useEffect(() => { deviceSettings.init() }, [])
 
   // Load persisted XAMPP host on mount (native only)
   useEffect(() => {
@@ -123,33 +116,6 @@ export function VictimSettings() {
               </button>
             </div>
           )}
-        </GlassCard>
-
-        {/* Network settings */}
-        <GlassCard>
-          <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-3">Network &amp; Power</p>
-          <div className="divide-y divide-[rgba(255,255,255,0.05)]">
-            <Toggle
-              on={meshRelay}
-              onToggle={() => {
-                const next = !meshRelay
-                setMeshRelay(next)
-                deviceSettings.setMeshRelay(next)
-              }}
-              label="Mesh Relay Mode"
-              sub="Forward messages from nearby devices (uses more battery)"
-            />
-            <Toggle
-              on={batterySaver}
-              onToggle={() => {
-                const next = !batterySaver
-                setBatterySaver(next)
-                deviceSettings.setBatterySaver(next)
-              }}
-              label="Battery Saver Mode"
-              sub="Reduces background scanning, prolongs battery life"
-            />
-          </div>
         </GlassCard>
 
         {/* XAMPP / Local server config */}
