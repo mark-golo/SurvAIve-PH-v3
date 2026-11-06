@@ -27,11 +27,14 @@ function Toggle({ on, onToggle, label, sub }) {
         {sub && <p className="text-xs text-slate-500 mt-0.5">{sub}</p>}
       </div>
       <button
+        type="button"
         onClick={onToggle}
-        className={`w-11 h-6 rounded-full overflow-hidden transition-all duration-200 relative ${on ? 'bg-[#00d4ff]' : 'bg-slate-700'}`}
+        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${on ? 'bg-[#00d4ff]' : 'bg-slate-700'}`}
       >
-        <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-200 ${on ? 'left-5.5' : 'left-0.5'}`}
-          style={{ left: on ? '22px' : '2px' }} />
+        <span
+          aria-hidden="true"
+          className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${on ? 'translate-x-5' : 'translate-x-0'}`}
+        />
       </button>
     </div>
   )
@@ -51,14 +54,15 @@ export function VictimSettings() {
 
   useEffect(() => { deviceSettings.init() }, [])
 
-  // Load persisted XAMPP host on mount
+  // Load persisted XAMPP host on mount (native only)
   useEffect(() => {
     async function loadXamppHost() {
+      if (!window.Capacitor?.isNativePlatform?.()) return
       try {
         const { Preferences } = await import('@capacitor/preferences')
         const { value } = await Preferences.get({ key: 'survAIve-xampp-host' })
         if (value) setXamppHostState(value)
-      } catch { /* web build — Preferences not available */ }
+      } catch {}
     }
     loadXamppHost()
   }, [])
