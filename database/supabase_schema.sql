@@ -167,19 +167,94 @@ CREATE TABLE IF NOT EXISTS welfare_checks (
 
 -- ── evacuation_centers ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS evacuation_centers (
-  id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  name           TEXT NOT NULL,
-  province       TEXT,
-  municipality   TEXT,
-  barangay       TEXT,
-  address        TEXT,
-  lat            NUMERIC(10,7),
-  lng            NUMERIC(10,7),
-  capacity       INT,
-  contact_number TEXT,
-  status         TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed','full')),
-  created_at     TIMESTAMPTZ DEFAULT NOW()
+  id                   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name                 TEXT NOT NULL,
+  province             TEXT,
+  municipality         TEXT,
+  barangay             TEXT,
+  address              TEXT,
+  lat                  NUMERIC(10,7),
+  lng                  NUMERIC(10,7),
+  capacity             INT,
+  current_occupancy    INTEGER      NOT NULL DEFAULT 0,
+  contact_number       TEXT,
+  status               TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed','full')),
+  safety_status        TEXT NOT NULL DEFAULT 'Unverified',
+  operational_status   TEXT NOT NULL DEFAULT 'Operational',
+  accessibility_status TEXT NOT NULL DEFAULT 'Unverified',
+  overall_status       TEXT NOT NULL DEFAULT 'Unverified',
+  last_verified_at     TIMESTAMPTZ DEFAULT NULL,
+  last_updated_at      TIMESTAMPTZ DEFAULT NULL,
+  created_at           TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ── Smart Evacuation Centers — Support Tables ─────────────────────────────────
+CREATE TABLE IF NOT EXISTS evacuation_center_assessments (
+  id                   BIGINT       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  center_id            BIGINT       NOT NULL REFERENCES evacuation_centers(id) ON DELETE CASCADE,
+  safety_status        TEXT         NOT NULL DEFAULT 'Unverified',
+  operational_status   TEXT         NOT NULL DEFAULT 'Operational',
+  accessibility_status TEXT         NOT NULL DEFAULT 'Unverified',
+  hazard_report        TEXT         DEFAULT NULL,
+  assessment_result    TEXT         NOT NULL DEFAULT 'Unverified',
+  assessment_source    TEXT         DEFAULT NULL,
+  assessed_by          BIGINT       DEFAULT NULL,
+  verified_by          BIGINT       DEFAULT NULL,
+  assessed_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  verified_at          TIMESTAMPTZ  DEFAULT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ec_assessments_center ON evacuation_center_assessments(center_id);
+
+CREATE TABLE IF NOT EXISTS evacuation_center_resources (
+  id                  BIGINT        GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  center_id           BIGINT        NOT NULL REFERENCES evacuation_centers(id) ON DELETE CASCADE,
+  resource_name       TEXT          NOT NULL,
+  quantity_available  NUMERIC(10,2) NOT NULL DEFAULT 0,
+  unit                TEXT          NOT NULL DEFAULT 'units',
+  availability_status TEXT          NOT NULL DEFAULT 'Available',
+  last_updated_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_ec_resources_center ON evacuation_center_resources(center_id);
+
+CREATE TABLE IF NOT EXISTS evacuation_occupancy_logs (
+  id                 BIGINT  GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  center_id          BIGINT  NOT NULL REFERENCES evacuation_centers(id) ON DELETE CASCADE,
+  previous_occupancy INTEGER NOT NULL DEFAULT 0,
+  updated_occupancy  INTEGER NOT NULL DEFAULT 0,
+  maximum_capacity   INTEGER NOT NULL DEFAULT 0,
+  available_spaces   INTEGER NOT NULL DEFAULT 0,
+  updated_by_role    TEXT    DEFAULT NULL,
+  recorded_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_ec_occupancy_center ON evacuation_occupancy_logs(center_id);
+
+CREATE TABLE IF NOT EXISTS evacuation_capacity_forecasts (
+  id                  BIGINT  GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  center_id           BIGINT  NOT NULL REFERENCES evacuation_centers(id) ON DELETE CASCADE,
+  current_occupancy   INTEGER NOT NULL DEFAULT 0,
+  projected_incoming  INTEGER NOT NULL DEFAULT 0,
+  projected_occupancy INTEGER NOT NULL DEFAULT 0,
+  maximum_capacity    INTEGER NOT NULL DEFAULT 0,
+  projected_remaining INTEGER NOT NULL DEFAULT 0,
+  forecast_status     TEXT NOT NULL DEFAULT 'Can Accommodate',
+  forecast_method     TEXT NOT NULL DEFAULT 'deterministic',
+  generated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_ec_forecasts_center ON evacuation_capacity_forecasts(center_id);
+
+CREATE TABLE IF NOT EXISTS evacuation_history (
+  id                     BIGINT       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  center_id              BIGINT       NOT NULL REFERENCES evacuation_centers(id) ON DELETE CASCADE,
+  event_name             TEXT         NOT NULL,
+  event_date             DATE         NOT NULL,
+  previous_occupancy     INTEGER      NOT NULL DEFAULT 0,
+  maximum_occupancy      INTEGER      NOT NULL DEFAULT 0,
+  total_evacuees         INTEGER      NOT NULL DEFAULT 0,
+  resource_summary       JSONB        DEFAULT NULL,
+  utilization_percentage NUMERIC(5,2) NOT NULL DEFAULT 0,
+  recorded_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_ec_history_center ON evacuation_history(center_id);
 
 -- ── escalations ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS escalations (

@@ -7,7 +7,11 @@ $id     = (int)$_GET['id'];
 $method = $_SERVER['REQUEST_METHOD'];
 
 if ($method === 'GET') {
-    $stmt = $db->prepare("SELECT id, name, province, municipality, barangay, address, lat, lng, capacity, contact_number, status, created_at FROM evacuation_centers WHERE id=?");
+    $stmt = $db->prepare("SELECT id, name, province, municipality, barangay, address, lat, lng,
+                   capacity, current_occupancy, contact_number, status,
+                   safety_status, operational_status, accessibility_status,
+                   overall_status, last_verified_at, last_updated_at, created_at
+            FROM evacuation_centers WHERE id=?");
     $stmt->execute([$id]);
     $row = $stmt->fetch();
     if (!$row) errorResponse('Not found', 404);
@@ -17,7 +21,10 @@ if ($method === 'GET') {
 if ($method === 'PUT') {
     requireAuth('admin');
     $body    = json_decode(file_get_contents('php://input'), true) ?? [];
-    $allowed = ['name', 'province', 'municipality', 'barangay', 'address', 'lat', 'lng', 'capacity', 'contact_number', 'status'];
+    $allowed = ['name', 'province', 'municipality', 'barangay', 'address', 'lat', 'lng',
+                'capacity', 'current_occupancy', 'contact_number', 'status',
+                'safety_status', 'operational_status', 'accessibility_status',
+                'overall_status', 'last_verified_at', 'last_updated_at'];
     $sets    = [];
     $params  = [];
     foreach ($allowed as $f) {

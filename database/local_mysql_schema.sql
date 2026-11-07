@@ -203,20 +203,100 @@ CREATE TABLE IF NOT EXISTS welfare_checks (
 
 -- ── Evacuation Centers ────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS evacuation_centers (
-  id             INT          AUTO_INCREMENT PRIMARY KEY,
-  name           VARCHAR(200) NOT NULL,
-  province       VARCHAR(100) DEFAULT NULL,
-  municipality   VARCHAR(100) DEFAULT NULL,
-  barangay       VARCHAR(100) DEFAULT NULL,
-  address        TEXT         DEFAULT NULL,
-  lat            DECIMAL(10,7) DEFAULT NULL,
-  lng            DECIMAL(10,7) DEFAULT NULL,
-  capacity       INT          DEFAULT NULL,
-  contact_number VARCHAR(20)  DEFAULT NULL,
-  status         ENUM('open','closed','full') NOT NULL DEFAULT 'open',
-  created_at     TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+  id                   INT          AUTO_INCREMENT PRIMARY KEY,
+  name                 VARCHAR(200) NOT NULL,
+  province             VARCHAR(100) DEFAULT NULL,
+  municipality         VARCHAR(100) DEFAULT NULL,
+  barangay             VARCHAR(100) DEFAULT NULL,
+  address              TEXT         DEFAULT NULL,
+  lat                  DECIMAL(10,7) DEFAULT NULL,
+  lng                  DECIMAL(10,7) DEFAULT NULL,
+  capacity             INT          DEFAULT NULL,
+  current_occupancy    INT          NOT NULL DEFAULT 0,
+  contact_number       VARCHAR(20)  DEFAULT NULL,
+  status               ENUM('open','closed','full') NOT NULL DEFAULT 'open',
+  safety_status        VARCHAR(20)  NOT NULL DEFAULT 'Unverified',
+  operational_status   VARCHAR(20)  NOT NULL DEFAULT 'Operational',
+  accessibility_status VARCHAR(20)  NOT NULL DEFAULT 'Unverified',
+  overall_status       VARCHAR(25)  NOT NULL DEFAULT 'Unverified',
+  last_verified_at     TIMESTAMP    NULL DEFAULT NULL,
+  last_updated_at      TIMESTAMP    NULL DEFAULT NULL,
+  created_at           TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_municipality (municipality)
 ) ENGINE=InnoDB;
+
+-- ── Smart Evacuation Centers — Support Tables ─────────────────────────────────
+CREATE TABLE IF NOT EXISTS evacuation_center_assessments (
+  id                   INT          AUTO_INCREMENT PRIMARY KEY,
+  center_id            INT          NOT NULL,
+  safety_status        VARCHAR(20)  NOT NULL DEFAULT 'Unverified',
+  operational_status   VARCHAR(20)  NOT NULL DEFAULT 'Operational',
+  accessibility_status VARCHAR(20)  NOT NULL DEFAULT 'Unverified',
+  hazard_report        TEXT         DEFAULT NULL,
+  assessment_result    VARCHAR(25)  NOT NULL DEFAULT 'Unverified',
+  assessment_source    VARCHAR(50)  DEFAULT NULL,
+  assessed_by          INT          DEFAULT NULL,
+  verified_by          INT          DEFAULT NULL,
+  assessed_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  verified_at          TIMESTAMP    NULL DEFAULT NULL,
+  FOREIGN KEY (center_id) REFERENCES evacuation_centers(id) ON DELETE CASCADE,
+  INDEX idx_center (center_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS evacuation_center_resources (
+  id                  INT           AUTO_INCREMENT PRIMARY KEY,
+  center_id           INT           NOT NULL,
+  resource_name       VARCHAR(100)  NOT NULL,
+  quantity_available  DECIMAL(10,2) NOT NULL DEFAULT 0,
+  unit                VARCHAR(30)   NOT NULL DEFAULT 'units',
+  availability_status VARCHAR(20)   NOT NULL DEFAULT 'Available',
+  last_updated_at     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (center_id) REFERENCES evacuation_centers(id) ON DELETE CASCADE,
+  INDEX idx_center (center_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS evacuation_occupancy_logs (
+  id                 INT         AUTO_INCREMENT PRIMARY KEY,
+  center_id          INT         NOT NULL,
+  previous_occupancy INT         NOT NULL DEFAULT 0,
+  updated_occupancy  INT         NOT NULL DEFAULT 0,
+  maximum_capacity   INT         NOT NULL DEFAULT 0,
+  available_spaces   INT         NOT NULL DEFAULT 0,
+  updated_by_role    VARCHAR(50) DEFAULT NULL,
+  recorded_at        TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (center_id) REFERENCES evacuation_centers(id) ON DELETE CASCADE,
+  INDEX idx_center (center_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS evacuation_capacity_forecasts (
+  id                  INT         AUTO_INCREMENT PRIMARY KEY,
+  center_id           INT         NOT NULL,
+  current_occupancy   INT         NOT NULL DEFAULT 0,
+  projected_incoming  INT         NOT NULL DEFAULT 0,
+  projected_occupancy INT         NOT NULL DEFAULT 0,
+  maximum_capacity    INT         NOT NULL DEFAULT 0,
+  projected_remaining INT         NOT NULL DEFAULT 0,
+  forecast_status     VARCHAR(25) NOT NULL DEFAULT 'Can Accommodate',
+  forecast_method     VARCHAR(30) NOT NULL DEFAULT 'deterministic',
+  generated_at        TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (center_id) REFERENCES evacuation_centers(id) ON DELETE CASCADE,
+  INDEX idx_center (center_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS evacuation_history (
+  id                     INT          AUTO_INCREMENT PRIMARY KEY,
+  center_id              INT          NOT NULL,
+  event_name             VARCHAR(200) NOT NULL,
+  event_date             DATE         NOT NULL,
+  previous_occupancy     INT          NOT NULL DEFAULT 0,
+  maximum_occupancy      INT          NOT NULL DEFAULT 0,
+  total_evacuees         INT          NOT NULL DEFAULT 0,
+  resource_summary       JSON         DEFAULT NULL,
+  utilization_percentage DECIMAL(5,2) NOT NULL DEFAULT 0,
+  recorded_at            TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (center_id) REFERENCES evacuation_centers(id) ON DELETE CASCADE,
+  INDEX idx_center (center_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ── Escalations (admin → superadmin, online-only REST flow) ───────────────────
 CREATE TABLE IF NOT EXISTS escalations (

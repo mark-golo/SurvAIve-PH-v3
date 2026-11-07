@@ -91,7 +91,12 @@ export async function localFetch(path, opts = {}) {
 }
 
 const TABLE = {
-  evacuation_centers: 'evacuation_centers',
+  evacuation_centers:              'evacuation_centers',
+  evacuation_center_assessments:   'evacuation_center_assessments',
+  evacuation_center_resources:     'evacuation_center_resources',
+  evacuation_occupancy_logs:       'evacuation_occupancy_logs',
+  evacuation_capacity_forecasts:   'evacuation_capacity_forecasts',
+  evacuation_history:              'evacuation_history',
   sos:                'sos_reports',
   victims:            'victims',
   constituents:       'victims',        // alias used by ConstituentRegistry
@@ -1059,9 +1064,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function isUUID(v) { return typeof v === 'string' && UUID_RE.test(v) }
 
 const ACTION_LABELS = {
-  POST:   { sos_reports: 'Submitted SOS report', responders: 'Created responder', admins: 'Created admin account', agencies: 'Created agency account', evacuation_centers: 'Created evacuation center', constituents: 'Registered constituent', province_reports: 'Submitted province report', escalations: 'Created escalation' },
-  PUT:    { sos_reports: 'Updated SOS report', responders: 'Updated responder record', admins: 'Updated admin account', agencies: 'Updated agency account', evacuation_centers: 'Updated evacuation center', constituents: 'Updated constituent', escalations: 'Acknowledged/updated escalation', superadmins: 'Updated superadmin', profiles: 'Updated profile' },
-  DELETE: { sos_reports: 'Deleted SOS report', responders: 'Deleted responder', admins: 'Deleted admin account', agencies: 'Deleted agency account', evacuation_centers: 'Deleted evacuation center', constituents: 'Removed constituent', superadmins: 'Deleted superadmin' },
+  POST:   { sos_reports: 'Submitted SOS report', responders: 'Created responder', admins: 'Created admin account', agencies: 'Created agency account', evacuation_centers: 'Created evacuation center', evacuation_center_assessments: 'Added center assessment', evacuation_center_resources: 'Added center resource', evacuation_occupancy_logs: 'Logged occupancy update', evacuation_capacity_forecasts: 'Generated capacity forecast', evacuation_history: 'Recorded evacuation event', constituents: 'Registered constituent', province_reports: 'Submitted province report', escalations: 'Created escalation' },
+  PUT:    { sos_reports: 'Updated SOS report', responders: 'Updated responder record', admins: 'Updated admin account', agencies: 'Updated agency account', evacuation_centers: 'Updated evacuation center', evacuation_center_assessments: 'Updated center assessment', evacuation_center_resources: 'Updated center resource', evacuation_history: 'Updated evacuation event', constituents: 'Updated constituent', escalations: 'Acknowledged/updated escalation', superadmins: 'Updated superadmin', profiles: 'Updated profile' },
+  DELETE: { sos_reports: 'Deleted SOS report', responders: 'Deleted responder', admins: 'Deleted admin account', agencies: 'Deleted agency account', evacuation_centers: 'Deleted evacuation center', evacuation_center_assessments: 'Deleted center assessment', evacuation_center_resources: 'Deleted center resource', evacuation_history: 'Deleted evacuation event', constituents: 'Removed constituent', superadmins: 'Deleted superadmin' },
   LOGIN:  { auth: 'Staff logged in' },
   LOGOUT: { auth: 'Staff logged out' },
   SYNC:   { profiles: 'Synced staff to cloud' },

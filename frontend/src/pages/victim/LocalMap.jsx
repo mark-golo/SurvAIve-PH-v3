@@ -1,12 +1,37 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { Home, Map, Radio, Settings, MessageSquare, Navigation, AlertTriangle, Tent } from 'lucide-react'
+import { Home, Map, Radio, Settings, MessageSquare, Navigation, AlertTriangle, Tent, CheckCircle, HelpCircle, XCircle, Clock, ExternalLink } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
+
+const EC_CACHE_KEY = 'ec-cache'
+
+function computeRecommendationScore(center, victimPos, allCenters) {
+  const safetyMap = { Safe: 100, 'At Risk': 50, Unverified: 25, Unsafe: 0 }
+  const accessMap = { Accessible: 100, Limited: 50, Unverified: 25, Inaccessible: 0 }
+  const Sa  = safetyMap[center.safety_status] ?? 25
+  const Ac  = accessMap[center.accessibility_status] ?? 25
+  const avail = Math.max(0, (center.capacity ?? 0) - (center.current_occupancy ?? 0))
+  const C   = center.capacity > 0 ? (avail / center.capacity) * 100 : 0
+  const dists = allCenters.filter(c => c.lat && c.lng)
+    .map(c => haversineCoords(victimPos[0], victimPos[1], Number(c.lat), Number(c.lng)))
+  const maxDist = Math.max(...dists, 1)
+  const dist = haversineCoords(victimPos[0], victimPos[1], Number(center.lat), Number(center.lng))
+  const D   = 100 - Math.min(100, (dist / maxDist) * 100)
+  return (Sa * 0.35) + (C * 0.25) + (Ac * 0.20) + (D * 0.15)
+}
+
+function haversineCoords(lat1, lng1, lat2, lng2) {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
 
 const DEFAULT_POS = [9.852, 126.073]
 
@@ -64,14 +89,57 @@ export function LocalMap() {
   const [centers, setCenters]     = useState([])
   const [loading, setLoading]     = useState(true)
 
+  // Smart Center Finder
+  const [finderOpen, setFinderOpen]       = useState(false)
+  const [recommendation, setRec]          = useState(null)
+  const [finderLoading, setFinderLoading] = useState(false)
+  const [isOffline, setIsOffline]         = useState(false)
+  const [cacheTime, setCacheTime]         = useState(null)
+
   const muni = scope?.municipality
 
   useEffect(() => {
-    api.get(muni ? `/evacuation_centers?municipality=${encodeURIComponent(muni)}` : '/evacuation_centers')
-      .then(rows => setCenters(rows))
-      .catch(() => setCenters([]))
+    const url = muni ? `/evacuation_centers?municipality=${encodeURIComponent(muni)}` : '/evacuation_centers'
+    api.get(url)
+      .then(rows => {
+        setCenters(Array.isArray(rows) ? rows : [])
+        try { localStorage.setItem(EC_CACHE_KEY, JSON.stringify({ centers: rows, ts: Date.now() })) } catch {}
+      })
+      .catch(() => {
+        try {
+          const raw = localStorage.getItem(EC_CACHE_KEY)
+          if (raw) {
+            const { centers: cached, ts } = JSON.parse(raw)
+            setCenters(Array.isArray(cached) ? cached : [])
+            setIsOffline(true)
+            setCacheTime(new Date(ts).toLocaleString())
+          }
+        } catch {}
+      })
       .finally(() => setLoading(false))
   }, [])
+
+  function runFinder() {
+    if (!userPos) return
+    setFinderLoading(true)
+    const eligible = centers.filter(c =>
+      c.lat && c.lng &&
+      !['Unsafe', 'Under Maintenance', 'Full'].includes(c.overall_status) &&
+      c.accessibility_status !== 'Inaccessible')
+    const scored = eligible.map(c => ({
+      ...c,
+      distKm: haversineCoords(userPos[0], userPos[1], Number(c.lat), Number(c.lng)),
+      score:  computeRecommendationScore(c, userPos, centers),
+    })).sort((a, b) => b.score - a.score)
+    setRec({ top: scored[0] ?? null, alternatives: scored.slice(1, 4) })
+    setFinderOpen(true)
+    setFinderLoading(false)
+  }
+
+  function navigateTo(center) {
+    const url = `https://www.google.com/maps/dir/?api=1&origin=${userPos[0]},${userPos[1]}&destination=${center.lat},${center.lng}&travelmode=driving`
+    window.open(url, '_blank')
+  }
 
   useEffect(() => {
     if (!navigator.geolocation) { setGpsError(true); return }
@@ -175,9 +243,46 @@ export function LocalMap() {
         </MapContainer>
       </div>
 
+      {/* Smart Center Finder */}
+      <div className="px-4 pb-2 space-y-2">
+        <button
+          onClick={runFinder}
+          disabled={finderLoading || !userPos}
+          className="w-full py-3 rounded-xl bg-[rgba(0,212,255,0.08)] border border-[rgba(0,212,255,0.25)] text-[#00d4ff] font-semibold text-sm hover:bg-[rgba(0,212,255,0.16)] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+          {finderLoading ? 'Evaluating centers…' : '📍 Find Nearest Safe Evacuation Center'}
+        </button>
+
+        {finderOpen && recommendation && (
+          <div className="rounded-2xl border border-[rgba(0,212,255,0.2)] bg-[rgba(0,0,0,0.5)] p-4 space-y-3">
+            {isOffline && (
+              <div className="text-[11px] text-[#f59e0b] bg-[rgba(245,158,11,0.08)] border border-[rgba(245,158,11,0.2)] rounded-lg px-3 py-2">
+                ⚠ Offline: showing last synced data ({cacheTime}). Actual conditions may have changed — verify before proceeding.
+              </div>
+            )}
+            {recommendation.top ? (
+              <>
+                <p className="text-[10px] font-bold text-[#00d4ff] uppercase tracking-wider">Recommended</p>
+                <FinderCard center={recommendation.top} onNavigate={navigateTo} />
+                {recommendation.alternatives.length > 0 && (
+                  <>
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider pt-1">Alternatives</p>
+                    {recommendation.alternatives.map(c => (
+                      <FinderCard key={c.id} center={c} onNavigate={navigateTo} compact />
+                    ))}
+                  </>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-[#f59e0b] text-center py-2">No suitable evacuation center found nearby. Contact emergency services immediately.</p>
+            )}
+            <button onClick={() => setFinderOpen(false)} className="text-[11px] text-slate-500 hover:text-slate-300 w-full text-center pt-1">Dismiss</button>
+          </div>
+        )}
+      </div>
+
       {/* Center list */}
       <div className="px-4 pb-2 space-y-2">
-        <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Evacuation Centers</p>
+        <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">All Evacuation Centers</p>
         {loading
           ? <p className="text-xs text-slate-500">Loading centers…</p>
           : centers.map(c => {
@@ -204,6 +309,47 @@ export function LocalMap() {
       </div>{/* end scrollable area */}
 
       <MobileNavBar items={NAV} />
+    </div>
+  )
+}
+
+const OVERALL_COLOR = {
+  'Safe':              '#22c55e',
+  'At Risk':           '#f59e0b',
+  'Unsafe':            '#ef4444',
+  'Full':              '#f97316',
+  'Under Maintenance': '#9ca3af',
+  'Unverified':        '#60a5fa',
+}
+
+function FinderCard({ center, onNavigate, compact = false }) {
+  const avail = Math.max(0, (center.capacity ?? 0) - (center.current_occupancy ?? 0))
+  const col = OVERALL_COLOR[center.overall_status] ?? '#60a5fa'
+  return (
+    <div className={`rounded-xl p-3 border ${compact ? 'border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)]' : 'border-[rgba(0,212,255,0.25)] bg-[rgba(0,212,255,0.04)]'}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-white truncate">{center.name}</p>
+          <p className="text-[11px] text-slate-400">{center.barangay ? `Brgy. ${center.barangay}` : ''}</p>
+        </div>
+        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0"
+          style={{ background: `${col}18`, color: col }}>
+          {center.overall_status ?? 'Unverified'}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-2 text-[11px] text-slate-400">
+        <span>{(center.distKm ?? 0).toFixed(1)} km away</span>
+        <span>{center.current_occupancy ?? 0}/{center.capacity ?? '?'} occupied</span>
+        <span className="text-[#22c55e]">{avail} available</span>
+        {center.accessibility_status && <span>{center.accessibility_status}</span>}
+      </div>
+      {!compact && (
+        <button
+          onClick={() => onNavigate(center)}
+          className="mt-3 w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-[rgba(0,212,255,0.12)] border border-[rgba(0,212,255,0.3)] text-[#00d4ff] text-xs font-semibold hover:bg-[rgba(0,212,255,0.2)] transition-colors">
+          <Navigation size={12} />Navigate Here<ExternalLink size={10} />
+        </button>
+      )}
     </div>
   )
 }
