@@ -490,9 +490,18 @@ const OVERALL_COLOR = {
 }
 
 function FinderCard({ center, onShowRoute, onMyLocation, onNavigate, isNavigating, activeTargetId, compact = false }) {
+  const [locFlash, setLocFlash] = useState(false)
   const avail = Math.max(0, (center.capacity ?? 0) - (center.current_occupancy ?? 0))
   const col = OVERALL_COLOR[center.overall_status] ?? '#60a5fa'
-  const navActive = isNavigating && activeTargetId === center.id
+  const routeActive = activeTargetId === center.id
+  const navActive   = isNavigating && activeTargetId === center.id
+
+  function handleMyLocation() {
+    setLocFlash(true)
+    setTimeout(() => setLocFlash(false), 1000)
+    onMyLocation()
+  }
+
   return (
     <div className={`rounded-xl p-3 border ${compact ? 'border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)]' : 'border-[rgba(0,212,255,0.25)] bg-[rgba(0,212,255,0.04)]'}`}>
       <div className="flex items-start justify-between gap-2">
@@ -513,18 +522,26 @@ function FinderCard({ center, onShowRoute, onMyLocation, onNavigate, isNavigatin
       </div>
       <div className="mt-3 grid grid-cols-3 gap-1.5">
         <button onClick={() => onShowRoute(center)}
-          className="flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-lg bg-[rgba(0,212,255,0.08)] border border-[rgba(0,212,255,0.2)] text-[#00d4ff] text-[10px] font-semibold hover:bg-[rgba(0,212,255,0.16)] transition-colors">
+          className={`flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-lg border text-[10px] font-semibold transition-colors ${
+            routeActive
+              ? 'bg-[#00d4ff] border-[#00d4ff] text-[#0f172a]'
+              : 'bg-[rgba(0,212,255,0.08)] border-[rgba(0,212,255,0.2)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.16)]'
+          }`}>
           <Route size={13} />Show Route
         </button>
-        <button onClick={onMyLocation}
-          className="flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-lg bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-slate-300 text-[10px] font-semibold hover:bg-[rgba(255,255,255,0.1)] transition-colors">
+        <button onClick={handleMyLocation}
+          className={`flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-lg border text-[10px] font-semibold transition-colors ${
+            locFlash
+              ? 'bg-[#22c55e] border-[#22c55e] text-white'
+              : 'bg-[rgba(34,197,94,0.08)] border-[rgba(34,197,94,0.25)] text-[#22c55e] hover:bg-[rgba(34,197,94,0.16)]'
+          }`}>
           <LocateFixed size={13} />My Location
         </button>
         <button onClick={() => onNavigate(center)}
           className={`flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-lg border text-[10px] font-semibold transition-colors ${
             navActive
-              ? 'bg-[#22c55e] border-[#22c55e] text-white'
-              : 'bg-[rgba(34,197,94,0.08)] border-[rgba(34,197,94,0.25)] text-[#22c55e] hover:bg-[rgba(34,197,94,0.16)]'
+              ? 'bg-[#ef4444] border-[#ef4444] text-white'
+              : 'bg-[rgba(156,163,175,0.08)] border-[rgba(156,163,175,0.25)] text-[#9ca3af] hover:bg-[rgba(156,163,175,0.16)]'
           }`}>
           {navActive ? <Square size={13} /> : <Play size={13} />}
           {navActive ? 'Stop' : 'Navigate'}
