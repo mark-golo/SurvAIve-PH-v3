@@ -493,16 +493,37 @@ const OVERALL_COLOR = {
 }
 
 function FinderCard({ center, onShowRoute, onMyLocation, onNavigate, isNavigating, activeTargetId, compact = false }) {
-  const [locFlash, setLocFlash] = useState(false)
+  const [activeBtn, setActiveBtn] = useState(null) // 'route' | 'location' | null
   const avail = Math.max(0, (center.capacity ?? 0) - (center.current_occupancy ?? 0))
   const col = OVERALL_COLOR[center.overall_status] ?? '#60a5fa'
-  const routeActive = activeTargetId === center.id
-  const navActive   = isNavigating && activeTargetId === center.id
+  const navActive = isNavigating && activeTargetId === center.id
+
+  // Reset local highlights when route is cleared or moved to another center
+  useEffect(() => {
+    if (activeTargetId !== center.id) setActiveBtn(null)
+  }, [activeTargetId, center.id])
+
+  function handleShowRoute() {
+    const next = activeBtn === 'route' ? null : 'route'
+    setActiveBtn(next)
+    if (next === 'route') {
+      onShowRoute(center)
+      if (navActive) onNavigate(center) // stop navigation when route is re-shown
+    }
+  }
 
   function handleMyLocation() {
-    setLocFlash(true)
-    setTimeout(() => setLocFlash(false), 1000)
-    onMyLocation()
+    const next = activeBtn === 'location' ? null : 'location'
+    setActiveBtn(next)
+    if (next === 'location') {
+      onMyLocation()
+      if (navActive) onNavigate(center) // stop navigation
+    }
+  }
+
+  function handleNavigate() {
+    setActiveBtn(null) // deactivate route / location highlights
+    onNavigate(center)
   }
 
   return (
@@ -524,9 +545,9 @@ function FinderCard({ center, onShowRoute, onMyLocation, onNavigate, isNavigatin
         {center.accessibility_status && <span>{center.accessibility_status}</span>}
       </div>
       <div className="mt-3 grid grid-cols-3 gap-1.5">
-        <button onClick={() => onShowRoute(center)}
+        <button onClick={handleShowRoute}
           className={`flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-lg border text-[10px] font-semibold transition-colors ${
-            routeActive
+            activeBtn === 'route'
               ? 'bg-[#00d4ff] border-[#00d4ff] text-[#0f172a]'
               : 'bg-[rgba(0,212,255,0.08)] border-[rgba(0,212,255,0.2)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.16)]'
           }`}>
@@ -534,13 +555,13 @@ function FinderCard({ center, onShowRoute, onMyLocation, onNavigate, isNavigatin
         </button>
         <button onClick={handleMyLocation}
           className={`flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-lg border text-[10px] font-semibold transition-colors ${
-            locFlash
+            activeBtn === 'location'
               ? 'bg-[#22c55e] border-[#22c55e] text-white'
               : 'bg-[rgba(34,197,94,0.08)] border-[rgba(34,197,94,0.25)] text-[#22c55e] hover:bg-[rgba(34,197,94,0.16)]'
           }`}>
           <LocateFixed size={13} />My Location
         </button>
-        <button onClick={() => onNavigate(center)}
+        <button onClick={handleNavigate}
           className={`flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-lg border text-[10px] font-semibold transition-colors ${
             navActive
               ? 'bg-[#ef4444] border-[#ef4444] text-white'
