@@ -35,7 +35,7 @@ export function VictimSignup() {
     name: '', contact_number: '', province: '', municipality: '', barangay: '', sitio: '',
     household_count: 1, vulnerabilities: [], medical_conditions: '',
     emergency_contact_name: '', emergency_contact_number: '',
-    emergency_contact_relationship: 'Parent',
+    emergency_contact_relationship: '',
   })
 
   // ── Step 1: PIN pad ───────────────────────────────────────────────────────────
@@ -69,6 +69,12 @@ export function VictimSignup() {
     if (!form.province || !form.municipality || !form.barangay) {
       setError('Province, Municipality, and Barangay are required.'); return
     }
+    if (!form.sitio.trim()) { setError('Purok / Zone is required.'); return }
+    if (!form.emergency_contact_name.trim()) { setError('Emergency contact name is required.'); return }
+    if (!form.emergency_contact_relationship) { setError('Relationship to emergency contact is required.'); return }
+    const ecCleaned = form.emergency_contact_number.replace(/\D/g, '')
+    if (ecCleaned.length < 10) { setError('Enter a valid emergency contact number (09XXXXXXXXX).'); return }
+    setForm(p => ({ ...p, emergency_contact_number: ecCleaned }))
     // Early duplicate check — avoids wasting 3 steps then failing at Activate
     setLoading(true)
     try {
@@ -238,7 +244,7 @@ export function VictimSignup() {
                     <option value="">Select Barangay</option>
                     {barangays.map(b => <option key={b} value={b}>{b}</option>)}
                   </GlassSelect>
-                  <GlassInput label="Sitio / Purok (Optional)" placeholder="e.g. Purok 3"
+                  <GlassInput label="Purok / Zone *" placeholder="e.g. Purok 3"
                     value={form.sitio} onChange={(e) => f('sitio')(e.target.value)} />
                 </div>
               </GlassCard>
@@ -270,13 +276,14 @@ export function VictimSignup() {
               <GlassCard>
                 <p className="text-xs font-semibold text-[#8b5cf6] uppercase tracking-wider mb-3">Emergency Contact</p>
                 <div className="space-y-3">
-                  <GlassInput label="Contact Name" value={form.emergency_contact_name}
+                  <GlassInput label="Contact Name *" value={form.emergency_contact_name}
                     onChange={(e) => f('emergency_contact_name')(e.target.value)} />
-                  <GlassSelect label="Relationship" value={form.emergency_contact_relationship}
+                  <GlassSelect label="Relationship *" value={form.emergency_contact_relationship}
                     onChange={(e) => f('emergency_contact_relationship')(e.target.value)}>
+                    <option value="">Select Relationship</option>
                     {RELATIONSHIP_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
                   </GlassSelect>
-                  <GlassInput label="Contact Number" value={form.emergency_contact_number}
+                  <GlassInput label="Contact Number *" value={form.emergency_contact_number}
                     onChange={(e) => f('emergency_contact_number')(e.target.value)} />
                 </div>
               </GlassCard>
@@ -408,15 +415,14 @@ export function VictimSignup() {
                   <Row label="Province"     value={form.province} />
                   <Row label="Municipality" value={form.municipality} />
                   <Row label="Barangay" value={form.barangay} />
-                  {form.sitio && <Row label="Sitio" value={form.sitio} />}
+                  <Row label="Purok / Zone" value={form.sitio} />
                   <Row label="Household" value={`${form.household_count} member(s)`} />
                   {form.vulnerabilities.length > 0 && (
                     <Row label="Vulnerabilities" value={form.vulnerabilities.join(', ')} />
                   )}
-                  {form.emergency_contact_name && (
-                    <Row label="Emergency Contact"
-                      value={`${form.emergency_contact_name} (${form.emergency_contact_relationship})`} />
-                  )}
+                  <Row label="Emergency Contact"
+                    value={`${form.emergency_contact_name} (${form.emergency_contact_relationship})`} />
+                  <Row label="Emergency No." value={form.emergency_contact_number} />
                 </div>
               </GlassCard>
 

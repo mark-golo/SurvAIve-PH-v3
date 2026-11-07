@@ -260,7 +260,7 @@ export function VictimSettings() {
           <InfoRow label="Victim ID"            value={user?.victim_id} />
           <InfoRow label="Full Name"            value={user?.name} />
           <InfoRow label="Contact Number"       value={user?.contact_number} />
-          <InfoRow label="Purok / Zone"         value={user?.purok ?? user?.zone} />
+          <InfoRow label="Purok / Zone"         value={user?.sitio} />
           <InfoRow label="Barangay"             value={user?.barangay} />
           <InfoRow label="Municipality"         value={user?.municipality} />
           <InfoRow label="Emergency Contact"    value={user?.emergency_contact_name} />
