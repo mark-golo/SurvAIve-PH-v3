@@ -370,9 +370,37 @@ export function EvacuationCenters() {
 
   function loadRecentEvents() {
     if (!occCenterId) return
-    api.get(`/evacuation_center_occupancy_events?center_id=${occCenterId}`)
-      .then(rows => setRecentEvents(Array.isArray(rows) ? rows.slice(0, 10) : []))
-      .catch(() => setRecentEvents([]))
+    // Fetch directly from checkins + checkouts so evacuee_name is available.
+    // Fallback to occupancy_events if either call fails (e.g. schema not yet migrated).
+    Promise.all([
+      api.get(`/evacuation_center_checkins?center_id=${occCenterId}`).catch(() => []),
+      api.get(`/evacuation_center_checkouts?center_id=${occCenterId}`).catch(() => []),
+    ]).then(([arrivals, departures]) => {
+      const events = [
+        ...(Array.isArray(arrivals) ? arrivals : []).map(r => ({
+          id:           `chk-${r.id}`,
+          event_type:   'ARRIVAL',
+          evacuee_ref:  r.evacuee_id,
+          evacuee_name: r.evacuee_name,
+          quantity:     r.group_size,
+          occurred_at:  r.checked_in_at,
+        })),
+        ...(Array.isArray(departures) ? departures : []).map(r => ({
+          id:           `out-${r.id}`,
+          event_type:   'DEPARTURE',
+          evacuee_ref:  r.evacuee_id,
+          evacuee_name: r.evacuee_name,
+          quantity:     r.group_size,
+          occurred_at:  r.checked_out_at,
+        })),
+      ]
+      events.sort((a, b) => new Date(b.occurred_at ?? 0) - new Date(a.occurred_at ?? 0))
+      setRecentEvents(events.slice(0, 10))
+    }).catch(() => {
+      api.get(`/evacuation_center_occupancy_events?center_id=${occCenterId}`)
+        .then(rows => setRecentEvents(Array.isArray(rows) ? rows.slice(0, 10) : []))
+        .catch(() => setRecentEvents([]))
+    })
   }
 
   function resetCheckForm() {
@@ -941,16 +969,23 @@ export function EvacuationCenters() {
                   ? <p className="text-[11px] text-slate-600 text-center py-3">No events yet — use the buttons above to record arrivals or departures.</p>
                   : recentEvents.map(ev => (
                     <div key={ev.id} className="flex items-center justify-between py-1.5 border-b border-[rgba(255,255,255,0.04)] last:border-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
                         {ev.event_type === 'ARRIVAL'
-                          ? <UserPlus size={11} className="text-[#22c55e]" />
-                          : <UserMinus size={11} className="text-[#f97316]" />}
-                        <span className="text-xs text-slate-300">{ev.evacuee_ref ?? 'Anonymous'}</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${ev.event_type === 'ARRIVAL' ? 'bg-[rgba(34,197,94,0.1)] text-[#22c55e]' : 'bg-[rgba(249,115,22,0.1)] text-[#f97316]'}`}>
+                          ? <UserPlus size={11} className="text-[#22c55e] shrink-0" />
+                          : <UserMinus size={11} className="text-[#f97316] shrink-0" />}
+                        <div className="min-w-0">
+                          <span className="text-xs text-slate-200 block truncate">
+                            {ev.evacuee_name || (ev.evacuee_ref && ev.evacuee_ref !== 'null' ? ev.evacuee_ref : 'Anonymous')}
+                          </span>
+                          {ev.evacuee_name && ev.evacuee_ref && ev.evacuee_ref !== 'null' && (
+                            <span className="text-[10px] text-slate-500 block truncate">ID: {ev.evacuee_ref}</span>
+                          )}
+                        </div>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full shrink-0 ${ev.event_type === 'ARRIVAL' ? 'bg-[rgba(34,197,94,0.1)] text-[#22c55e]' : 'bg-[rgba(249,115,22,0.1)] text-[#f97316]'}`}>
                           {ev.event_type === 'ARRIVAL' ? `+${ev.quantity}` : `-${ev.quantity}`}
                         </span>
                       </div>
-                      <span className="text-[10px] text-slate-500">{ev.occurred_at ? new Date(ev.occurred_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                      <span className="text-[10px] text-slate-500 shrink-0 ml-2">{ev.occurred_at ? new Date(ev.occurred_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                     </div>
                   ))}
               </div>
@@ -1310,7 +1345,20 @@ function QRScanField({ onScan, onAutoRecord, scannerMode, setScannerMode, evacue
           async (text) => {
             if (!text.startsWith('SURVPH:EVACUEE:')) return
             const parts = text.split(':')
-            const eid = parts[2] ?? ''; const ename = parts[3] ?? ''
+            const rawEid = parts[2] ?? ''
+            // Reject QR codes that embedded a null/undefined user id at generation time
+            if (!rawEid || rawEid === 'null' || rawEid === 'undefined') return
+            const eid   = rawEid
+            const ename = parts[3] ? decodeURIComponent(parts[3]) : ''
+
+            // Resolve victim name from DB (async, best-effort — doesn't block recording)
+            async function resolveVictimName(id) {
+              try {
+                const rows = await api.get(`/victims?victim_id=${encodeURIComponent(id)}`)
+                if (Array.isArray(rows) && rows[0]?.name) return rows[0].name
+              } catch {}
+              return ename
+            }
 
             if (onAutoRecordRef.current) {
               // ── Auto-record mode: stay open, record immediately ────────────
@@ -1324,12 +1372,17 @@ function QRScanField({ onScan, onAutoRecord, scannerMode, setScannerMode, evacue
               }
               recentScans.current.set(eid, Date.now())
               setAutoStatus('recording')
-              setAutoMsg(ename || eid || 'Victim')
+              setAutoMsg(ename || eid)
               try {
-                await onAutoRecordRef.current({ evacueeId: eid, evacueeName: ename })
-                setEvacueeRef(eid); setEvacueeName(ename)
+                // Look up name while recording in parallel
+                const [resolvedName] = await Promise.all([
+                  resolveVictimName(eid),
+                  onAutoRecordRef.current({ evacueeId: eid, evacueeName: ename }),
+                ])
+                const displayName = resolvedName || ename || eid
+                setEvacueeRef(eid); setEvacueeName(resolvedName || ename)
                 setAutoStatus('success')
-                setAutoMsg(ename || eid || 'Victim')
+                setAutoMsg(displayName)
               } catch (err) {
                 setAutoStatus('error')
                 setAutoMsg(err?.error ?? 'Failed to record — check connection')
@@ -1337,8 +1390,9 @@ function QRScanField({ onScan, onAutoRecord, scannerMode, setScannerMode, evacue
               setTimeout(() => setAutoStatus(null), 2500)
             } else {
               // ── Manual mode: old behaviour ─────────────────────────────────
-              setEvacueeRef(eid); setEvacueeName(ename)
-              onScan({ evacueeId: eid, evacueeName: ename })
+              const resolvedName = await resolveVictimName(eid)
+              setEvacueeRef(eid); setEvacueeName(resolvedName || ename)
+              onScan({ evacueeId: eid, evacueeName: resolvedName || ename })
               setScanSuccess(true)
               qr.stop().catch(() => {}); qrRef.current = null
               setTimeout(() => { setOverlayOpen(false); setScannerMode(false); setScanSuccess(false) }, 1200)
@@ -1386,7 +1440,21 @@ function QRScanField({ onScan, onAutoRecord, scannerMode, setScannerMode, evacue
         return
       }
       const parts = text.split(':')
-      const eid = parts[2] ?? ''; const ename = parts[3] ?? ''
+      const rawEid = parts[2] ?? ''
+      if (!rawEid || rawEid === 'null' || rawEid === 'undefined') {
+        setGalleryError('QR code does not contain a valid Victim ID.')
+        return
+      }
+      const eid   = rawEid
+      const ename = parts[3] ? decodeURIComponent(parts[3]) : ''
+
+      // Best-effort name lookup from victims table
+      let resolvedName = ename
+      try {
+        const rows = await api.get(`/victims?victim_id=${encodeURIComponent(eid)}`)
+        if (Array.isArray(rows) && rows[0]?.name) resolvedName = rows[0].name
+      } catch {}
+
       if (onAutoRecordRef.current) {
         // Auto-record mode: record from gallery image too
         const lastScan = recentScans.current.get(eid)
@@ -1395,19 +1463,19 @@ function QRScanField({ onScan, onAutoRecord, scannerMode, setScannerMode, evacue
           return
         }
         recentScans.current.set(eid, Date.now())
-        setAutoStatus('recording'); setAutoMsg(ename || eid || 'Victim')
+        setAutoStatus('recording'); setAutoMsg(resolvedName || eid)
         try {
-          await onAutoRecordRef.current({ evacueeId: eid, evacueeName: ename })
-          setEvacueeRef(eid); setEvacueeName(ename)
-          setAutoStatus('success'); setAutoMsg(ename || eid || 'Victim')
+          await onAutoRecordRef.current({ evacueeId: eid, evacueeName: resolvedName || ename })
+          setEvacueeRef(eid); setEvacueeName(resolvedName || ename)
+          setAutoStatus('success'); setAutoMsg(resolvedName || eid)
         } catch (err) {
           setAutoStatus('error'); setAutoMsg(err?.error ?? 'Failed to record')
         }
         setTimeout(() => setAutoStatus(null), 2500)
       } else {
         if (qrRef.current) { await qrRef.current.stop().catch(() => {}); qrRef.current = null }
-        setEvacueeRef(eid); setEvacueeName(ename)
-        onScan({ evacueeId: eid, evacueeName: ename })
+        setEvacueeRef(eid); setEvacueeName(resolvedName || ename)
+        onScan({ evacueeId: eid, evacueeName: resolvedName || ename })
         setScanSuccess(true)
         setTimeout(() => { setOverlayOpen(false); setScannerMode(false); setScanSuccess(false); setGalleryError('') }, 1200)
       }
