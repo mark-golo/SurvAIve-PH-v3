@@ -372,7 +372,6 @@ export function EvacuationCenters() {
         evacuee_name: checkEvacueeName || null,
         group_size: checkGroupSize,
         checked_in_by: 'admin',
-        source: checkEvacueeRef ? 'QR_SCAN' : 'ADMIN',
       })
       loadCenters(); loadRecentEvents()
       setArrivedOpen(false); resetCheckForm()
@@ -390,7 +389,6 @@ export function EvacuationCenters() {
         evacuee_name: checkEvacueeName || null,
         group_size: checkGroupSize,
         checked_out_by: 'admin',
-        source: checkEvacueeRef ? 'QR_SCAN' : 'ADMIN',
       })
       loadCenters(); loadRecentEvents()
       setDepartedOpen(false); resetCheckForm()
