@@ -53,7 +53,7 @@ function FlyTo({ pos }) {
   return null
 }
 
-function QRScanPanel({ centers, onClose }) {
+function QRScanPanel({ centers, onClose, onCheckInComplete }) {
   const [scanStage, setScanStage] = useState('scanning') // 'scanning' | 'confirm' | 'done' | 'error'
   const [scanResult, setScanResult] = useState(null)
   const [selCenter, setSelCenter] = useState('')
@@ -77,7 +77,7 @@ function QRScanPanel({ centers, onClose }) {
               setScanResult({ evacueeId: parts[2] ?? '', evacueeName: parts[3] ?? '' })
               setScanStage('confirm')
             } else {
-              setErrorMsg('Invalid QR code — expected an evacuee ID.')
+              setErrorMsg('Invalid QR code — expected a victim QR code.')
               setScanStage('error')
             }
           },
@@ -101,9 +101,9 @@ function QRScanPanel({ centers, onClose }) {
         evacuee_name: scanResult?.evacueeName || null,
         group_size: groupSize,
         checked_in_by: 'responder',
-        source: 'QR_SCAN',
       })
       setScanStage('done')
+      onCheckInComplete?.()
     } catch (e) { setErrorMsg(e?.error ?? 'Failed to record check-in') }
     finally { setSaving(false) }
   }
@@ -133,7 +133,7 @@ function QRScanPanel({ centers, onClose }) {
             <div className="glass rounded-xl p-4 flex items-center gap-3">
               <UserCheck size={20} className="text-[#22c55e] shrink-0" />
               <div>
-                <p className="text-xs text-slate-400">Evacuee scanned</p>
+                <p className="text-xs text-slate-400">Victim scanned</p>
                 <p className="text-sm font-semibold text-white">{scanResult.evacueeName || 'Unknown name'}</p>
                 <p className="text-[10px] text-slate-500 font-mono">{scanResult.evacueeId}</p>
               </div>
@@ -212,11 +212,14 @@ export function FieldMap() {
   const clusters = useMemo(() => clusterSOS(activeAssigned), [activeAssigned])
 
   const muni = scope?.municipality
-  useEffect(() => {
+
+  function loadCenters() {
     api.get(muni ? `/evacuation_centers?municipality=${encodeURIComponent(muni)}` : '/evacuation_centers')
-      .then(rows => setCenters(rows))
-      .catch(() => setCenters([]))
-  }, [])
+      .then(rows => setCenters(Array.isArray(rows) ? rows : []))
+      .catch(() => {})
+  }
+
+  useEffect(() => { loadCenters() }, [])
 
   useEffect(() => {
     api.get(muni ? `/sos?municipality=${encodeURIComponent(muni)}` : '/sos')
@@ -415,7 +418,7 @@ export function FieldMap() {
       </div>
 
       {/* QR Scanner panel */}
-      {scannerOpen && <QRScanPanel centers={centers} onClose={() => setScannerOpen(false)} />}
+      {scannerOpen && <QRScanPanel centers={centers} onClose={() => setScannerOpen(false)} onCheckInComplete={loadCenters} />}
 
       {/* QR Scan button */}
       <div className="px-3 pb-2">

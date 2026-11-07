@@ -158,17 +158,27 @@ export function LocalMap() {
       .finally(() => setLoading(false))
   }, [])
 
-  function runFinder() {
+  async function runFinder() {
     if (!userPos) return
     setFinderLoading(true)
-    const eligible = centers.filter(c =>
+    let fresh = centers
+    try {
+      const url = muni ? `/evacuation_centers?municipality=${encodeURIComponent(muni)}` : '/evacuation_centers'
+      const rows = await api.get(url)
+      if (Array.isArray(rows) && rows.length > 0) {
+        fresh = rows
+        setCenters(rows)
+        try { localStorage.setItem(EC_CACHE_KEY, JSON.stringify({ centers: rows, ts: Date.now() })) } catch {}
+      }
+    } catch {}
+    const eligible = fresh.filter(c =>
       c.lat && c.lng &&
       !['Unsafe', 'Under Maintenance', 'Full'].includes(c.overall_status) &&
       c.accessibility_status !== 'Inaccessible')
     const scored = eligible.map(c => ({
       ...c,
       distKm: haversineCoords(userPos[0], userPos[1], Number(c.lat), Number(c.lng)),
-      score:  computeRecommendationScore(c, userPos, centers),
+      score:  computeRecommendationScore(c, userPos, fresh),
     })).sort((a, b) => b.score - a.score)
     setRec({ top: scored[0] ?? null, alternatives: scored.slice(1, 4) })
     setFinderOpen(true)
