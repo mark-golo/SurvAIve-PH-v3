@@ -667,6 +667,10 @@ async function post(path, body = {}) {
             province:       m.province       ?? null,
             municipality:   m.municipality   ?? null,
             barangay:       m.barangay       ?? null,
+            sitio:          m.sitio          ?? null,
+            emergency_contact_name:         m.emergency_contact_name         ?? null,
+            emergency_contact_number:       m.emergency_contact_number       ?? null,
+            emergency_contact_relationship: m.emergency_contact_relationship ?? null,
           }, { onConflict: 'victim_id' }).then(() => {}).catch(() => {})
         }
         return phpRes
@@ -677,7 +681,7 @@ async function post(path, body = {}) {
       // Supabase path: victim is already in Supabase — verify client-side
       const { data: victim, error: qe } = await supabase
         .from('victims')
-        .select('id, name, contact_number, province, municipality, barangay, pin_hash, device_key_hash, pin_salt, status')
+        .select('id, name, contact_number, province, municipality, barangay, sitio, emergency_contact_name, emergency_contact_number, emergency_contact_relationship, pin_hash, device_key_hash, pin_salt, status')
         .eq('victim_id', body.victim_id)
         .maybeSingle()
       if (qe) sbThrow(qe)
@@ -705,6 +709,10 @@ async function post(path, body = {}) {
         province:       victim.province,
         municipality:   victim.municipality,
         barangay:       victim.barangay,
+        sitio:          victim.sitio ?? null,
+        emergency_contact_name:         victim.emergency_contact_name ?? null,
+        emergency_contact_number:       victim.emergency_contact_number ?? null,
+        emergency_contact_relationship: victim.emergency_contact_relationship ?? null,
       }
       return { token: createOfflineToken(user), user }
     }

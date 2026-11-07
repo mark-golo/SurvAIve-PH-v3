@@ -18,7 +18,8 @@ $db = getDB();
 
 // Look up victim by Victim ID
 $stmt = $db->prepare("
-    SELECT id, name, contact_number, province, municipality, barangay,
+    SELECT id, name, contact_number, province, municipality, barangay, sitio,
+           emergency_contact_name, emergency_contact_number, emergency_contact_relationship,
            pin_hash, device_key_hash AS stored_device_key_hash, status
     FROM victims
     WHERE victim_id = ?
@@ -64,5 +65,9 @@ jsonResponse([
         'province'     => $victim['province'],
         'municipality' => $victim['municipality'],
         'barangay'     => $victim['barangay'],
+        'sitio'        => $victim['sitio'] ?? null,
+        'emergency_contact_name'         => $victim['emergency_contact_name'] ?? null,
+        'emergency_contact_number'       => $victim['emergency_contact_number'] ?? null,
+        'emergency_contact_relationship' => $victim['emergency_contact_relationship'] ?? null,
     ],
 ]);

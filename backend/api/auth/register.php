@@ -82,4 +82,8 @@ jsonResponse(['success' => true, 'token' => $token, 'user' => [
     'barangay'     => $body['barangay'],
     'municipality' => $body['municipality'],
     'province'     => $body['province'],
+    'sitio'        => $body['sitio'] ?? null,
+    'emergency_contact_name'         => $body['emergency_contact_name'] ?? null,
+    'emergency_contact_number'       => $body['emergency_contact_number'] ?? null,
+    'emergency_contact_relationship' => $body['emergency_contact_relationship'] ?? null,
 ]]);
