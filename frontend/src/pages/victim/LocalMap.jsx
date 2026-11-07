@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { Home, Map, Radio, Settings, MessageSquare, Navigation, AlertTriangle, Tent, CheckCircle, HelpCircle, XCircle, Clock } from 'lucide-react'
+import { Home, Map, Radio, Settings, MessageSquare, Navigation, AlertTriangle, Tent, CheckCircle, HelpCircle, XCircle, Clock, LocateFixed, Route, Play, Square } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
@@ -89,6 +89,20 @@ function FlyToBounds({ line }) {
   return null
 }
 
+function MapRefSetter({ mapRef }) {
+  const map = useMap()
+  useEffect(() => { mapRef.current = map }, [map])
+  return null
+}
+
+function FollowUser({ pos, active }) {
+  const map = useMap()
+  useEffect(() => {
+    if (active && pos) map.panTo(pos, { animate: true, duration: 0.5 })
+  }, [pos, active])
+  return null
+}
+
 export function LocalMap() {
   const { scope } = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
@@ -110,6 +124,12 @@ export function LocalMap() {
   const [routeInfo, setRouteInfo]         = useState(null)
   const [routeLoading, setRouteLoading]   = useState(false)
   const [routeError, setRouteError]       = useState(null)
+
+  // Map controls
+  const mapRef      = useRef(null)
+  const watchIdRef  = useRef(null)
+  const [isNavigating, setIsNavigating] = useState(false)
+  const [navError, setNavError]         = useState(null)
 
   const muni = scope?.municipality
 
@@ -181,7 +201,56 @@ export function LocalMap() {
 
   function clearRoute() {
     setRouteLine(null); setRouteTarget(null); setRouteInfo(null); setRouteError(null)
+    if (isNavigating) toggleNavigation()
   }
+
+  function goToMyLocation() {
+    if (!navigator.geolocation) return
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const p = [pos.coords.latitude, pos.coords.longitude]
+        setUserPos(p)
+        mapRef.current?.flyTo(p, 16, { duration: 1 })
+      },
+      () => mapRef.current?.flyTo(userPos ?? DEFAULT_POS, 15, { duration: 1 }),
+      { enableHighAccuracy: true, timeout: 8000 }
+    )
+  }
+
+  function showRouteOnMap() {
+    if (routeTarget) navigateInApp(routeTarget)
+  }
+
+  function toggleNavigation() {
+    if (isNavigating) {
+      if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current)
+      watchIdRef.current = null
+      setIsNavigating(false)
+      setNavError(null)
+    } else {
+      if (!routeTarget) { setNavError('Select a destination first'); return }
+      if (!navigator.geolocation) { setNavError('GPS not available'); return }
+      setIsNavigating(true)
+      setNavError(null)
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        pos => {
+          const p = [pos.coords.latitude, pos.coords.longitude]
+          setUserPos(p)
+          if (routeLine?.length) {
+            const nearestDist = Math.min(...routeLine.map(([rlat, rlng]) =>
+              haversineCoords(p[0], p[1], rlat, rlng) * 1000))
+            if (nearestDist > 150) navigateInApp(routeTarget)
+          }
+        },
+        () => setNavError('GPS signal lost'),
+        { enableHighAccuracy: true, maximumAge: 3000 }
+      )
+    }
+  }
+
+  useEffect(() => () => {
+    if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current)
+  }, [])
 
   useEffect(() => {
     if (!navigator.geolocation) { setGpsError(true); return }
@@ -231,7 +300,7 @@ export function LocalMap() {
       )}
 
       {/* Map */}
-      <div className="mx-4 mt-2 mb-2 rounded-2xl overflow-hidden border border-[rgba(255,255,255,0.08)] h-[45vh] min-h-[280px]">
+      <div className="mx-4 mt-2 mb-2 relative rounded-2xl overflow-hidden border border-[rgba(255,255,255,0.08)] h-[45vh] min-h-[280px]">
         <MapContainer
           center={userPos ?? DEFAULT_POS}
           zoom={14}
@@ -239,6 +308,8 @@ export function LocalMap() {
           zoomControl={false}
         >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
+          <MapRefSetter mapRef={mapRef} />
+          <FollowUser pos={userPos} active={isNavigating} />
           {userPos && <FlyTo pos={userPos} />}
 
           {/* User position */}
@@ -292,7 +363,27 @@ export function LocalMap() {
             )
           })}
         </MapContainer>
+
+        {/* Floating map controls */}
+        <div className="absolute bottom-3 right-3 z-[1000] flex flex-col gap-2">
+          <MapControlBtn icon={LocateFixed} label="My Location" onClick={goToMyLocation} />
+          <MapControlBtn icon={Route} label="Show Route" onClick={showRouteOnMap}
+            disabled={!routeTarget} />
+          <MapControlBtn
+            icon={isNavigating ? Square : Play}
+            label={isNavigating ? 'Stop' : 'Navigate'}
+            onClick={toggleNavigation}
+            active={isNavigating}
+            disabled={!routeTarget && !isNavigating} />
+        </div>
       </div>
+
+      {/* Nav error toast */}
+      {navError && (
+        <div className="mx-4 mb-1 px-3 py-1.5 rounded-lg bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.3)]">
+          <p className="text-[11px] text-[#ef4444]">{navError}</p>
+        </div>
+      )}
 
       {/* Route info banner */}
       {(routeTarget || routeLoading) && (
@@ -304,6 +395,11 @@ export function LocalMap() {
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold text-[#00d4ff] flex items-center gap-1.5">
                     <Navigation size={12} /> Navigating to {routeTarget?.name}
+                    {isNavigating && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-[#22c55e] font-semibold ml-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />LIVE
+                      </span>
+                    )}
                   </p>
                   <button onClick={clearRoute} className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors">✕ Clear</button>
                 </div>
@@ -396,6 +492,25 @@ const OVERALL_COLOR = {
   'Full':              '#f97316',
   'Under Maintenance': '#9ca3af',
   'Unverified':        '#60a5fa',
+}
+
+function MapControlBtn({ icon: Icon, label, onClick, disabled = false, active = false }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl text-[9px] font-semibold gap-0.5 shadow-lg transition-all
+        ${active
+          ? 'bg-[#22c55e] text-white shadow-[0_0_12px_rgba(34,197,94,0.4)]'
+          : disabled
+            ? 'bg-[rgba(255,255,255,0.05)] text-slate-600 cursor-not-allowed'
+            : 'bg-[rgba(15,23,42,0.85)] border border-[rgba(255,255,255,0.12)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.15)] active:scale-95'
+        }`}>
+      <Icon size={16} />
+      {label}
+    </button>
+  )
 }
 
 function FinderCard({ center, onNavigate, compact = false }) {
