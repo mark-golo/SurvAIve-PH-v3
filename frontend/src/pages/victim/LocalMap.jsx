@@ -317,7 +317,7 @@ export function LocalMap() {
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
           <MapRefSetter mapRef={mapRef} />
           <FollowUser pos={userPos} active={isNavigating} />
-          {userPos && <FlyTo pos={userPos} />}
+          {userPos && !isNavigating && <FlyTo pos={userPos} />}
 
           {/* User position */}
           {userPos && (
