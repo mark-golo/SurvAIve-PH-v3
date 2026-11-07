@@ -98,7 +98,9 @@ function MapRefSetter({ mapRef }) {
 function FollowUser({ pos, active }) {
   const map = useMap()
   useEffect(() => {
-    if (active && pos) map.flyTo(pos, 19, { animate: true, duration: 0.5 })
+    if (!active || !pos) return
+    map.stop()
+    map.panTo(pos, { animate: true, duration: 0.5 })
   }, [pos, active])
   return null
 }
@@ -237,6 +239,7 @@ export function LocalMap() {
     if (!navigator.geolocation) { setNavError('GPS not available'); return }
     await navigateInApp(center)
     setIsNavigating(true); setNavError(null)
+    if (userPos) mapRef.current?.flyTo(userPos, 19, { duration: 0.8 })
     watchIdRef.current = navigator.geolocation.watchPosition(
       pos => {
         const p = [pos.coords.latitude, pos.coords.longitude]
