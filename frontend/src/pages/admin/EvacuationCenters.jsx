@@ -1254,7 +1254,9 @@ function CenterForm({ title, form, set, error, saving, onSave, onCancel }) {
 function QRScanField({ onScan, scannerMode, setScannerMode, evacueeRef, setEvacueeRef, evacueeName, setEvacueeName }) {
   const [overlayOpen, setOverlayOpen] = useState(false)
   const [scanSuccess, setScanSuccess] = useState(false)
+  const [galleryError, setGalleryError] = useState('')
   const qrRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
     if (!overlayOpen) return
@@ -1288,10 +1290,43 @@ function QRScanField({ onScan, scannerMode, setScannerMode, evacueeRef, setEvacu
     }
   }, [overlayOpen])
 
-  function openScanner() { setScanSuccess(false); setOverlayOpen(true); setScannerMode(true) }
+  function openScanner() { setScanSuccess(false); setGalleryError(''); setOverlayOpen(true); setScannerMode(true) }
   function closeScanner() {
     if (qrRef.current) { qrRef.current.stop().catch(() => {}); qrRef.current = null }
-    setOverlayOpen(false); setScannerMode(false)
+    setOverlayOpen(false); setScannerMode(false); setGalleryError('')
+  }
+
+  async function handleGalleryFile(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setGalleryError('')
+    try {
+      const { Html5Qrcode } = await import('html5-qrcode')
+      let tempEl = document.getElementById('qr-file-reader-tmp')
+      if (!tempEl) {
+        tempEl = document.createElement('div')
+        tempEl.id = 'qr-file-reader-tmp'
+        tempEl.style.display = 'none'
+        document.body.appendChild(tempEl)
+      }
+      const qr = new Html5Qrcode('qr-file-reader-tmp')
+      const result = await qr.scanFileV2(file, false)
+      const text = result.decodedText
+      if (text.startsWith('SURVPH:EVACUEE:')) {
+        const parts = text.split(':')
+        const eid = parts[2] ?? ''; const ename = parts[3] ?? ''
+        if (qrRef.current) { await qrRef.current.stop().catch(() => {}); qrRef.current = null }
+        setEvacueeRef(eid); setEvacueeName(ename)
+        onScan({ evacueeId: eid, evacueeName: ename })
+        setScanSuccess(true)
+        setTimeout(() => { setOverlayOpen(false); setScannerMode(false); setScanSuccess(false); setGalleryError('') }, 1200)
+      } else {
+        setGalleryError('QR found but not a valid victim QR. Try a different image.')
+      }
+    } catch {
+      setGalleryError('No QR code detected. Try a clearer photo.')
+    }
   }
 
   return (
@@ -1384,11 +1419,28 @@ function QRScanField({ onScan, scannerMode, setScannerMode, evacueeRef, setEvacu
                 <p className="text-[11px] text-white/35 text-center leading-relaxed">
                   Align the victim's QR code within the cyan frame
                 </p>
+                {galleryError && (
+                  <p className="text-[11px] text-red-400 text-center">{galleryError}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-xs text-white/40 hover:text-white/70 transition-colors underline mt-1"
+                >
+                  Use image from gallery instead
+                </button>
               </>
             )}
           </div>
         </div>
       )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleGalleryFile}
+      />
     </>
   )
 }
