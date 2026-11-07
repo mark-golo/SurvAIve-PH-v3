@@ -1275,7 +1275,7 @@ function QRScanField({ onScan, scannerMode, setScannerMode, evacueeRef, setEvacu
       {scannerMode && <div id="qr-reader-admin" className="rounded-xl overflow-hidden" />}
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <p className="text-[10px] text-slate-500 mb-1">Evacuee ID (optional)</p>
+          <p className="text-[10px] text-slate-500 mb-1">Victim ID (optional)</p>
           <input value={evacueeRef} onChange={e => setEvacueeRef(e.target.value)} placeholder="From QR scan…"
             className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none" />
         </div>
