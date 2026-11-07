@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { Home, Map, Radio, Settings, MessageSquare, Navigation, AlertTriangle, Tent, CheckCircle, HelpCircle, XCircle, Clock, LocateFixed, Route, Play, Square } from 'lucide-react'
+import { Home, Map, Radio, Settings, MessageSquare, Navigation, AlertTriangle, Tent, LocateFixed, Route, Play, Square } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
@@ -126,8 +126,10 @@ export function LocalMap() {
   const [routeError, setRouteError]       = useState(null)
 
   // Map controls
-  const mapRef      = useRef(null)
-  const watchIdRef  = useRef(null)
+  const mapRef         = useRef(null)
+  const watchIdRef     = useRef(null)
+  const routeLineRef   = useRef(null)
+  const routeTargetRef = useRef(null)
   const [isNavigating, setIsNavigating] = useState(false)
   const [navError, setNavError]         = useState(null)
 
@@ -175,8 +177,8 @@ export function LocalMap() {
     if (!userPos) return
     setRouteLoading(true)
     setRouteError(null)
-    setRouteLine(null)
-    setRouteTarget(center)
+    setRouteLine(null); routeLineRef.current = null
+    setRouteTarget(center); routeTargetRef.current = center
     try {
       const osrmUrl =
         `https://router.project-osrm.org/route/v1/driving/` +
@@ -188,10 +190,11 @@ export function LocalMap() {
       const coords = data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng])
       const dist   = (data.routes[0].distance / 1000).toFixed(1)
       const dur    = Math.ceil(data.routes[0].duration / 60)
-      setRouteLine(coords)
+      setRouteLine(coords); routeLineRef.current = coords
       setRouteInfo({ distanceKm: dist, durationMin: dur })
     } catch {
-      setRouteLine([userPos, [Number(center.lat), Number(center.lng)]])
+      const fallback = [userPos, [Number(center.lat), Number(center.lng)]]
+      setRouteLine(fallback); routeLineRef.current = fallback
       setRouteInfo(null)
       setRouteError('Live routing unavailable — showing straight-line path.')
     } finally {
@@ -200,8 +203,12 @@ export function LocalMap() {
   }
 
   function clearRoute() {
-    setRouteLine(null); setRouteTarget(null); setRouteInfo(null); setRouteError(null)
-    if (isNavigating) toggleNavigation()
+    if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current)
+    watchIdRef.current = null
+    setIsNavigating(false); setNavError(null)
+    setRouteLine(null);   routeLineRef.current  = null
+    setRouteTarget(null); routeTargetRef.current = null
+    setRouteInfo(null); setRouteError(null)
   }
 
   function goToMyLocation() {
@@ -217,35 +224,32 @@ export function LocalMap() {
     )
   }
 
-  function showRouteOnMap() {
-    if (routeTarget) navigateInApp(routeTarget)
-  }
-
-  function toggleNavigation() {
-    if (isNavigating) {
+  async function handleNavigate(center) {
+    if (isNavigating && routeTargetRef.current?.id === center.id) {
       if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current)
       watchIdRef.current = null
-      setIsNavigating(false)
-      setNavError(null)
-    } else {
-      if (!routeTarget) { setNavError('Select a destination first'); return }
-      if (!navigator.geolocation) { setNavError('GPS not available'); return }
-      setIsNavigating(true)
-      setNavError(null)
-      watchIdRef.current = navigator.geolocation.watchPosition(
-        pos => {
-          const p = [pos.coords.latitude, pos.coords.longitude]
-          setUserPos(p)
-          if (routeLine?.length) {
-            const nearestDist = Math.min(...routeLine.map(([rlat, rlng]) =>
-              haversineCoords(p[0], p[1], rlat, rlng) * 1000))
-            if (nearestDist > 150) navigateInApp(routeTarget)
-          }
-        },
-        () => setNavError('GPS signal lost'),
-        { enableHighAccuracy: true, maximumAge: 3000 }
-      )
+      setIsNavigating(false); setNavError(null)
+      return
     }
+    if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current)
+    watchIdRef.current = null
+    setIsNavigating(false)
+    if (!navigator.geolocation) { setNavError('GPS not available'); return }
+    await navigateInApp(center)
+    setIsNavigating(true); setNavError(null)
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      pos => {
+        const p = [pos.coords.latitude, pos.coords.longitude]
+        setUserPos(p)
+        if (routeLineRef.current?.length) {
+          const nearest = Math.min(...routeLineRef.current.map(([rlat, rlng]) =>
+            haversineCoords(p[0], p[1], rlat, rlng) * 1000))
+          if (nearest > 150 && routeTargetRef.current) navigateInApp(routeTargetRef.current)
+        }
+      },
+      () => setNavError('GPS signal lost'),
+      { enableHighAccuracy: true, maximumAge: 3000 }
+    )
   }
 
   useEffect(() => () => {
@@ -363,19 +367,6 @@ export function LocalMap() {
             )
           })}
         </MapContainer>
-
-        {/* Floating map controls */}
-        <div className="absolute bottom-3 right-3 z-[1000] flex flex-col gap-2">
-          <MapControlBtn icon={LocateFixed} label="My Location" onClick={goToMyLocation} />
-          <MapControlBtn icon={Route} label="Show Route" onClick={showRouteOnMap}
-            disabled={!routeTarget} />
-          <MapControlBtn
-            icon={isNavigating ? Square : Play}
-            label={isNavigating ? 'Stop' : 'Navigate'}
-            onClick={toggleNavigation}
-            active={isNavigating}
-            disabled={!routeTarget && !isNavigating} />
-        </div>
       </div>
 
       {/* Nav error toast */}
@@ -434,12 +425,16 @@ export function LocalMap() {
             {recommendation.top ? (
               <>
                 <p className="text-[10px] font-bold text-[#00d4ff] uppercase tracking-wider">Recommended</p>
-                <FinderCard center={recommendation.top} onNavigate={navigateInApp} />
+                <FinderCard center={recommendation.top} onShowRoute={navigateInApp}
+                  onMyLocation={goToMyLocation} onNavigate={handleNavigate}
+                  isNavigating={isNavigating} activeTargetId={routeTarget?.id} />
                 {recommendation.alternatives.length > 0 && (
                   <>
                     <p className="text-[10px] text-slate-500 uppercase tracking-wider pt-1">Alternatives</p>
                     {recommendation.alternatives.map(c => (
-                      <FinderCard key={c.id} center={c} onNavigate={navigateInApp} compact />
+                      <FinderCard key={c.id} center={c} onShowRoute={navigateInApp}
+                        onMyLocation={goToMyLocation} onNavigate={handleNavigate}
+                        isNavigating={isNavigating} activeTargetId={routeTarget?.id} compact />
                     ))}
                   </>
                 )}
@@ -494,28 +489,10 @@ const OVERALL_COLOR = {
   'Unverified':        '#60a5fa',
 }
 
-function MapControlBtn({ icon: Icon, label, onClick, disabled = false, active = false }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      title={label}
-      className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl text-[9px] font-semibold gap-0.5 shadow-lg transition-all
-        ${active
-          ? 'bg-[#22c55e] text-white shadow-[0_0_12px_rgba(34,197,94,0.4)]'
-          : disabled
-            ? 'bg-[rgba(255,255,255,0.05)] text-slate-600 cursor-not-allowed'
-            : 'bg-[rgba(15,23,42,0.85)] border border-[rgba(255,255,255,0.12)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.15)] active:scale-95'
-        }`}>
-      <Icon size={16} />
-      {label}
-    </button>
-  )
-}
-
-function FinderCard({ center, onNavigate, compact = false }) {
+function FinderCard({ center, onShowRoute, onMyLocation, onNavigate, isNavigating, activeTargetId, compact = false }) {
   const avail = Math.max(0, (center.capacity ?? 0) - (center.current_occupancy ?? 0))
   const col = OVERALL_COLOR[center.overall_status] ?? '#60a5fa'
+  const navActive = isNavigating && activeTargetId === center.id
   return (
     <div className={`rounded-xl p-3 border ${compact ? 'border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)]' : 'border-[rgba(0,212,255,0.25)] bg-[rgba(0,212,255,0.04)]'}`}>
       <div className="flex items-start justify-between gap-2">
@@ -534,13 +511,25 @@ function FinderCard({ center, onNavigate, compact = false }) {
         <span className="text-[#22c55e]">{avail} available</span>
         {center.accessibility_status && <span>{center.accessibility_status}</span>}
       </div>
-      {!compact && (
-        <button
-          onClick={() => onNavigate(center)}
-          className="mt-3 w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-[rgba(0,212,255,0.12)] border border-[rgba(0,212,255,0.3)] text-[#00d4ff] text-xs font-semibold hover:bg-[rgba(0,212,255,0.2)] transition-colors">
-          <Navigation size={12} />Show Route on Map
+      <div className="mt-3 grid grid-cols-3 gap-1.5">
+        <button onClick={() => onShowRoute(center)}
+          className="flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-lg bg-[rgba(0,212,255,0.08)] border border-[rgba(0,212,255,0.2)] text-[#00d4ff] text-[10px] font-semibold hover:bg-[rgba(0,212,255,0.16)] transition-colors">
+          <Route size={13} />Show Route
         </button>
-      )}
+        <button onClick={onMyLocation}
+          className="flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-lg bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-slate-300 text-[10px] font-semibold hover:bg-[rgba(255,255,255,0.1)] transition-colors">
+          <LocateFixed size={13} />My Location
+        </button>
+        <button onClick={() => onNavigate(center)}
+          className={`flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-lg border text-[10px] font-semibold transition-colors ${
+            navActive
+              ? 'bg-[#22c55e] border-[#22c55e] text-white'
+              : 'bg-[rgba(34,197,94,0.08)] border-[rgba(34,197,94,0.25)] text-[#22c55e] hover:bg-[rgba(34,197,94,0.16)]'
+          }`}>
+          {navActive ? <Square size={13} /> : <Play size={13} />}
+          {navActive ? 'Stop' : 'Navigate'}
+        </button>
+      </div>
     </div>
   )
 }
