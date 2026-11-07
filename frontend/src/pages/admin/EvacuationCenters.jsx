@@ -147,6 +147,7 @@ export function EvacuationCenters() {
 
   // ── Core data ──────────────────────────────────────────────────────────────
   const [tab, setTab]       = useState('overview')
+  const [refreshing, setRefreshing] = useState(false)
   const [data, setData]     = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -159,6 +160,22 @@ export function EvacuationCenters() {
   }, [muni])
 
   useEffect(() => { loadCenters() }, [loadCenters])
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    loadCenters()
+    if (tab === 'assessment' && assessCenterId) {
+      api.get(`/evacuation_center_assessments?center_id=${assessCenterId}`)
+        .then(rows => setAssessments(Array.isArray(rows) ? rows : [])).catch(() => {})
+    }
+    if (tab === 'occupancy' && occCenterId) {
+      api.get(`/evacuation_center_resources?center_id=${occCenterId}`)
+        .then(rows => setResources(Array.isArray(rows) ? rows : [])).catch(() => {})
+      api.get(`/evacuation_center_occupancy_events?center_id=${occCenterId}`)
+        .then(rows => setRecentEvents(Array.isArray(rows) ? rows.slice(0, 10) : [])).catch(() => {})
+    }
+    setTimeout(() => setRefreshing(false), 800)
+  }
 
   // ── Centers tab ────────────────────────────────────────────────────────────
   const [search, setSearch]           = useState('')
@@ -527,8 +544,8 @@ export function EvacuationCenters() {
             {t.label}
           </button>
         ))}
-        <button onClick={loadCenters} className="ml-auto text-slate-500 hover:text-slate-300 p-2 rounded-xl hover:bg-[rgba(255,255,255,0.05)] transition-colors">
-          <RefreshCw size={14} />
+        <button onClick={handleRefresh} disabled={refreshing} className="ml-auto text-slate-500 hover:text-slate-300 p-2 rounded-xl hover:bg-[rgba(255,255,255,0.05)] transition-colors disabled:opacity-50">
+          <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
         </button>
       </div>
 
