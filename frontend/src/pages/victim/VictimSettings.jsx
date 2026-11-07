@@ -43,7 +43,8 @@ function Toggle({ on, onToggle, label, sub }) {
 export function VictimSettings() {
   const navigate = useNavigate()
   const { user, isGuest, logout } = useAuthStore()
-  const [showQR, setShowQR] = useState(false)
+  const [showQR, setShowQR]       = useState(false)
+  const [qrExpanded, setQrExpanded] = useState(false)
 
   // XAMPP / local server IP — saved via Capacitor Preferences for native builds
   const [xamppHost,     setXamppHostState] = useState('192.168.43.1')
@@ -141,7 +142,11 @@ export function VictimSettings() {
             </div>
             {showQR && (
               <div className="flex flex-col items-center gap-3 pt-2 border-t border-[rgba(255,255,255,0.06)]">
-                <div className="p-3 bg-white rounded-xl">
+                <div
+                  className="p-3 bg-white rounded-xl cursor-zoom-in select-none"
+                  onDoubleClick={() => setQrExpanded(true)}
+                  title="Double-click to expand"
+                >
                   <QRCodeSVG
                     value={`SURVPH:EVACUEE:${user?.id}`}
                     size={180}
@@ -150,6 +155,34 @@ export function VictimSettings() {
                   />
                 </div>
                 <p className="text-[10px] text-slate-500 text-center">Show this QR to center personnel for check-in/check-out</p>
+                <p className="text-[10px] text-slate-600 text-center">Double-tap to expand</p>
+              </div>
+            )}
+
+            {/* Full-screen QR overlay */}
+            {qrExpanded && (
+              <div
+                className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm"
+                onDoubleClick={() => setQrExpanded(false)}
+              >
+                <div className="flex flex-col items-center gap-5 select-none">
+                  <div className="flex items-center gap-2 mb-1">
+                    <QrCode size={16} className="text-[#00d4ff]" />
+                    <p className="text-sm font-semibold text-white/80">My Evacuation QR Code</p>
+                  </div>
+                  <div className="p-5 bg-white rounded-2xl shadow-[0_0_40px_rgba(0,212,255,0.3)]">
+                    <QRCodeSVG
+                      value={`SURVPH:EVACUEE:${user?.id}`}
+                      size={260}
+                      level="M"
+                      includeMargin={false}
+                    />
+                  </div>
+                  <p className="text-xs text-white/50 text-center px-6 leading-relaxed">
+                    Show this QR to center personnel for check-in/check-out
+                  </p>
+                  <p className="text-[11px] text-white/30">Double-tap to close</p>
+                </div>
               </div>
             )}
           </GlassCard>
