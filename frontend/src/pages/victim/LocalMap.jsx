@@ -81,14 +81,6 @@ function FlyTo({ pos }) {
   return null
 }
 
-function FlyToBounds({ line }) {
-  const map = useMap()
-  useEffect(() => {
-    if (line?.length) map.fitBounds(L.latLngBounds(line), { padding: [40, 40] })
-  }, [line])
-  return null
-}
-
 function MapRefSetter({ mapRef }) {
   const map = useMap()
   useEffect(() => { mapRef.current = map }, [map])
@@ -98,7 +90,7 @@ function MapRefSetter({ mapRef }) {
 function FollowUser({ pos, active }) {
   const map = useMap()
   useEffect(() => {
-    if (active && pos) map.panTo(pos, { animate: true, duration: 0.5 })
+    if (active && pos) map.flyTo(pos, 17, { animate: true, duration: 0.5 })
   }, [pos, active])
   return null
 }
@@ -338,7 +330,6 @@ export function LocalMap() {
             <>
               <Polyline positions={routeLine} pathOptions={{ color: '#00d4ff', weight: 8, opacity: 0.15 }} />
               <Polyline positions={routeLine} pathOptions={{ color: '#00d4ff', weight: 3, opacity: 0.9, dashArray: '10 6' }} />
-              <FlyToBounds line={routeLine} />
             </>
           )}
 
