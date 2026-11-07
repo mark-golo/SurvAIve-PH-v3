@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { setXamppHost, localFetch } from '../../lib/api'
+import api from '../../lib/api'
 import { QRCodeSVG } from 'qrcode.react'
 import {
   User, Shield, Settings, Home, Map, MessageSquare, Radio,
@@ -113,7 +114,28 @@ function InfoRow({ label, value }) {
 
 export function VictimSettings() {
   const navigate = useNavigate()
-  const { user, isGuest, logout } = useAuthStore()
+  const { user, isGuest, logout, updateUser } = useAuthStore()
+
+  // Refresh missing profile fields from DB for users whose auth store was
+  // persisted before the backend started returning these fields.
+  useEffect(() => {
+    const vid = user?.victim_id
+    if (!vid || isGuest) return
+    const needsRefresh = !user?.sitio && !user?.emergency_contact_name
+    if (!needsRefresh) return
+    api.get(`/victims?victim_id=${encodeURIComponent(vid)}`)
+      .then(rows => {
+        if (!Array.isArray(rows) || !rows[0]) return
+        const v = rows[0]
+        updateUser({
+          sitio:                          v.sitio                          ?? null,
+          emergency_contact_name:         v.emergency_contact_name         ?? null,
+          emergency_contact_number:       v.emergency_contact_number       ?? null,
+          emergency_contact_relationship: v.emergency_contact_relationship ?? null,
+        })
+      })
+      .catch(() => {})
+  }, [user?.victim_id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // QR state
   const [showQR,     setShowQR]     = useState(false)
