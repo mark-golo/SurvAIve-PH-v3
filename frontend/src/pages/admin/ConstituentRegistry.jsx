@@ -145,6 +145,30 @@ export function ConstituentRegistry() {
     unknown: data.filter(c => c.status === 'unknown').length,
   }
 
+  function exportCSV() {
+    const headers = ['Victim ID', 'Name', 'Contact', 'Barangay', 'Household', 'Vulnerabilities', 'Status', 'Verified']
+    const rows = filtered.map(c => [
+      c.victim_id ?? '',
+      c.name,
+      c.contact ?? '',
+      c.barangay ?? '',
+      c.household ?? '',
+      c.vulnerabilities.join('; '),
+      STATUS_COLORS[c.status]?.label ?? c.status,
+      c.admin_entry ? 'Admin-Entered' : c.victim_id ? 'Self-Registered' : c.verified ? 'Verified' : 'Admin-Entered',
+    ])
+    const csv = [headers, ...rows]
+      .map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      .join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `constituents${muni ? '-' + muni : ''}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   if (loading) return (
     <div className="flex items-center justify-center h-64 text-slate-400 text-sm">Loading constituents…</div>
   )
@@ -174,7 +198,7 @@ export function ConstituentRegistry() {
             <option value="rescued">Safe</option>
             <option value="unknown">Unknown</option>
           </GlassSelect>
-          <NeonButton variant="ghost" size="sm" onClick={() => alert('Export CSV – would download barangay registry')}>
+          <NeonButton variant="ghost" size="sm" onClick={exportCSV}>
             <Download size={13} className="mr-1.5" />
             Export CSV
           </NeonButton>
