@@ -45,7 +45,10 @@ $routes = [
   'superadmins'        => __DIR__ . '/superadmins/index.php',
   'admins'             => __DIR__ . '/admins/index.php',
   'agencies'           => __DIR__ . '/agencies/index.php',
-  'evacuation_centers' => __DIR__ . '/evacuation_centers/index.php',
+  'evacuation_centers'               => __DIR__ . '/evacuation_centers/index.php',
+  'evacuation_center_checkins'       => __DIR__ . '/evacuation_center_checkins/index.php',
+  'evacuation_center_checkouts'      => __DIR__ . '/evacuation_center_checkouts/index.php',
+  'evacuation_center_occupancy_events' => __DIR__ . '/evacuation_center_occupancy_events/index.php',
   'analytics'     => __DIR__ . '/analytics/index.php',
   'feedback'      => __DIR__ . '/feedback/index.php',
   'sync'               => __DIR__ . '/sync/index.php',
@@ -106,6 +109,12 @@ if (preg_match('#^constituents/(\d+)$#', $path, $m)) {
 if (preg_match('#^evacuation_centers/(\d+)$#', $path, $m)) {
   $_GET['id'] = $m[1];
   require __DIR__ . '/evacuation_centers/item.php';
+  exit;
+}
+
+if (preg_match('#^evacuation_center_checkins/(\d+)$#', $path, $m)) {
+  $_GET['id'] = $m[1];
+  require __DIR__ . '/evacuation_center_checkins/item.php';
   exit;
 }
 

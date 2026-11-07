@@ -6,6 +6,7 @@ import {
   LayoutDashboard, Building2, Shield, Users, Brain, BarChart2, History,
   Plus, Pencil, Trash2, Search, RefreshCw, Tent, CheckCircle, AlertTriangle,
   XCircle, Clock, HelpCircle, Package, ChevronDown, ChevronUp,
+  UserPlus, UserMinus, Camera, QrCode, X, AlertCircle,
 } from 'lucide-react'
 
 import { GlassCard } from '../../components/ui/GlassCard'
@@ -280,11 +281,25 @@ export function EvacuationCenters() {
   const [editResId, setEditResId]           = useState(null)
   const [resSaving, setResSaving]           = useState(false)
 
+  // ── QR check-in / check-out ────────────────────────────────────────────────
+  const [arrivedOpen, setArrivedOpen]       = useState(false)
+  const [departedOpen, setDepartedOpen]     = useState(false)
+  const [checkScannerMode, setCheckScannerMode] = useState(false)
+  const [checkEvacueeRef, setCheckEvacueeRef]   = useState('')
+  const [checkEvacueeName, setCheckEvacueeName] = useState('')
+  const [checkGroupSize, setCheckGroupSize]     = useState(1)
+  const [checkSaving, setCheckSaving]           = useState(false)
+  const [checkError, setCheckError]             = useState('')
+  const [recentEvents, setRecentEvents]         = useState([])
+
   useEffect(() => {
     if (tab === 'occupancy' && occCenterId) {
       api.get(`/evacuation_center_resources?center_id=${occCenterId}`)
         .then(rows => setResources(Array.isArray(rows) ? rows : []))
         .catch(() => setResources([]))
+      api.get(`/evacuation_center_occupancy_events?center_id=${occCenterId}`)
+        .then(rows => setRecentEvents(Array.isArray(rows) ? rows.slice(0, 10) : []))
+        .catch(() => setRecentEvents([]))
     }
   }, [tab, occCenterId])
 
@@ -334,6 +349,53 @@ export function EvacuationCenters() {
     if (!window.confirm('Remove this resource?')) return
     await api.delete(`/evacuation_center_resources/${id}`).catch(() => {})
     setResources(prev => prev.filter(r => r.id !== id))
+  }
+
+  function loadRecentEvents() {
+    if (!occCenterId) return
+    api.get(`/evacuation_center_occupancy_events?center_id=${occCenterId}`)
+      .then(rows => setRecentEvents(Array.isArray(rows) ? rows.slice(0, 10) : []))
+      .catch(() => setRecentEvents([]))
+  }
+
+  function resetCheckForm() {
+    setCheckEvacueeRef(''); setCheckEvacueeName(''); setCheckGroupSize(1); setCheckError(''); setCheckScannerMode(false)
+  }
+
+  async function recordArrival() {
+    if (!occCenterId) { setCheckError('Select a center first'); return }
+    setCheckSaving(true); setCheckError('')
+    try {
+      await api.post('/evacuation_center_checkins', {
+        center_id: occCenterId,
+        evacuee_id: checkEvacueeRef || null,
+        evacuee_name: checkEvacueeName || null,
+        group_size: checkGroupSize,
+        checked_in_by: 'admin',
+        source: checkEvacueeRef ? 'QR_SCAN' : 'ADMIN',
+      })
+      loadCenters(); loadRecentEvents()
+      setArrivedOpen(false); resetCheckForm()
+    } catch (e) { setCheckError(e?.error ?? 'Failed to record arrival') }
+    finally { setCheckSaving(false) }
+  }
+
+  async function recordDeparture() {
+    if (!occCenterId) { setCheckError('Select a center first'); return }
+    setCheckSaving(true); setCheckError('')
+    try {
+      await api.post('/evacuation_center_checkouts', {
+        center_id: occCenterId,
+        evacuee_id: checkEvacueeRef || null,
+        evacuee_name: checkEvacueeName || null,
+        group_size: checkGroupSize,
+        checked_out_by: 'admin',
+        source: checkEvacueeRef ? 'QR_SCAN' : 'ADMIN',
+      })
+      loadCenters(); loadRecentEvents()
+      setDepartedOpen(false); resetCheckForm()
+    } catch (e) { setCheckError(e?.error ?? 'Failed to record departure') }
+    finally { setCheckSaving(false) }
   }
 
   // ── AI Insights tab ────────────────────────────────────────────────────────
@@ -742,6 +804,116 @@ export function EvacuationCenters() {
             )}
           </GlassCard>
 
+          {/* ── Evacuees Arrived / Departed ──────────────────────────────── */}
+          {occCenterId && (
+            <GlassCard>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+                <Users size={12} className="inline mr-1.5" />Occupancy Tracking
+              </p>
+
+              {/* Capacity status badge */}
+              {occCenter?.capacity_status && (
+                <div className="mb-3">
+                  <span className={`inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full font-medium ${
+                    occCenter.capacity_status === 'Full'             ? 'bg-[rgba(239,68,68,0.12)] text-[#ef4444]' :
+                    occCenter.capacity_status === 'Nearly Full'      ? 'bg-[rgba(249,115,22,0.12)] text-[#f97316]' :
+                    occCenter.capacity_status === 'Mostly Occupied'  ? 'bg-[rgba(245,158,11,0.12)] text-[#f59e0b]' :
+                    'bg-[rgba(34,197,94,0.12)] text-[#22c55e]'
+                  }`}>
+                    {occCenter.capacity_status}
+                  </span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <button onClick={() => { setArrivedOpen(p => !p); setDepartedOpen(false); resetCheckForm() }}
+                  className={`flex flex-col items-center justify-center gap-1.5 py-4 rounded-xl border transition-colors ${arrivedOpen ? 'bg-[rgba(34,197,94,0.15)] border-[rgba(34,197,94,0.4)] text-[#22c55e]' : 'bg-[rgba(34,197,94,0.06)] border-[rgba(34,197,94,0.2)] text-[#22c55e] hover:bg-[rgba(34,197,94,0.12)]'}`}>
+                  <UserPlus size={20} />
+                  <span className="text-xs font-semibold">Evacuees Arrived</span>
+                </button>
+                <button onClick={() => { setDepartedOpen(p => !p); setArrivedOpen(false); resetCheckForm() }}
+                  className={`flex flex-col items-center justify-center gap-1.5 py-4 rounded-xl border transition-colors ${departedOpen ? 'bg-[rgba(249,115,22,0.15)] border-[rgba(249,115,22,0.4)] text-[#f97316]' : 'bg-[rgba(249,115,22,0.06)] border-[rgba(249,115,22,0.2)] text-[#f97316] hover:bg-[rgba(249,115,22,0.12)]'}`}>
+                  <UserMinus size={20} />
+                  <span className="text-xs font-semibold">Evacuees Departed</span>
+                </button>
+              </div>
+
+              {/* Arrived form */}
+              {arrivedOpen && (
+                <div className="mb-4 p-3 rounded-xl bg-[rgba(34,197,94,0.05)] border border-[rgba(34,197,94,0.15)] space-y-3">
+                  <p className="text-xs font-semibold text-[#22c55e]">Record Arrival</p>
+                  <QRScanField
+                    onScan={({ evacueeId, evacueeName }) => { setCheckEvacueeRef(evacueeId); setCheckEvacueeName(evacueeName) }}
+                    scannerMode={checkScannerMode}
+                    setScannerMode={setCheckScannerMode}
+                    evacueeRef={checkEvacueeRef}
+                    setEvacueeRef={setCheckEvacueeRef}
+                    evacueeName={checkEvacueeName}
+                    setEvacueeName={setCheckEvacueeName}
+                  />
+                  <div>
+                    <p className="text-xs text-slate-400 mb-1">Group Size</p>
+                    <input type="number" min="1" value={checkGroupSize} onChange={e => setCheckGroupSize(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[rgba(34,197,94,0.5)]" />
+                  </div>
+                  {checkError && <p className="text-xs text-[#ef4444]">{checkError}</p>}
+                  <NeonButton size="sm" onClick={recordArrival} loading={checkSaving}>
+                    <UserPlus size={12} className="mr-1.5" />Confirm Arrival
+                  </NeonButton>
+                </div>
+              )}
+
+              {/* Departed form */}
+              {departedOpen && (
+                <div className="mb-4 p-3 rounded-xl bg-[rgba(249,115,22,0.05)] border border-[rgba(249,115,22,0.15)] space-y-3">
+                  <p className="text-xs font-semibold text-[#f97316]">Record Departure</p>
+                  <QRScanField
+                    onScan={({ evacueeId, evacueeName }) => { setCheckEvacueeRef(evacueeId); setCheckEvacueeName(evacueeName) }}
+                    scannerMode={checkScannerMode}
+                    setScannerMode={setCheckScannerMode}
+                    evacueeRef={checkEvacueeRef}
+                    setEvacueeRef={setCheckEvacueeRef}
+                    evacueeName={checkEvacueeName}
+                    setEvacueeName={setCheckEvacueeName}
+                  />
+                  <div>
+                    <p className="text-xs text-slate-400 mb-1">Group Size</p>
+                    <input type="number" min="1" value={checkGroupSize} onChange={e => setCheckGroupSize(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[rgba(249,115,22,0.5)]" />
+                  </div>
+                  {checkError && <p className="text-xs text-[#ef4444]">{checkError}</p>}
+                  <NeonButton size="sm" onClick={recordDeparture} loading={checkSaving}>
+                    <UserMinus size={12} className="mr-1.5" />Confirm Departure
+                  </NeonButton>
+                </div>
+              )}
+
+              {/* Recent occupancy events */}
+              <div className="mt-1">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Recent Events</p>
+                  <button onClick={loadRecentEvents} className="text-[10px] text-[#00d4ff] hover:underline">Refresh</button>
+                </div>
+                {recentEvents.length === 0
+                  ? <p className="text-[11px] text-slate-600 text-center py-3">No events yet — use the buttons above to record arrivals or departures.</p>
+                  : recentEvents.map(ev => (
+                    <div key={ev.id} className="flex items-center justify-between py-1.5 border-b border-[rgba(255,255,255,0.04)] last:border-0">
+                      <div className="flex items-center gap-2">
+                        {ev.event_type === 'ARRIVAL'
+                          ? <UserPlus size={11} className="text-[#22c55e]" />
+                          : <UserMinus size={11} className="text-[#f97316]" />}
+                        <span className="text-xs text-slate-300">{ev.evacuee_ref ?? 'Anonymous'}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${ev.event_type === 'ARRIVAL' ? 'bg-[rgba(34,197,94,0.1)] text-[#22c55e]' : 'bg-[rgba(249,115,22,0.1)] text-[#f97316]'}`}>
+                          {ev.event_type === 'ARRIVAL' ? `+${ev.quantity}` : `-${ev.quantity}`}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-500">{ev.occurred_at ? new Date(ev.occurred_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                    </div>
+                  ))}
+              </div>
+            </GlassCard>
+          )}
+
           {occCenterId && (
             <GlassCard>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
@@ -1061,6 +1233,59 @@ function CenterForm({ title, form, set, error, saving, onSave, onCancel }) {
         <NeonButton variant="ghost" size="sm" onClick={onCancel}>Cancel</NeonButton>
       </div>
     </GlassCard>
+  )
+}
+
+function QRScanField({ onScan, scannerMode, setScannerMode, evacueeRef, setEvacueeRef, evacueeName, setEvacueeName }) {
+  useEffect(() => {
+    if (!scannerMode) return
+    let scanner = null
+    const id = 'qr-reader-admin'
+    const timer = setTimeout(async () => {
+      try {
+        const { Html5QrcodeScanner } = await import('html5-qrcode')
+        scanner = new Html5QrcodeScanner(id, { fps: 10, qrbox: 200 }, false)
+        scanner.render(
+          (text) => {
+            scanner.clear().catch(() => {})
+            if (text.startsWith('SURVPH:EVACUEE:')) {
+              const parts = text.split(':')
+              const eid = parts[2] ?? ''; const ename = parts[3] ?? ''
+              setEvacueeRef(eid); setEvacueeName(ename)
+              onScan({ evacueeId: eid, evacueeName: ename })
+            }
+            setScannerMode(false)
+          },
+          () => {}
+        )
+      } catch { setScannerMode(false) }
+    }, 100)
+    return () => { clearTimeout(timer); if (scanner) scanner.clear().catch(() => {}) }
+  }, [scannerMode])
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <button onClick={() => setScannerMode(p => !p)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${scannerMode ? 'bg-[rgba(0,212,255,0.15)] border-[rgba(0,212,255,0.3)] text-[#00d4ff]' : 'bg-[rgba(255,255,255,0.05)] border-[rgba(255,255,255,0.1)] text-slate-400 hover:text-white'}`}>
+          <Camera size={11} />{scannerMode ? 'Stop Scanner' : 'Scan QR'}
+        </button>
+        <span className="text-[10px] text-slate-500">or enter manually:</span>
+      </div>
+      {scannerMode && <div id="qr-reader-admin" className="rounded-xl overflow-hidden" />}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <p className="text-[10px] text-slate-500 mb-1">Evacuee ID (optional)</p>
+          <input value={evacueeRef} onChange={e => setEvacueeRef(e.target.value)} placeholder="From QR scan…"
+            className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none" />
+        </div>
+        <div>
+          <p className="text-[10px] text-slate-500 mb-1">Name (optional)</p>
+          <input value={evacueeName} onChange={e => setEvacueeName(e.target.value)} placeholder="Name…"
+            className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none" />
+        </div>
+      </div>
+    </div>
   )
 }
 

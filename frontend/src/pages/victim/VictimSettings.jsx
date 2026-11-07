@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { setXamppHost } from '../../lib/api'
-import { Bell, Shield, LogOut, Phone, User, Radio, ChevronRight, Home, Map, Settings, MessageSquare, Server, Check, Sun } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
+import { Bell, Shield, LogOut, Phone, User, Radio, ChevronRight, Home, Map, Settings, MessageSquare, Server, Check, Sun, QrCode } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { NeonButton } from '../../components/ui/NeonButton'
@@ -42,6 +43,7 @@ function Toggle({ on, onToggle, label, sub }) {
 export function VictimSettings() {
   const navigate = useNavigate()
   const { user, isGuest, logout } = useAuthStore()
+  const [showQR, setShowQR] = useState(false)
 
   // XAMPP / local server IP — saved via Capacitor Preferences for native builds
   const [xamppHost,     setXamppHostState] = useState('192.168.43.1')
@@ -117,6 +119,41 @@ export function VictimSettings() {
             </div>
           )}
         </GlassCard>
+
+        {/* QR Code — verified users only */}
+        {!isGuest && (
+          <GlassCard>
+            <div className="flex items-center gap-3 mb-3">
+              <QrCode size={16} className="text-[#00d4ff]" />
+              <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider">My Evacuation QR Code</p>
+            </div>
+            <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+              Your personal QR code is used to record your arrival and departure at evacuation centers.
+            </p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm text-white font-medium">Show QR Code</p>
+              <button
+                onClick={() => setShowQR(v => !v)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${showQR ? 'bg-[#00d4ff]' : 'bg-slate-700'}`}
+              >
+                <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${showQR ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+            </div>
+            {showQR && (
+              <div className="flex flex-col items-center gap-3 pt-2 border-t border-[rgba(255,255,255,0.06)]">
+                <div className="p-3 bg-white rounded-xl">
+                  <QRCodeSVG
+                    value={`SURVPH:EVACUEE:${user?.id}`}
+                    size={180}
+                    level="M"
+                    includeMargin={false}
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500 text-center">Show this QR to center personnel for check-in/check-out</p>
+              </div>
+            )}
+          </GlassCard>
+        )}
 
         {/* XAMPP / Local server config */}
         <GlassCard>

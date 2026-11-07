@@ -96,7 +96,10 @@ const TABLE = {
   evacuation_center_resources:     'evacuation_center_resources',
   evacuation_occupancy_logs:       'evacuation_occupancy_logs',
   evacuation_capacity_forecasts:   'evacuation_capacity_forecasts',
-  evacuation_history:              'evacuation_history',
+  evacuation_history:                    'evacuation_history',
+  evacuation_center_checkins:            'evacuation_center_checkins',
+  evacuation_center_checkouts:           'evacuation_center_checkouts',
+  evacuation_center_occupancy_events:    'evacuation_center_occupancy_events',
   sos:                'sos_reports',
   victims:            'victims',
   constituents:       'victims',        // alias used by ConstituentRegistry
