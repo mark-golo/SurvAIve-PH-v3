@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { Home, Map, Radio, Settings, MessageSquare, Navigation, AlertTriangle, Tent, CheckCircle, HelpCircle, XCircle, Clock, ExternalLink } from 'lucide-react'
+import { Home, Map, Radio, Settings, MessageSquare, Navigation, AlertTriangle, Tent, CheckCircle, HelpCircle, XCircle, Clock } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
@@ -81,6 +81,14 @@ function FlyTo({ pos }) {
   return null
 }
 
+function FlyToBounds({ line }) {
+  const map = useMap()
+  useEffect(() => {
+    if (line?.length) map.fitBounds(L.latLngBounds(line), { padding: [40, 40] })
+  }, [line])
+  return null
+}
+
 export function LocalMap() {
   const { scope } = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
@@ -95,6 +103,13 @@ export function LocalMap() {
   const [finderLoading, setFinderLoading] = useState(false)
   const [isOffline, setIsOffline]         = useState(false)
   const [cacheTime, setCacheTime]         = useState(null)
+
+  // In-app routing
+  const [routeLine, setRouteLine]         = useState(null)
+  const [routeTarget, setRouteTarget]     = useState(null)
+  const [routeInfo, setRouteInfo]         = useState(null)
+  const [routeLoading, setRouteLoading]   = useState(false)
+  const [routeError, setRouteError]       = useState(null)
 
   const muni = scope?.municipality
 
@@ -136,9 +151,36 @@ export function LocalMap() {
     setFinderLoading(false)
   }
 
-  function navigateTo(center) {
-    const url = `https://www.google.com/maps/dir/?api=1&origin=${userPos[0]},${userPos[1]}&destination=${center.lat},${center.lng}&travelmode=driving`
-    window.open(url, '_blank')
+  async function navigateInApp(center) {
+    if (!userPos) return
+    setRouteLoading(true)
+    setRouteError(null)
+    setRouteLine(null)
+    setRouteTarget(center)
+    try {
+      const osrmUrl =
+        `https://router.project-osrm.org/route/v1/driving/` +
+        `${userPos[1]},${userPos[0]};${center.lng},${center.lat}` +
+        `?overview=full&geometries=geojson`
+      const res  = await fetch(osrmUrl, { signal: AbortSignal.timeout(8000) })
+      const data = await res.json()
+      if (data.code !== 'Ok' || !data.routes?.[0]) throw new Error('No route found')
+      const coords = data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng])
+      const dist   = (data.routes[0].distance / 1000).toFixed(1)
+      const dur    = Math.ceil(data.routes[0].duration / 60)
+      setRouteLine(coords)
+      setRouteInfo({ distanceKm: dist, durationMin: dur })
+    } catch {
+      setRouteLine([userPos, [Number(center.lat), Number(center.lng)]])
+      setRouteInfo(null)
+      setRouteError('Live routing unavailable — showing straight-line path.')
+    } finally {
+      setRouteLoading(false)
+    }
+  }
+
+  function clearRoute() {
+    setRouteLine(null); setRouteTarget(null); setRouteInfo(null); setRouteError(null)
   }
 
   useEffect(() => {
@@ -216,6 +258,15 @@ export function LocalMap() {
             <Circle center={userPos} radius={50} pathOptions={{ color: '#00d4ff', fillColor: '#00d4ff', fillOpacity: 0.06, weight: 1 }} />
           )}
 
+          {/* Route polyline */}
+          {routeLine && (
+            <>
+              <Polyline positions={routeLine} pathOptions={{ color: '#00d4ff', weight: 8, opacity: 0.15 }} />
+              <Polyline positions={routeLine} pathOptions={{ color: '#00d4ff', weight: 3, opacity: 0.9, dashArray: '10 6' }} />
+              <FlyToBounds line={routeLine} />
+            </>
+          )}
+
           {/* Evacuation centers */}
           {centers.map(c => {
             const isNearest = c.id === nearestId
@@ -243,6 +294,31 @@ export function LocalMap() {
         </MapContainer>
       </div>
 
+      {/* Route info banner */}
+      {(routeTarget || routeLoading) && (
+        <div className="mx-4 mb-2 px-3 py-2 rounded-xl bg-[rgba(0,212,255,0.08)] border border-[rgba(0,212,255,0.25)] space-y-1">
+          {routeLoading
+            ? <p className="text-xs text-[#00d4ff]">Calculating route…</p>
+            : (
+              <>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-[#00d4ff] flex items-center gap-1.5">
+                    <Navigation size={12} /> Navigating to {routeTarget?.name}
+                  </p>
+                  <button onClick={clearRoute} className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors">✕ Clear</button>
+                </div>
+                {routeInfo && (
+                  <p className="text-[11px] text-slate-400">{routeInfo.distanceKm} km · ~{routeInfo.durationMin} min by road</p>
+                )}
+                {routeError && (
+                  <p className="text-[11px] text-[#f59e0b]">{routeError}</p>
+                )}
+              </>
+            )
+          }
+        </div>
+      )}
+
       {/* Smart Center Finder */}
       <div className="px-4 pb-2 space-y-2">
         <button
@@ -262,12 +338,12 @@ export function LocalMap() {
             {recommendation.top ? (
               <>
                 <p className="text-[10px] font-bold text-[#00d4ff] uppercase tracking-wider">Recommended</p>
-                <FinderCard center={recommendation.top} onNavigate={navigateTo} />
+                <FinderCard center={recommendation.top} onNavigate={navigateInApp} />
                 {recommendation.alternatives.length > 0 && (
                   <>
                     <p className="text-[10px] text-slate-500 uppercase tracking-wider pt-1">Alternatives</p>
                     {recommendation.alternatives.map(c => (
-                      <FinderCard key={c.id} center={c} onNavigate={navigateTo} compact />
+                      <FinderCard key={c.id} center={c} onNavigate={navigateInApp} compact />
                     ))}
                   </>
                 )}
@@ -347,7 +423,7 @@ function FinderCard({ center, onNavigate, compact = false }) {
         <button
           onClick={() => onNavigate(center)}
           className="mt-3 w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-[rgba(0,212,255,0.12)] border border-[rgba(0,212,255,0.3)] text-[#00d4ff] text-xs font-semibold hover:bg-[rgba(0,212,255,0.2)] transition-colors">
-          <Navigation size={12} />Navigate Here<ExternalLink size={10} />
+          <Navigation size={12} />Show Route on Map
         </button>
       )}
     </div>
