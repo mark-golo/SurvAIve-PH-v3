@@ -413,6 +413,32 @@ export function EvacuationCenters() {
     finally { setCheckSaving(false) }
   }
 
+  // Auto-record variants: called directly by QRScanField on each valid scan.
+  // group_size is always 1 (individual QR scan); form is NOT closed after each scan.
+  async function recordArrivalAuto({ evacueeId, evacueeName: name }) {
+    if (!occCenterId) throw new Error('Select a center first')
+    await api.post('/evacuation_center_checkins', {
+      center_id: occCenterId,
+      evacuee_id: evacueeId || null,
+      evacuee_name: name || null,
+      group_size: 1,
+      checked_in_by: 'admin',
+    })
+    loadCenters(); loadRecentEvents()
+  }
+
+  async function recordDepartureAuto({ evacueeId, evacueeName: name }) {
+    if (!occCenterId) throw new Error('Select a center first')
+    await api.post('/evacuation_center_checkouts', {
+      center_id: occCenterId,
+      evacuee_id: evacueeId || null,
+      evacuee_name: name || null,
+      group_size: 1,
+      checked_out_by: 'admin',
+    })
+    loadCenters(); loadRecentEvents()
+  }
+
   // ── AI Insights tab ────────────────────────────────────────────────────────
   const [recLat, setRecLat]             = useState('')
   const [recLng, setRecLng]             = useState('')
@@ -859,6 +885,7 @@ export function EvacuationCenters() {
                   <p className="text-xs font-semibold text-[#22c55e]">Record Arrival</p>
                   <QRScanField
                     onScan={({ evacueeId, evacueeName }) => { setCheckEvacueeRef(evacueeId); setCheckEvacueeName(evacueeName) }}
+                    onAutoRecord={recordArrivalAuto}
                     scannerMode={checkScannerMode}
                     setScannerMode={setCheckScannerMode}
                     evacueeRef={checkEvacueeRef}
@@ -867,7 +894,7 @@ export function EvacuationCenters() {
                     setEvacueeName={setCheckEvacueeName}
                   />
                   <div>
-                    <p className="text-xs text-slate-400 mb-1">Group Size</p>
+                    <p className="text-xs text-slate-400 mb-1">Group Size <span className="text-slate-600">(manual entry only)</span></p>
                     <input type="number" min="1" value={checkGroupSize} onChange={e => setCheckGroupSize(Math.max(1, parseInt(e.target.value) || 1))}
                       className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[rgba(34,197,94,0.5)]" />
                   </div>
@@ -884,6 +911,7 @@ export function EvacuationCenters() {
                   <p className="text-xs font-semibold text-[#f97316]">Record Departure</p>
                   <QRScanField
                     onScan={({ evacueeId, evacueeName }) => { setCheckEvacueeRef(evacueeId); setCheckEvacueeName(evacueeName) }}
+                    onAutoRecord={recordDepartureAuto}
                     scannerMode={checkScannerMode}
                     setScannerMode={setCheckScannerMode}
                     evacueeRef={checkEvacueeRef}
@@ -892,7 +920,7 @@ export function EvacuationCenters() {
                     setEvacueeName={setCheckEvacueeName}
                   />
                   <div>
-                    <p className="text-xs text-slate-400 mb-1">Group Size</p>
+                    <p className="text-xs text-slate-400 mb-1">Group Size <span className="text-slate-600">(manual entry only)</span></p>
                     <input type="number" min="1" value={checkGroupSize} onChange={e => setCheckGroupSize(Math.max(1, parseInt(e.target.value) || 1))}
                       className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[rgba(249,115,22,0.5)]" />
                   </div>
@@ -1251,12 +1279,21 @@ function CenterForm({ title, form, set, error, saving, onSave, onCancel }) {
   )
 }
 
-function QRScanField({ onScan, scannerMode, setScannerMode, evacueeRef, setEvacueeRef, evacueeName, setEvacueeName }) {
-  const [overlayOpen, setOverlayOpen] = useState(false)
-  const [scanSuccess, setScanSuccess] = useState(false)
+// onAutoRecord: when provided, QR detections are recorded immediately without closing the overlay.
+// The camera stays open for continuous scanning; a 5-second per-victim cooldown prevents duplicates.
+function QRScanField({ onScan, onAutoRecord, scannerMode, setScannerMode, evacueeRef, setEvacueeRef, evacueeName, setEvacueeName }) {
+  const [overlayOpen, setOverlayOpen]   = useState(false)
+  const [scanSuccess, setScanSuccess]   = useState(false)
   const [galleryError, setGalleryError] = useState('')
-  const qrRef = useRef(null)
-  const fileInputRef = useRef(null)
+  const [autoStatus, setAutoStatus]     = useState(null) // null | 'recording' | 'success' | 'error' | 'cooldown'
+  const [autoMsg, setAutoMsg]           = useState('')
+  const qrRef          = useRef(null)
+  const fileInputRef   = useRef(null)
+  const recentScans    = useRef(new Map())   // evacueeId → timestamp
+  const onAutoRecordRef = useRef(onAutoRecord)
+  const COOLDOWN_MS    = 5000
+
+  useEffect(() => { onAutoRecordRef.current = onAutoRecord }, [onAutoRecord])
 
   useEffect(() => {
     if (!overlayOpen) return
@@ -1270,15 +1307,42 @@ function QRScanField({ onScan, scannerMode, setScannerMode, evacueeRef, setEvacu
         await qr.start(
           { facingMode: 'environment' },
           { fps: 15, qrbox: { width: 220, height: 220 } },
-          (text) => {
+          async (text) => {
             if (!text.startsWith('SURVPH:EVACUEE:')) return
             const parts = text.split(':')
             const eid = parts[2] ?? ''; const ename = parts[3] ?? ''
-            setEvacueeRef(eid); setEvacueeName(ename)
-            onScan({ evacueeId: eid, evacueeName: ename })
-            setScanSuccess(true)
-            qr.stop().catch(() => {}); qrRef.current = null
-            setTimeout(() => { setOverlayOpen(false); setScannerMode(false); setScanSuccess(false) }, 1200)
+
+            if (onAutoRecordRef.current) {
+              // ── Auto-record mode: stay open, record immediately ────────────
+              const lastScan = recentScans.current.get(eid)
+              if (lastScan && Date.now() - lastScan < COOLDOWN_MS) {
+                const remaining = Math.ceil((COOLDOWN_MS - (Date.now() - lastScan)) / 1000)
+                setAutoStatus('cooldown')
+                setAutoMsg(`Already scanned — ${remaining}s cooldown remaining`)
+                setTimeout(() => setAutoStatus(null), 2000)
+                return
+              }
+              recentScans.current.set(eid, Date.now())
+              setAutoStatus('recording')
+              setAutoMsg(ename || eid || 'Victim')
+              try {
+                await onAutoRecordRef.current({ evacueeId: eid, evacueeName: ename })
+                setEvacueeRef(eid); setEvacueeName(ename)
+                setAutoStatus('success')
+                setAutoMsg(ename || eid || 'Victim')
+              } catch (err) {
+                setAutoStatus('error')
+                setAutoMsg(err?.error ?? 'Failed to record — check connection')
+              }
+              setTimeout(() => setAutoStatus(null), 2500)
+            } else {
+              // ── Manual mode: old behaviour ─────────────────────────────────
+              setEvacueeRef(eid); setEvacueeName(ename)
+              onScan({ evacueeId: eid, evacueeName: ename })
+              setScanSuccess(true)
+              qr.stop().catch(() => {}); qrRef.current = null
+              setTimeout(() => { setOverlayOpen(false); setScannerMode(false); setScanSuccess(false) }, 1200)
+            }
           },
           () => {}
         )
@@ -1290,10 +1354,14 @@ function QRScanField({ onScan, scannerMode, setScannerMode, evacueeRef, setEvacu
     }
   }, [overlayOpen])
 
-  function openScanner() { setScanSuccess(false); setGalleryError(''); setOverlayOpen(true); setScannerMode(true) }
+  function openScanner() {
+    setScanSuccess(false); setGalleryError(''); setAutoStatus(null)
+    recentScans.current.clear()
+    setOverlayOpen(true); setScannerMode(true)
+  }
   function closeScanner() {
     if (qrRef.current) { qrRef.current.stop().catch(() => {}); qrRef.current = null }
-    setOverlayOpen(false); setScannerMode(false); setGalleryError('')
+    setOverlayOpen(false); setScannerMode(false); setGalleryError(''); setAutoStatus(null)
   }
 
   async function handleGalleryFile(e) {
@@ -1313,20 +1381,103 @@ function QRScanField({ onScan, scannerMode, setScannerMode, evacueeRef, setEvacu
       const qr = new Html5Qrcode('qr-file-reader-tmp')
       const result = await qr.scanFileV2(file, false)
       const text = result.decodedText
-      if (text.startsWith('SURVPH:EVACUEE:')) {
-        const parts = text.split(':')
-        const eid = parts[2] ?? ''; const ename = parts[3] ?? ''
+      if (!text.startsWith('SURVPH:EVACUEE:')) {
+        setGalleryError('QR found but not a valid victim QR. Try a different image.')
+        return
+      }
+      const parts = text.split(':')
+      const eid = parts[2] ?? ''; const ename = parts[3] ?? ''
+      if (onAutoRecordRef.current) {
+        // Auto-record mode: record from gallery image too
+        const lastScan = recentScans.current.get(eid)
+        if (lastScan && Date.now() - lastScan < COOLDOWN_MS) {
+          setGalleryError(`Already recorded — ${Math.ceil((COOLDOWN_MS - (Date.now() - lastScan)) / 1000)}s cooldown.`)
+          return
+        }
+        recentScans.current.set(eid, Date.now())
+        setAutoStatus('recording'); setAutoMsg(ename || eid || 'Victim')
+        try {
+          await onAutoRecordRef.current({ evacueeId: eid, evacueeName: ename })
+          setEvacueeRef(eid); setEvacueeName(ename)
+          setAutoStatus('success'); setAutoMsg(ename || eid || 'Victim')
+        } catch (err) {
+          setAutoStatus('error'); setAutoMsg(err?.error ?? 'Failed to record')
+        }
+        setTimeout(() => setAutoStatus(null), 2500)
+      } else {
         if (qrRef.current) { await qrRef.current.stop().catch(() => {}); qrRef.current = null }
         setEvacueeRef(eid); setEvacueeName(ename)
         onScan({ evacueeId: eid, evacueeName: ename })
         setScanSuccess(true)
         setTimeout(() => { setOverlayOpen(false); setScannerMode(false); setScanSuccess(false); setGalleryError('') }, 1200)
-      } else {
-        setGalleryError('QR found but not a valid victim QR. Try a different image.')
       }
     } catch {
       setGalleryError('No QR code detected. Try a clearer photo.')
     }
+  }
+
+  // Bottom bar content for auto-record mode
+  function AutoBar() {
+    if (autoStatus === 'success') return (
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-[rgba(34,197,94,0.2)] border border-[rgba(34,197,94,0.5)] flex items-center justify-center">
+          <CheckCircle size={18} className="text-[#22c55e]" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-[#22c55e]">Recorded</p>
+          <p className="text-[10px] text-white/50">{autoMsg}</p>
+        </div>
+      </div>
+    )
+    if (autoStatus === 'error') return (
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-[rgba(239,68,68,0.2)] border border-[rgba(239,68,68,0.5)] flex items-center justify-center">
+          <AlertCircle size={18} className="text-[#ef4444]" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-[#ef4444]">Failed</p>
+          <p className="text-[10px] text-white/50">{autoMsg}</p>
+        </div>
+      </div>
+    )
+    if (autoStatus === 'cooldown') return (
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-[rgba(245,158,11,0.15)] border border-[rgba(245,158,11,0.4)] flex items-center justify-center">
+          <div className="w-4 h-4 rounded-full border-2 border-[#f59e0b] border-t-transparent animate-spin" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-[#f59e0b]">Cooldown</p>
+          <p className="text-[10px] text-white/50">{autoMsg}</p>
+        </div>
+      </div>
+    )
+    if (autoStatus === 'recording') return (
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-[rgba(0,212,255,0.15)] border border-[rgba(0,212,255,0.4)] flex items-center justify-center animate-pulse">
+          <QrCode size={18} className="text-[#00d4ff]" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-[#00d4ff]">Recording…</p>
+          <p className="text-[10px] text-white/50">{autoMsg}</p>
+        </div>
+      </div>
+    )
+    return (
+      <>
+        <div className="flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-[#00d4ff] animate-pulse" />
+          <p className="text-xs text-white/70 font-medium">Auto-scanning — hold QR code up to camera</p>
+        </div>
+        <p className="text-[11px] text-white/35 text-center leading-relaxed">
+          Each valid QR is recorded immediately · 5 s cooldown per person
+        </p>
+        {galleryError && <p className="text-[11px] text-red-400 text-center">{galleryError}</p>}
+        <button type="button" onClick={() => fileInputRef.current?.click()}
+          className="text-xs text-white/40 hover:text-white/70 transition-colors underline mt-1">
+          Use image from gallery instead
+        </button>
+      </>
+    )
   }
 
   return (
@@ -1353,10 +1504,9 @@ function QRScanField({ onScan, scannerMode, setScannerMode, evacueeRef, setEvacu
         </div>
       </div>
 
-      {/* Full-screen QR camera overlay — matching YOLO camera design */}
+      {/* Full-screen QR camera overlay */}
       {overlayOpen && (
         <div className="fixed inset-0 z-50 bg-black flex flex-col">
-          {/* CSS overrides to make Html5Qrcode fill the viewfinder */}
           <style>{`
             #qr-fs-admin,#qr-fs-admin>div{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;padding:0!important;border:none!important;background:transparent!important;}
             #qr-fs-admin video{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;object-fit:cover!important;}
@@ -1365,82 +1515,70 @@ function QRScanField({ onScan, scannerMode, setScannerMode, evacueeRef, setEvacu
             #qr-fs-admin img{display:none!important;}
           `}</style>
 
-          {/* Viewfinder */}
           <div className="flex-1 relative overflow-hidden">
-            {/* Html5Qrcode renders camera stream here */}
             <div id="qr-fs-admin" />
 
-            {/* Dim mask + QR frame */}
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-              {/* Semi-dark surround */}
               <div className="absolute inset-0 bg-black/40" />
-              {/* Scan frame — 220×220 to match qrbox */}
               <div className="relative z-10 w-[220px] h-[220px]">
-                {/* Clear window */}
                 <div className="absolute inset-0 bg-transparent" />
-                {/* Corner brackets */}
                 <span className="absolute top-0 left-0 w-7 h-7 border-t-[3px] border-l-[3px] border-[#00d4ff] rounded-tl-sm" />
                 <span className="absolute top-0 right-0 w-7 h-7 border-t-[3px] border-r-[3px] border-[#00d4ff] rounded-tr-sm" />
                 <span className="absolute bottom-0 left-0 w-7 h-7 border-b-[3px] border-l-[3px] border-[#00d4ff] rounded-bl-sm" />
                 <span className="absolute bottom-0 right-0 w-7 h-7 border-b-[3px] border-r-[3px] border-[#00d4ff] rounded-br-sm" />
-                {/* Scanning beam */}
-                {!scanSuccess && (
+                {!scanSuccess && autoStatus !== 'success' && (
                   <div className="absolute left-1 right-1 h-[2px] bg-gradient-to-r from-transparent via-[#00d4ff] to-transparent opacity-80 animate-[scanBeam_1.8s_ease-in-out_infinite]" />
+                )}
+                {/* Flash overlay on successful auto-record */}
+                {autoStatus === 'success' && (
+                  <div className="absolute inset-0 rounded bg-[rgba(34,197,94,0.25)] border-2 border-[#22c55e]" />
                 )}
               </div>
             </div>
 
-            {/* Top header */}
             <div className="absolute top-0 left-0 right-0 px-4 pt-4 pb-8 bg-gradient-to-b from-black/70 to-transparent flex items-center gap-3">
               <button onClick={closeScanner} className="w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white/80 hover:text-white hover:bg-black/60 transition-colors text-base leading-none">✕</button>
               <QrCode size={14} className="text-[#00d4ff]" />
-              <p className="text-sm font-semibold text-white/90">Scan Victim QR Code</p>
+              <p className="text-sm font-semibold text-white/90">
+                {onAutoRecord ? 'Auto-Record Victim QR' : 'Scan Victim QR Code'}
+              </p>
             </div>
           </div>
 
-          {/* Bottom controls — matching YOLO shutter bar style */}
+          {/* Bottom controls */}
           <div className="bg-black/90 px-6 py-7 flex flex-col items-center gap-2.5">
-            {scanSuccess ? (
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[rgba(34,197,94,0.2)] border border-[rgba(34,197,94,0.5)] flex items-center justify-center">
-                  <CheckCircle size={18} className="text-[#22c55e]" />
+            {onAutoRecord ? <AutoBar /> : (
+              scanSuccess ? (
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[rgba(34,197,94,0.2)] border border-[rgba(34,197,94,0.5)] flex items-center justify-center">
+                    <CheckCircle size={18} className="text-[#22c55e]" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-[#22c55e]">QR Code Scanned</p>
+                    <p className="text-[10px] text-white/40">Closing scanner…</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-[#22c55e]">QR Code Scanned</p>
-                  <p className="text-[10px] text-white/40">Closing scanner…</p>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#00d4ff] animate-pulse" />
-                  <p className="text-xs text-white/70 font-medium">Scanning for QR code…</p>
-                </div>
-                <p className="text-[11px] text-white/35 text-center leading-relaxed">
-                  Align the victim's QR code within the cyan frame
-                </p>
-                {galleryError && (
-                  <p className="text-[11px] text-red-400 text-center">{galleryError}</p>
-                )}
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="text-xs text-white/40 hover:text-white/70 transition-colors underline mt-1"
-                >
-                  Use image from gallery instead
-                </button>
-              </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#00d4ff] animate-pulse" />
+                    <p className="text-xs text-white/70 font-medium">Scanning for QR code…</p>
+                  </div>
+                  <p className="text-[11px] text-white/35 text-center leading-relaxed">
+                    Align the victim's QR code within the cyan frame
+                  </p>
+                  {galleryError && <p className="text-[11px] text-red-400 text-center">{galleryError}</p>}
+                  <button type="button" onClick={() => fileInputRef.current?.click()}
+                    className="text-xs text-white/40 hover:text-white/70 transition-colors underline mt-1">
+                    Use image from gallery instead
+                  </button>
+                </>
+              )
             )}
           </div>
         </div>
       )}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleGalleryFile}
-      />
+      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleGalleryFile} />
     </>
   )
 }
