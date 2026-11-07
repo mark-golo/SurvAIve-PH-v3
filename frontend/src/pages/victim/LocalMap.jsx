@@ -194,11 +194,31 @@ export function LocalMap() {
       const dur    = Math.ceil(data.routes[0].duration / 60)
       setRouteLine(coords); routeLineRef.current = coords
       setRouteInfo({ distanceKm: dist, durationMin: dur })
+      // Save successful route to offline cache
+      try {
+        const cache = JSON.parse(localStorage.getItem('route-cache') || '{}')
+        cache[center.id] = { coords, distanceKm: dist, durationMin: dur }
+        localStorage.setItem('route-cache', JSON.stringify(cache))
+      } catch {}
     } catch {
-      const fallback = [userPos, [Number(center.lat), Number(center.lng)]]
-      setRouteLine(fallback); routeLineRef.current = fallback
-      setRouteInfo(null)
-      setRouteError('Live routing unavailable — showing straight-line path.')
+      // Try cached route before falling back to straight line
+      let usedCache = false
+      try {
+        const cache = JSON.parse(localStorage.getItem('route-cache') || '{}')
+        const cached = cache[center.id]
+        if (cached?.coords?.length) {
+          setRouteLine(cached.coords); routeLineRef.current = cached.coords
+          setRouteInfo({ distanceKm: cached.distanceKm, durationMin: cached.durationMin })
+          setRouteError('Offline: using cached route — directions may not reflect current conditions.')
+          usedCache = true
+        }
+      } catch {}
+      if (!usedCache) {
+        const fallback = [userPos, [Number(center.lat), Number(center.lng)]]
+        setRouteLine(fallback); routeLineRef.current = fallback
+        setRouteInfo(null)
+        setRouteError('No connection and no cached route — showing straight-line path.')
+      }
     } finally {
       setRouteLoading(false)
     }
