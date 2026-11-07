@@ -125,6 +125,13 @@ html, body {
 }
 .glow-border { animation: glow-border 2s ease-in-out infinite; }
 
+@keyframes scanBeam {
+  0%   { top: 0%;    opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { top: 100%;  opacity: 0; }
+}
+
 /* ── Victim light theme ───────────────────────────────────────────────────── */
 /* Activated by adding .light-theme to the victim page wrapper div only.       */
 /* Rules are outside @layer so they override Tailwind's @layer utilities.      */

@@ -1252,55 +1252,144 @@ function CenterForm({ title, form, set, error, saving, onSave, onCancel }) {
 }
 
 function QRScanField({ onScan, scannerMode, setScannerMode, evacueeRef, setEvacueeRef, evacueeName, setEvacueeName }) {
+  const [overlayOpen, setOverlayOpen] = useState(false)
+  const [scanSuccess, setScanSuccess] = useState(false)
+  const qrRef = useRef(null)
+
   useEffect(() => {
-    if (!scannerMode) return
-    let scanner = null
-    const id = 'qr-reader-admin'
+    if (!overlayOpen) return
+    let mounted = true
     const timer = setTimeout(async () => {
       try {
-        const { Html5QrcodeScanner } = await import('html5-qrcode')
-        scanner = new Html5QrcodeScanner(id, { fps: 10, qrbox: 200 }, false)
-        scanner.render(
+        const { Html5Qrcode } = await import('html5-qrcode')
+        const qr = new Html5Qrcode('qr-fs-admin')
+        if (!mounted) return
+        qrRef.current = qr
+        await qr.start(
+          { facingMode: 'environment' },
+          { fps: 15, qrbox: { width: 220, height: 220 } },
           (text) => {
-            scanner.clear().catch(() => {})
-            if (text.startsWith('SURVPH:EVACUEE:')) {
-              const parts = text.split(':')
-              const eid = parts[2] ?? ''; const ename = parts[3] ?? ''
-              setEvacueeRef(eid); setEvacueeName(ename)
-              onScan({ evacueeId: eid, evacueeName: ename })
-            }
-            setScannerMode(false)
+            if (!text.startsWith('SURVPH:EVACUEE:')) return
+            const parts = text.split(':')
+            const eid = parts[2] ?? ''; const ename = parts[3] ?? ''
+            setEvacueeRef(eid); setEvacueeName(ename)
+            onScan({ evacueeId: eid, evacueeName: ename })
+            setScanSuccess(true)
+            qr.stop().catch(() => {}); qrRef.current = null
+            setTimeout(() => { setOverlayOpen(false); setScannerMode(false); setScanSuccess(false) }, 1200)
           },
           () => {}
         )
-      } catch { setScannerMode(false) }
-    }, 100)
-    return () => { clearTimeout(timer); if (scanner) scanner.clear().catch(() => {}) }
-  }, [scannerMode])
+      } catch { if (mounted) { setOverlayOpen(false); setScannerMode(false) } }
+    }, 150)
+    return () => {
+      mounted = false; clearTimeout(timer)
+      if (qrRef.current) { qrRef.current.stop().catch(() => {}); qrRef.current = null }
+    }
+  }, [overlayOpen])
+
+  function openScanner() { setScanSuccess(false); setOverlayOpen(true); setScannerMode(true) }
+  function closeScanner() {
+    if (qrRef.current) { qrRef.current.stop().catch(() => {}); qrRef.current = null }
+    setOverlayOpen(false); setScannerMode(false)
+  }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <button onClick={() => setScannerMode(p => !p)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${scannerMode ? 'bg-[rgba(0,212,255,0.15)] border-[rgba(0,212,255,0.3)] text-[#00d4ff]' : 'bg-[rgba(255,255,255,0.05)] border-[rgba(255,255,255,0.1)] text-slate-400 hover:text-white'}`}>
-          <Camera size={11} />{scannerMode ? 'Stop Scanner' : 'Scan QR'}
-        </button>
-        <span className="text-[10px] text-slate-500">or enter manually:</span>
-      </div>
-      {scannerMode && <div id="qr-reader-admin" className="rounded-xl overflow-hidden" />}
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <p className="text-[10px] text-slate-500 mb-1">Victim ID (optional)</p>
-          <input value={evacueeRef} onChange={e => setEvacueeRef(e.target.value)} placeholder="From QR scan…"
-            className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none" />
+    <>
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <button onClick={openScanner}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-[rgba(0,212,255,0.08)] border-[rgba(0,212,255,0.25)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.16)] transition-colors">
+            <Camera size={11} />Scan QR
+          </button>
+          <span className="text-[10px] text-slate-500">or enter manually:</span>
         </div>
-        <div>
-          <p className="text-[10px] text-slate-500 mb-1">Name (optional)</p>
-          <input value={evacueeName} onChange={e => setEvacueeName(e.target.value)} placeholder="Name…"
-            className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none" />
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <p className="text-[10px] text-slate-500 mb-1">Victim ID (optional)</p>
+            <input value={evacueeRef} onChange={e => setEvacueeRef(e.target.value)} placeholder="From QR scan…"
+              className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none" />
+          </div>
+          <div>
+            <p className="text-[10px] text-slate-500 mb-1">Name (optional)</p>
+            <input value={evacueeName} onChange={e => setEvacueeName(e.target.value)} placeholder="Name…"
+              className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none" />
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Full-screen QR camera overlay — matching YOLO camera design */}
+      {overlayOpen && (
+        <div className="fixed inset-0 z-50 bg-black flex flex-col">
+          {/* CSS overrides to make Html5Qrcode fill the viewfinder */}
+          <style>{`
+            #qr-fs-admin,#qr-fs-admin>div{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;padding:0!important;border:none!important;background:transparent!important;}
+            #qr-fs-admin video{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;object-fit:cover!important;}
+            #qr-fs-admin__scan_region{display:none!important;}
+            #qr-fs-admin__dashboard_section{display:none!important;}
+            #qr-fs-admin img{display:none!important;}
+          `}</style>
+
+          {/* Viewfinder */}
+          <div className="flex-1 relative overflow-hidden">
+            {/* Html5Qrcode renders camera stream here */}
+            <div id="qr-fs-admin" />
+
+            {/* Dim mask + QR frame */}
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+              {/* Semi-dark surround */}
+              <div className="absolute inset-0 bg-black/40" />
+              {/* Scan frame — 220×220 to match qrbox */}
+              <div className="relative z-10 w-[220px] h-[220px]">
+                {/* Clear window */}
+                <div className="absolute inset-0 bg-transparent" />
+                {/* Corner brackets */}
+                <span className="absolute top-0 left-0 w-7 h-7 border-t-[3px] border-l-[3px] border-[#00d4ff] rounded-tl-sm" />
+                <span className="absolute top-0 right-0 w-7 h-7 border-t-[3px] border-r-[3px] border-[#00d4ff] rounded-tr-sm" />
+                <span className="absolute bottom-0 left-0 w-7 h-7 border-b-[3px] border-l-[3px] border-[#00d4ff] rounded-bl-sm" />
+                <span className="absolute bottom-0 right-0 w-7 h-7 border-b-[3px] border-r-[3px] border-[#00d4ff] rounded-br-sm" />
+                {/* Scanning beam */}
+                {!scanSuccess && (
+                  <div className="absolute left-1 right-1 h-[2px] bg-gradient-to-r from-transparent via-[#00d4ff] to-transparent opacity-80 animate-[scanBeam_1.8s_ease-in-out_infinite]" />
+                )}
+              </div>
+            </div>
+
+            {/* Top header */}
+            <div className="absolute top-0 left-0 right-0 px-4 pt-4 pb-8 bg-gradient-to-b from-black/70 to-transparent flex items-center gap-3">
+              <button onClick={closeScanner} className="w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white/80 hover:text-white hover:bg-black/60 transition-colors text-base leading-none">✕</button>
+              <QrCode size={14} className="text-[#00d4ff]" />
+              <p className="text-sm font-semibold text-white/90">Scan Victim QR Code</p>
+            </div>
+          </div>
+
+          {/* Bottom controls — matching YOLO shutter bar style */}
+          <div className="bg-black/90 px-6 py-7 flex flex-col items-center gap-2.5">
+            {scanSuccess ? (
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-[rgba(34,197,94,0.2)] border border-[rgba(34,197,94,0.5)] flex items-center justify-center">
+                  <CheckCircle size={18} className="text-[#22c55e]" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-[#22c55e]">QR Code Scanned</p>
+                  <p className="text-[10px] text-white/40">Closing scanner…</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#00d4ff] animate-pulse" />
+                  <p className="text-xs text-white/70 font-medium">Scanning for QR code…</p>
+                </div>
+                <p className="text-[11px] text-white/35 text-center leading-relaxed">
+                  Align the victim's QR code within the cyan frame
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
