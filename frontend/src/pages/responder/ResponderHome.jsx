@@ -4,10 +4,10 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   AlertTriangle, Home, Map, Radio, Settings, List, RefreshCw, Power,
-  Star, Wifi, WifiOff, QrCode, ChevronRight, CheckCircle, XCircle,
-  Loader, Users, Shield, Zap,
+  Star, WifiOff, QrCode, ChevronRight, CheckCircle, XCircle,
+  Users, Shield, Zap,
 } from 'lucide-react'
-import { MobileNavBar, TopBar } from '../../components/ui/NavBar'
+import { MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { NeonButton } from '../../components/ui/NeonButton'
@@ -524,20 +524,31 @@ export function ResponderHome() {
 
         {/* ── 4. Quick Actions ────────────────────────────────────────── */}
         <div className="grid grid-cols-3 gap-3">
-          <NeonButton onClick={() => navigate('/responder/queue')} className="flex-col h-16 !px-2 text-center" size="sm">
-            <List size={18} className="mb-1" />
-            <span className="text-[10px]">View Queue</span>
-          </NeonButton>
-          <NeonButton onClick={() => navigate('/responder/map')} variant="violet" className="flex-col h-16 !px-2 text-center" size="sm">
-            <Map size={18} className="mb-1" />
-            <span className="text-[10px]">Open Map</span>
-          </NeonButton>
-          <NeonButton onClick={syncNow} variant="ghost" loading={syncing} className="flex-col h-16 !px-2 text-center" size="sm">
-            <RefreshCw size={18} className={`mb-1 ${syncing ? 'animate-spin' : ''}`} />
-            <span className="text-[10px]">
-              {syncing ? 'Syncing…' : 'Sync Data'}
-            </span>
-          </NeonButton>
+          {/* View Queue — cyan fill, white icon + label */}
+          <button
+            onClick={() => navigate('/responder/queue')}
+            className="flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl bg-gradient-to-r from-[#00d4ff] to-[#0ea5e9] shadow-[0_0_18px_rgba(0,212,255,0.4)] hover:shadow-[0_0_28px_rgba(0,212,255,0.7)] active:scale-95 transition-all"
+          >
+            <List size={18} className="text-white" />
+            <span className="text-[11px] font-bold text-white">View Queue</span>
+          </button>
+          {/* Open Map — purple fill, white icon + label */}
+          <button
+            onClick={() => navigate('/responder/map')}
+            className="flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl bg-gradient-to-r from-[#8b5cf6] to-[#7c3aed] shadow-[0_0_18px_rgba(139,92,246,0.4)] hover:shadow-[0_0_28px_rgba(139,92,246,0.7)] active:scale-95 transition-all"
+          >
+            <Map size={18} className="text-white" />
+            <span className="text-[11px] font-bold text-white">Open Map</span>
+          </button>
+          {/* Sync Data — ghost/dark, cyan icon + label */}
+          <button
+            onClick={syncNow}
+            disabled={syncing}
+            className="flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl bg-transparent border border-[rgba(0,212,255,0.3)] hover:bg-[rgba(0,212,255,0.08)] hover:border-[rgba(0,212,255,0.6)] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw size={18} className={`text-[#00d4ff] ${syncing ? 'animate-spin' : ''}`} />
+            <span className="text-[11px] font-bold text-[#00d4ff]">{syncing ? 'Syncing…' : 'Sync Data'}</span>
+          </button>
         </div>
         {lastSync && (
           <p className="text-center text-[10px] text-slate-600">
