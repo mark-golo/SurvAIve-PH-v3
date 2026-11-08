@@ -307,20 +307,18 @@ export function ResponderHome() {
     if (!file) return
     e.target.value = ''
     setGalleryError('')
-    let tmpEl = null
     try {
       const { Html5Qrcode } = await import('html5-qrcode')
       const tmpId = 'qr-resp-file-tmp'
-      tmpEl = document.getElementById(tmpId) || (() => {
-        const el = document.createElement('div')
-        el.id = tmpId
-        el.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none'
-        document.body.appendChild(el)
-        return el
-      })()
+      let tmpEl = document.getElementById(tmpId)
+      if (!tmpEl) {
+        tmpEl = document.createElement('div')
+        tmpEl.id = tmpId
+        tmpEl.style.display = 'none'
+        document.body.appendChild(tmpEl)
+      }
       const qr = new Html5Qrcode(tmpId)
       const result = await qr.scanFileV2(file, false)
-      await qr.clear?.().catch(() => {})
       const text = result.decodedText?.trim() ?? ''
       if (!text.startsWith('SURVPH:EVACUEE:')) { setGalleryError('Not a valid evacuee QR image.'); return }
       const parts = text.split(':')
@@ -344,7 +342,6 @@ export function ResponderHome() {
       }
       setTimeout(() => setAutoStatus(null), 2500)
     } catch { setGalleryError('Could not read QR from image.') }
-    finally { if (tmpEl) { try { document.body.removeChild(tmpEl) } catch {} } }
   }
 
   const openQRScanner = () => {
