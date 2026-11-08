@@ -463,14 +463,17 @@ export function ResponderHome() {
             onClick={() => navigate('/responder/queue')}
             className="glass rounded-xl px-5 pt-4 pb-5 border border-[rgba(239,68,68,0.5)] cursor-pointer hover:border-[rgba(239,68,68,0.8)] transition-all shadow-[0_0_16px_rgba(239,68,68,0.15)]"
           >
-            {/* Icon — top left */}
-            <AlertTriangle size={14} className="text-[#ef4444] animate-pulse mb-3" />
-
-            {/* Large number left · text stack right */}
+            {/* Icon · Number · Text — single horizontal row, all vertically centered */}
             <div className="flex items-center gap-4">
+              {/* Large icon */}
+              <AlertTriangle size={44} className="text-[#ef4444] animate-pulse shrink-0" />
+
+              {/* Huge count */}
               <p className="text-[64px] font-black text-[#ef4444] leading-none shrink-0 tabular-nums">
                 {criticalCount}
               </p>
+
+              {/* Text stack */}
               <div className="flex flex-col gap-1 min-w-0">
                 <p className="text-sm font-black text-[#ef4444] uppercase tracking-wider leading-tight">
                   CRITICAL RESCUE ALERTS
