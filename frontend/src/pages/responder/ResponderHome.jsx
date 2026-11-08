@@ -107,6 +107,7 @@ export function ResponderHome() {
   const [networkOnline, setNetworkOnline] = useState(() => getNetworkOnline())
   const [meshAlert,    setMeshAlert]    = useState(null)
   const [receivedMeshSOS, setReceivedMeshSOS] = useState(() => getReceivedSOS())
+  const [now, setNow] = useState(Date.now)
 
   // UI state
   const [showStandbyConfirm, setShowStandbyConfirm] = useState(false)
@@ -128,12 +129,20 @@ export function ResponderHome() {
   const unacknowledgedCount = activeList.filter(r => !r.rescue_status || r.rescue_status === 'pending').length
   const pendingCount        = unacknowledgedCount
   const rescuedCount        = sosList.filter(r => r.rescue_status === 'rescued').length
+  const THIRTY_MIN          = 30 * 60 * 1000
+  const recentCount         = sosList.filter(r => r.created_at && (now - new Date(r.created_at).getTime() < THIRTY_MIN)).length
 
   // ── Mesh stats polling ────────────────────────────────────────────────────
   useEffect(() => {
     const load = async () => setStats(await mesh.getStats())
     load()
     const t = setInterval(load, 10000)
+    return () => clearInterval(t)
+  }, [])
+
+  // ── Recent SOS tick — recomputes recentCount every 60 s ──────────────────
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000)
     return () => clearInterval(t)
   }, [])
 
@@ -592,15 +601,15 @@ export function ResponderHome() {
             <p className="text-[10px] text-slate-500 mt-0.5">victims in queue</p>
           </div>
           <div
-            onClick={unacknowledgedCount > 0 ? () => navigate('/responder/queue') : undefined}
-            className={`glass rounded-xl p-3.5 border border-[rgba(255,255,255,0.08)] transition-all ${unacknowledgedCount > 0 ? 'cursor-pointer hover:border-[rgba(245,158,11,0.3)]' : ''}`}
+            onClick={recentCount > 0 ? () => navigate('/responder/queue') : undefined}
+            className={`glass rounded-xl p-3.5 border border-[rgba(255,255,255,0.08)] transition-all ${recentCount > 0 ? 'cursor-pointer hover:border-[rgba(245,158,11,0.3)]' : ''}`}
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Unacknowledged</span>
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Recent</span>
               <Clock size={12} className="text-[#f59e0b] opacity-70" />
             </div>
-            <p className={`text-3xl font-black ${unacknowledgedCount > 0 ? 'text-[#f59e0b]' : 'text-slate-500'}`}>{unacknowledgedCount}</p>
-            <p className="text-[10px] text-slate-500 mt-0.5">awaiting acknowledgment</p>
+            <p className={`text-3xl font-black ${recentCount > 0 ? 'text-[#f59e0b]' : 'text-slate-500'}`}>{recentCount}</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">new emergencies</p>
           </div>
           <div className="glass rounded-xl p-3.5 border border-[rgba(255,255,255,0.08)]">
             <div className="flex items-center justify-between mb-1">
