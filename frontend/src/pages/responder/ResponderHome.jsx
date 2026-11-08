@@ -3,7 +3,7 @@ import { getResponderTheme } from '../../lib/victimTheme'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  AlertTriangle, Home, Map, Radio, Settings, List, RefreshCw, Power,
+  AlertTriangle, Home, Map as MapIcon, Radio, Settings, List, RefreshCw, Power,
   Star, WifiOff, QrCode, ChevronRight, CheckCircle, XCircle,
   Users, Shield, Zap, Clock, AlertCircle,
 } from 'lucide-react'
@@ -22,7 +22,7 @@ import { getReceivedSOS, onActivityChange } from '../../lib/meshActivityStore'
 const NAV = [
   { icon: Home,     label: 'Home',     path: '/responder'          },
   { icon: List,     label: 'Queue',    path: '/responder/queue'    },
-  { icon: Map,      label: 'Map',      path: '/responder/map'      },
+  { icon: MapIcon,  label: 'Map',      path: '/responder/map'      },
   { icon: Radio,    label: 'Mesh',     path: '/responder/relay'    },
   { icon: Settings, label: 'Settings', path: '/responder/settings' },
 ]
@@ -638,7 +638,7 @@ export function ResponderHome() {
             onClick={() => navigate('/responder/map')}
             className="flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl bg-gradient-to-r from-[#8b5cf6] to-[#7c3aed] shadow-[0_0_18px_rgba(139,92,246,0.4)] hover:shadow-[0_0_28px_rgba(139,92,246,0.7)] active:scale-95 transition-all"
           >
-            <Map size={18} className="text-white" />
+            <MapIcon size={18} className="text-white" />
             <span className="text-[11px] font-bold text-white">Open Map</span>
           </button>
           {/* Sync Data — ghost/dark, cyan icon + label */}
