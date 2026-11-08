@@ -232,7 +232,7 @@ export function ResponderHome() {
   // ── Load evacuation centers (for QR check-in) ─────────────────────────────
   useEffect(() => {
     api.get('/evacuation_centers')
-      .then(r => setRespCenters((Array.isArray(r) ? r : (r.data ?? [])).filter(c => c.is_active)))
+      .then(r => setRespCenters(Array.isArray(r) ? r : []))
       .catch(() => {})
   }, [])
 
