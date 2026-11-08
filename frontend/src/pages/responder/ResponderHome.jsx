@@ -461,16 +461,27 @@ export function ResponderHome() {
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
             onClick={() => navigate('/responder/queue')}
-            className="glass rounded-xl p-4 border border-[rgba(239,68,68,0.5)] cursor-pointer hover:border-[rgba(239,68,68,0.8)] transition-all shadow-[0_0_16px_rgba(239,68,68,0.15)]"
+            className="glass rounded-xl px-5 pt-4 pb-5 border border-[rgba(239,68,68,0.5)] cursor-pointer hover:border-[rgba(239,68,68,0.8)] transition-all shadow-[0_0_16px_rgba(239,68,68,0.15)]"
           >
-            <div className="flex items-center gap-2 mb-1">
-              <AlertTriangle size={16} className="text-[#ef4444] animate-pulse shrink-0" />
-              <p className="text-sm font-black text-[#ef4444] uppercase tracking-wide">CRITICAL RESCUE ALERTS</p>
-            </div>
-            <p className="text-2xl font-black text-[#ef4444] leading-none mb-1">{criticalCount}</p>
-            <p className="text-xs text-slate-400">victim{criticalCount !== 1 ? 's' : ''} requiring immediate attention</p>
-            <div className="flex items-center gap-1 mt-2 text-xs text-[#ef4444] font-semibold">
-              View Priority Queue <ChevronRight size={13} />
+            {/* Icon — top left */}
+            <AlertTriangle size={14} className="text-[#ef4444] animate-pulse mb-3" />
+
+            {/* Large number left · text stack right */}
+            <div className="flex items-center gap-4">
+              <p className="text-[64px] font-black text-[#ef4444] leading-none shrink-0 tabular-nums">
+                {criticalCount}
+              </p>
+              <div className="flex flex-col gap-1 min-w-0">
+                <p className="text-sm font-black text-[#ef4444] uppercase tracking-wider leading-tight">
+                  CRITICAL RESCUE ALERTS
+                </p>
+                <p className="text-xs text-slate-400">
+                  victim{criticalCount !== 1 ? 's' : ''} requiring immediate attention
+                </p>
+                <div className="flex items-center gap-0.5 text-xs text-[#ef4444] font-semibold mt-0.5">
+                  View Priority Queue <ChevronRight size={12} />
+                </div>
+              </div>
             </div>
           </motion.div>
         ) : (
