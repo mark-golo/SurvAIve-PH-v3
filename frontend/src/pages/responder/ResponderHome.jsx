@@ -478,11 +478,11 @@ export function ResponderHome() {
                 <p className="text-sm font-black text-[#ef4444] uppercase tracking-wider leading-tight">
                   CRITICAL ALERTS
                 </p>
-                <p className="text-xs text-slate-400">
+                <p className="text-[10px] text-slate-400">
                   Immediate Response Needed
                 </p>
-                <div className="flex items-center gap-0.5 text-xs text-[#ef4444] font-semibold mt-0.5">
-                  View Priority Queue <ChevronRight size={12} />
+                <div className="flex items-center gap-0.5 text-[10px] text-[#ef4444] font-semibold mt-0.5">
+                  View Priority Queue <ChevronRight size={11} />
                 </div>
               </div>
             </div>
