@@ -476,10 +476,10 @@ export function ResponderHome() {
               {/* Text stack */}
               <div className="flex flex-col gap-1 min-w-0">
                 <p className="text-sm font-black text-[#ef4444] uppercase tracking-wider leading-tight">
-                  CRITICAL RESCUE ALERTS
+                  CRITICAL ALERTS
                 </p>
                 <p className="text-xs text-slate-400">
-                  victim{criticalCount !== 1 ? 's' : ''} requiring immediate attention
+                  Immediate Response Needed
                 </p>
                 <div className="flex items-center gap-0.5 text-xs text-[#ef4444] font-semibold mt-0.5">
                   View Priority Queue <ChevronRight size={12} />
