@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   AlertTriangle, Home, Map, Radio, Settings, List, RefreshCw, Power,
   Star, WifiOff, QrCode, ChevronRight, CheckCircle, XCircle,
-  Users, Shield, Zap, Clock, UserPlus, UserMinus, Camera, AlertCircle,
+  Users, Shield, Zap, Clock,
 } from 'lucide-react'
 import { MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
@@ -110,6 +110,9 @@ export function ResponderHome() {
 
   // UI state
   const [showStandbyConfirm, setShowStandbyConfirm] = useState(false)
+  const [showQRScanner,      setShowQRScanner]      = useState(false)
+  const [qrResult,           setQrResult]           = useState(null) // { id, name } | 'scanning' | 'error'
+  const qrRef = useRef(null)
 
   // ── Derived stats ─────────────────────────────────────────────────────────
   const activeList          = sosList.filter(r => r.rescue_status !== 'rescued')
@@ -270,6 +273,51 @@ export function ResponderHome() {
     finally { dutyChangingRef.current = false }
   }, [onDuty, responderId])
 
+  // ── QR Scanner ────────────────────────────────────────────────────────────
+  const openQRScanner = () => { setQrResult('scanning'); setShowQRScanner(true) }
+  const closeQRScanner = useCallback(() => {
+    setShowQRScanner(false)
+    setQrResult(null)
+    if (qrRef.current) { qrRef.current.stop().catch(() => {}); qrRef.current = null }
+  }, [])
+
+  useEffect(() => {
+    if (!showQRScanner || qrResult !== 'scanning') return
+    let mounted = true
+    const timer = setTimeout(async () => {
+      try {
+        const { Html5Qrcode } = await import('html5-qrcode')
+        const qr = new Html5Qrcode('qr-responder-scan')
+        if (!mounted) return
+        qrRef.current = qr
+        await qr.start(
+          { facingMode: 'environment' },
+          { fps: 15, qrbox: { width: 220, height: 220 } },
+          async (text) => {
+            if (!text.startsWith('SURVPH:EVACUEE:')) { setQrResult('error'); return }
+            const parts = text.split(':')
+            const eid   = parts[2] ?? ''
+            const ename = parts[3] ? decodeURIComponent(parts[3]) : ''
+            if (!eid || eid === 'null') { setQrResult('error'); return }
+            if (qrRef.current) { qrRef.current.stop().catch(() => {}); qrRef.current = null }
+            // Try to resolve name from DB
+            let resolvedName = ename
+            try {
+              const rows = await api.get(`/victims?victim_id=${encodeURIComponent(eid)}`)
+              if (Array.isArray(rows) && rows[0]?.name) resolvedName = rows[0].name
+            } catch {}
+            if (mounted) setQrResult({ id: eid, name: resolvedName || eid })
+          },
+          () => {}
+        )
+      } catch { if (mounted) setQrResult('error') }
+    }, 150)
+    return () => {
+      mounted = false
+      clearTimeout(timer)
+      if (qrRef.current) { qrRef.current.stop().catch(() => {}); qrRef.current = null }
+    }
+  }, [showQRScanner, qrResult])
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const name = profile?.name || 'Responder'
@@ -564,7 +612,21 @@ export function ResponderHome() {
         <MyRatingsSummary responderId={responderId} />
 
         {/* ── 7. Scan Evacuee QR ──────────────────────────────────────── */}
-        <RespQRScanSection municipality={muni} />
+        <GlassCard
+          onClick={openQRScanner}
+          className="cursor-pointer hover:border-[rgba(0,212,255,0.3)] transition-all"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.2)] flex items-center justify-center shrink-0">
+              <QrCode size={18} className="text-[#00d4ff]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white">Scan Evacuee QR</p>
+              <p className="text-xs text-slate-500">Record and verify evacuee arrival at evacuation centers</p>
+            </div>
+            <ChevronRight size={15} className="text-slate-500 shrink-0" />
+          </div>
+        </GlassCard>
 
       </main>
 
@@ -611,6 +673,90 @@ export function ResponderHome() {
         )}
       </AnimatePresence>
 
+      {/* ── QR Scanner Overlay ──────────────────────────────────────── */}
+      <AnimatePresence>
+        {showQRScanner && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex flex-col"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[rgba(255,255,255,0.08)]">
+              <div className="flex items-center gap-2">
+                <QrCode size={16} className="text-[#00d4ff]" />
+                <p className="text-sm font-bold text-white">Scan Evacuee QR</p>
+              </div>
+              <button onClick={closeQRScanner} className="text-slate-400 hover:text-white p-1">✕</button>
+            </div>
+
+            {/* Scanner / Result */}
+            <div className="flex-1 flex flex-col items-center justify-center p-6 gap-5">
+              {qrResult === 'scanning' && (
+                <>
+                  {/* Camera viewport */}
+                  <div className="relative w-72 h-72 rounded-2xl overflow-hidden bg-black border-2 border-[rgba(0,212,255,0.4)]">
+                    <div id="qr-responder-scan" className="w-full h-full" />
+                    {/* Scan beam */}
+                    <div className="absolute inset-0 pointer-events-none">
+                      <div className="absolute left-4 right-4 h-0.5 bg-[#00d4ff] opacity-70 animate-[scanBeam_2s_ease-in-out_infinite]" />
+                      {/* Corner marks */}
+                      {[['top-2 left-2', 'border-t-2 border-l-2'],['top-2 right-2', 'border-t-2 border-r-2'],
+                        ['bottom-2 left-2', 'border-b-2 border-l-2'],['bottom-2 right-2', 'border-b-2 border-r-2']].map(([pos, border], i) => (
+                        <div key={i} className={`absolute ${pos} w-6 h-6 ${border} border-[#00d4ff] rounded-sm`} />
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-400 text-center">Point the camera at an evacuee's QR code</p>
+                </>
+              )}
+
+              {typeof qrResult === 'object' && qrResult !== null && (
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="w-full max-w-sm glass rounded-2xl p-5 border border-[rgba(34,197,94,0.4)] space-y-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <CheckCircle size={18} className="text-[#22c55e]" />
+                    <p className="font-bold text-white">Evacuee Verified</p>
+                  </div>
+                  <div className="space-y-1.5 pl-1">
+                    <p className="text-sm text-white font-semibold">{qrResult.name}</p>
+                    <p className="text-xs text-slate-500">Victim ID: {qrResult.id}</p>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    QR code is valid. Use the Admin Evacuation Centers module to record an official check-in.
+                  </p>
+                  <div className="flex gap-3 pt-1">
+                    <NeonButton variant="ghost" onClick={closeQRScanner} className="flex-1">Close</NeonButton>
+                    <NeonButton onClick={() => { closeQRScanner(); setQrResult('scanning'); openQRScanner() }} className="flex-1">Scan Again</NeonButton>
+                  </div>
+                </motion.div>
+              )}
+
+              {qrResult === 'error' && (
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="w-full max-w-sm glass rounded-2xl p-5 border border-[rgba(239,68,68,0.4)] space-y-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <XCircle size={18} className="text-[#ef4444]" />
+                    <p className="font-bold text-white">Invalid QR Code</p>
+                  </div>
+                  <p className="text-xs text-slate-400">This QR code is not a valid SurvAIve PH evacuee code. Please try again.</p>
+                  <div className="flex gap-3">
+                    <NeonButton variant="ghost" onClick={closeQRScanner} className="flex-1">Cancel</NeonButton>
+                    <NeonButton variant="red" onClick={() => setQrResult('scanning')} className="flex-1">Retry</NeonButton>
+                  </div>
+                </motion.div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -622,520 +768,5 @@ function ConnRow({ label, value, accent }) {
       <span className="text-[10px] text-slate-500">{label}</span>
       <span className="text-[11px] font-bold" style={{ color: accent }}>{value}</span>
     </div>
-  )
-}
-
-// ── RespQRScanSection ─────────────────────────────────────────────────────────
-// Full continuous auto-scan + auto-record for responders.
-// Replicates Admin EvacuationCenters Occupancy & Resources QR design.
-function RespQRScanSection({ municipality }) {
-  const [centers,          setCenters]          = useState([])
-  const [centerId,         setCenterId]         = useState('')
-  const [arrivedOpen,      setArrivedOpen]      = useState(false)
-  const [departedOpen,     setDepartedOpen]     = useState(false)
-  const [scannerMode,      setScannerMode]      = useState(false)
-  const [evacueeRef,       setEvacueeRef]       = useState('')
-  const [evacueeName,      setEvacueeName]      = useState('')
-  const [checkSaving,      setCheckSaving]      = useState(false)
-  const [checkError,       setCheckError]       = useState('')
-  const [recentEvents,     setRecentEvents]     = useState([])
-
-  // Load evacuation centers
-  useEffect(() => {
-    const url = municipality
-      ? `/evacuation_centers?municipality=${encodeURIComponent(municipality)}`
-      : '/evacuation_centers'
-    api.get(url)
-      .then(rows => setCenters(Array.isArray(rows) ? rows : []))
-      .catch(() => {})
-  }, [municipality])
-
-  function loadRecentEvents(cid = centerId) {
-    if (!cid) return
-    Promise.all([
-      api.get(`/evacuation_center_checkins?center_id=${cid}`).catch(() => []),
-      api.get(`/evacuation_center_checkouts?center_id=${cid}`).catch(() => []),
-    ]).then(([arr, dep]) => {
-      const events = [
-        ...(Array.isArray(arr) ? arr : []).map(r => ({
-          id: `chk-${r.id}`, event_type: 'ARRIVAL',
-          evacuee_ref: r.evacuee_id, evacuee_name: r.evacuee_name,
-          quantity: r.group_size, occurred_at: r.checked_in_at,
-        })),
-        ...(Array.isArray(dep) ? dep : []).map(r => ({
-          id: `out-${r.id}`, event_type: 'DEPARTURE',
-          evacuee_ref: r.evacuee_id, evacuee_name: r.evacuee_name,
-          quantity: r.group_size, occurred_at: r.checked_out_at,
-        })),
-      ]
-      events.sort((a, b) => new Date(b.occurred_at ?? 0) - new Date(a.occurred_at ?? 0))
-      setRecentEvents(events.slice(0, 10))
-    }).catch(() => {})
-  }
-
-  useEffect(() => { if (centerId) loadRecentEvents(centerId) }, [centerId])
-
-  function resetForm() {
-    setEvacueeRef(''); setEvacueeName(''); setCheckError(''); setScannerMode(false)
-  }
-  function toggleArrived()  { setArrivedOpen(p => !p); setDepartedOpen(false); resetForm() }
-  function toggleDeparted() { setDepartedOpen(p => !p); setArrivedOpen(false); resetForm() }
-
-  async function recordArrivalAuto({ evacueeId, evacueeName: name }) {
-    if (!centerId) throw new Error('Select a center first')
-    await api.post('/evacuation_center_checkins', {
-      center_id: centerId, evacuee_id: evacueeId || null,
-      evacuee_name: name || null, group_size: 1, checked_in_by: 'responder',
-    })
-    loadRecentEvents()
-  }
-
-  async function recordDepartureAuto({ evacueeId, evacueeName: name }) {
-    if (!centerId) throw new Error('Select a center first')
-    await api.post('/evacuation_center_checkouts', {
-      center_id: centerId, evacuee_id: evacueeId || null,
-      evacuee_name: name || null, group_size: 1, checked_out_by: 'responder',
-    })
-    loadRecentEvents()
-  }
-
-  async function confirmArrival() {
-    if (!centerId) { setCheckError('Select a center first'); return }
-    setCheckSaving(true); setCheckError('')
-    try {
-      await api.post('/evacuation_center_checkins', {
-        center_id: centerId, evacuee_id: evacueeRef || null,
-        evacuee_name: evacueeName || null, group_size: 1, checked_in_by: 'responder',
-      })
-      loadRecentEvents(); setArrivedOpen(false); resetForm()
-    } catch (e) { setCheckError(e?.error ?? 'Failed to record arrival') }
-    finally { setCheckSaving(false) }
-  }
-
-  async function confirmDeparture() {
-    if (!centerId) { setCheckError('Select a center first'); return }
-    setCheckSaving(true); setCheckError('')
-    try {
-      await api.post('/evacuation_center_checkouts', {
-        center_id: centerId, evacuee_id: evacueeRef || null,
-        evacuee_name: evacueeName || null, group_size: 1, checked_out_by: 'responder',
-      })
-      loadRecentEvents(); setDepartedOpen(false); resetForm()
-    } catch (e) { setCheckError(e?.error ?? 'Failed to record departure') }
-    finally { setCheckSaving(false) }
-  }
-
-  return (
-    <div className="glass rounded-2xl border border-[rgba(0,212,255,0.2)] overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-[rgba(255,255,255,0.06)]">
-        <QrCode size={15} className="text-[#00d4ff]" />
-        <p className="text-sm font-semibold text-white">Scan Evacuee QR</p>
-      </div>
-
-      <div className="p-4 space-y-3">
-        {/* Center selector */}
-        <div>
-          <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Evacuation Center</p>
-          <select
-            value={centerId}
-            onChange={e => setCenterId(e.target.value)}
-            className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[rgba(0,212,255,0.4)]"
-          >
-            <option value="">— Select center —</option>
-            {centers.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </div>
-
-        {!centerId && (
-          <p className="text-[11px] text-slate-600 text-center py-1">Select an evacuation center to start scanning.</p>
-        )}
-
-        {centerId && (
-          <>
-            {/* Arrived / Departed toggle buttons */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={toggleArrived}
-                className={`flex flex-col items-center justify-center gap-1.5 py-4 rounded-xl border transition-colors ${
-                  arrivedOpen
-                    ? 'bg-[rgba(34,197,94,0.15)] border-[rgba(34,197,94,0.4)] text-[#22c55e]'
-                    : 'bg-[rgba(34,197,94,0.06)] border-[rgba(34,197,94,0.2)] text-[#22c55e] hover:bg-[rgba(34,197,94,0.12)]'
-                }`}
-              >
-                <UserPlus size={20} />
-                <span className="text-xs font-semibold">Evacuees Arrived</span>
-              </button>
-              <button
-                onClick={toggleDeparted}
-                className={`flex flex-col items-center justify-center gap-1.5 py-4 rounded-xl border transition-colors ${
-                  departedOpen
-                    ? 'bg-[rgba(249,115,22,0.15)] border-[rgba(249,115,22,0.4)] text-[#f97316]'
-                    : 'bg-[rgba(249,115,22,0.06)] border-[rgba(249,115,22,0.2)] text-[#f97316] hover:bg-[rgba(249,115,22,0.12)]'
-                }`}
-              >
-                <UserMinus size={20} />
-                <span className="text-xs font-semibold">Evacuees Departed</span>
-              </button>
-            </div>
-
-            {/* Arrived form */}
-            {arrivedOpen && (
-              <div className="p-3 rounded-xl bg-[rgba(34,197,94,0.05)] border border-[rgba(34,197,94,0.15)] space-y-3">
-                <p className="text-xs font-semibold text-[#22c55e]">Record Arrival</p>
-                <RespQRScanField
-                  onAutoRecord={recordArrivalAuto}
-                  scannerMode={scannerMode}
-                  setScannerMode={setScannerMode}
-                  evacueeRef={evacueeRef}
-                  setEvacueeRef={setEvacueeRef}
-                  evacueeName={evacueeName}
-                  setEvacueeName={setEvacueeName}
-                />
-                {checkError && <p className="text-xs text-[#ef4444]">{checkError}</p>}
-                <NeonButton size="sm" variant="green" onClick={confirmArrival} loading={checkSaving}>
-                  <UserPlus size={12} className="mr-1.5" />Confirm Arrival
-                </NeonButton>
-              </div>
-            )}
-
-            {/* Departed form */}
-            {departedOpen && (
-              <div className="p-3 rounded-xl bg-[rgba(249,115,22,0.05)] border border-[rgba(249,115,22,0.15)] space-y-3">
-                <p className="text-xs font-semibold text-[#f97316]">Record Departure</p>
-                <RespQRScanField
-                  onAutoRecord={recordDepartureAuto}
-                  scannerMode={scannerMode}
-                  setScannerMode={setScannerMode}
-                  evacueeRef={evacueeRef}
-                  setEvacueeRef={setEvacueeRef}
-                  evacueeName={evacueeName}
-                  setEvacueeName={setEvacueeName}
-                />
-                {checkError && <p className="text-xs text-[#ef4444]">{checkError}</p>}
-                <NeonButton size="sm" variant="orange" onClick={confirmDeparture} loading={checkSaving}>
-                  <UserMinus size={12} className="mr-1.5" />Confirm Departure
-                </NeonButton>
-              </div>
-            )}
-
-            {/* Recent events */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider">Recent Events</p>
-                <button onClick={() => loadRecentEvents()} className="text-[10px] text-[#00d4ff] hover:underline">Refresh</button>
-              </div>
-              {recentEvents.length === 0
-                ? <p className="text-[11px] text-slate-600 text-center py-3">No events yet — scan or record an arrival or departure.</p>
-                : recentEvents.map(ev => (
-                  <div key={ev.id} className="flex items-center justify-between py-1.5 border-b border-[rgba(255,255,255,0.04)] last:border-0">
-                    <div className="flex items-center gap-2 min-w-0">
-                      {ev.event_type === 'ARRIVAL'
-                        ? <UserPlus size={11} className="text-[#22c55e] shrink-0" />
-                        : <UserMinus size={11} className="text-[#f97316] shrink-0" />}
-                      <div className="min-w-0">
-                        <span className="text-xs text-slate-200 block truncate">
-                          {ev.evacuee_name || (ev.evacuee_ref && ev.evacuee_ref !== 'null' ? ev.evacuee_ref : 'Anonymous')}
-                        </span>
-                        <span className="text-[10px] text-slate-600">
-                          {ev.event_type === 'ARRIVAL' ? 'Arrived' : 'Departed'}
-                          {ev.quantity && ev.quantity > 1 ? ` · ${ev.quantity} pax` : ''}
-                        </span>
-                      </div>
-                    </div>
-                    <span className="text-[10px] text-slate-600 shrink-0">
-                      {ev.occurred_at ? new Date(ev.occurred_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
-                    </span>
-                  </div>
-                ))
-              }
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ── RespQRScanField ───────────────────────────────────────────────────────────
-// Continuous auto-scan + auto-record. Ported from Admin QRScanField.
-// Always runs in auto-record mode; 5-second per-victim cooldown prevents duplicates.
-const RESP_COOLDOWN_MS = 5000
-
-function RespQRScanField({ onAutoRecord, scannerMode, setScannerMode, evacueeRef, setEvacueeRef, evacueeName, setEvacueeName }) {
-  const [overlayOpen,  setOverlayOpen]  = useState(false)
-  const [galleryError, setGalleryError] = useState('')
-  const [autoStatus,   setAutoStatus]   = useState(null) // null | 'recording' | 'success' | 'error' | 'cooldown'
-  const [autoMsg,      setAutoMsg]      = useState('')
-  const qrRef           = useRef(null)
-  const fileInputRef    = useRef(null)
-  const recentScans     = useRef(new Map())
-  const onAutoRecordRef = useRef(onAutoRecord)
-
-  useEffect(() => { onAutoRecordRef.current = onAutoRecord }, [onAutoRecord])
-
-  // Start camera when overlay opens
-  useEffect(() => {
-    if (!overlayOpen) return
-    let mounted = true
-    const timer = setTimeout(async () => {
-      try {
-        const { Html5Qrcode } = await import('html5-qrcode')
-        const qr = new Html5Qrcode('qr-fs-responder')
-        if (!mounted) return
-        qrRef.current = qr
-        await qr.start(
-          { facingMode: 'environment' },
-          { fps: 15, qrbox: { width: 220, height: 220 } },
-          async (text) => {
-            if (!text.startsWith('SURVPH:EVACUEE:')) return
-            const parts  = text.split(':')
-            const rawEid = parts[2] ?? ''
-            if (!rawEid || rawEid === 'null' || rawEid === 'undefined') return
-            const eid   = rawEid
-            const ename = parts[3] ? decodeURIComponent(parts[3]) : ''
-
-            async function resolveName(id) {
-              try {
-                const rows = await api.get(`/victims?victim_id=${encodeURIComponent(id)}`)
-                if (Array.isArray(rows) && rows[0]?.name) return rows[0].name
-              } catch {}
-              return ename
-            }
-
-            const lastScan = recentScans.current.get(eid)
-            if (lastScan && Date.now() - lastScan < RESP_COOLDOWN_MS) {
-              const remaining = Math.ceil((RESP_COOLDOWN_MS - (Date.now() - lastScan)) / 1000)
-              setAutoStatus('cooldown')
-              setAutoMsg(`Already scanned — ${remaining}s cooldown remaining`)
-              setTimeout(() => setAutoStatus(null), 2000)
-              return
-            }
-            recentScans.current.set(eid, Date.now())
-            setAutoStatus('recording')
-            setAutoMsg(ename || eid)
-            try {
-              const [resolvedName] = await Promise.all([
-                resolveName(eid),
-                onAutoRecordRef.current({ evacueeId: eid, evacueeName: ename }),
-              ])
-              const displayName = resolvedName || ename || eid
-              setEvacueeRef(eid); setEvacueeName(resolvedName || ename)
-              setAutoStatus('success')
-              setAutoMsg(displayName)
-            } catch (err) {
-              setAutoStatus('error')
-              setAutoMsg(err?.error ?? 'Failed to record — check connection')
-            }
-            setTimeout(() => setAutoStatus(null), 2500)
-          },
-          () => {}
-        )
-      } catch { if (mounted) { setOverlayOpen(false); setScannerMode(false) } }
-    }, 150)
-    return () => {
-      mounted = false; clearTimeout(timer)
-      if (qrRef.current) { qrRef.current.stop().catch(() => {}); qrRef.current = null }
-    }
-  }, [overlayOpen])
-
-  function openScanner() {
-    setGalleryError(''); setAutoStatus(null)
-    recentScans.current.clear()
-    setOverlayOpen(true); setScannerMode(true)
-  }
-  function closeScanner() {
-    if (qrRef.current) { qrRef.current.stop().catch(() => {}); qrRef.current = null }
-    setOverlayOpen(false); setScannerMode(false); setGalleryError(''); setAutoStatus(null)
-  }
-
-  async function handleGalleryFile(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    e.target.value = ''
-    setGalleryError('')
-    try {
-      const { Html5Qrcode } = await import('html5-qrcode')
-      let tempEl = document.getElementById('qr-resp-file-tmp')
-      if (!tempEl) {
-        tempEl = document.createElement('div')
-        tempEl.id = 'qr-resp-file-tmp'
-        tempEl.style.display = 'none'
-        document.body.appendChild(tempEl)
-      }
-      const qr = new Html5Qrcode('qr-resp-file-tmp')
-      const result = await qr.scanFileV2(file, false)
-      const text = result.decodedText
-      if (!text.startsWith('SURVPH:EVACUEE:')) {
-        setGalleryError('QR found but not a valid victim QR. Try a different image.')
-        return
-      }
-      const parts  = text.split(':')
-      const rawEid = parts[2] ?? ''
-      if (!rawEid || rawEid === 'null' || rawEid === 'undefined') {
-        setGalleryError('QR code does not contain a valid Victim ID.')
-        return
-      }
-      const eid   = rawEid
-      const ename = parts[3] ? decodeURIComponent(parts[3]) : ''
-      let resolvedName = ename
-      try {
-        const rows = await api.get(`/victims?victim_id=${encodeURIComponent(eid)}`)
-        if (Array.isArray(rows) && rows[0]?.name) resolvedName = rows[0].name
-      } catch {}
-
-      const lastScan = recentScans.current.get(eid)
-      if (lastScan && Date.now() - lastScan < RESP_COOLDOWN_MS) {
-        setGalleryError(`Already recorded — ${Math.ceil((RESP_COOLDOWN_MS - (Date.now() - lastScan)) / 1000)}s cooldown.`)
-        return
-      }
-      recentScans.current.set(eid, Date.now())
-      setAutoStatus('recording'); setAutoMsg(resolvedName || eid)
-      try {
-        await onAutoRecordRef.current({ evacueeId: eid, evacueeName: resolvedName || ename })
-        setEvacueeRef(eid); setEvacueeName(resolvedName || ename)
-        setAutoStatus('success'); setAutoMsg(resolvedName || eid)
-      } catch (err) {
-        setAutoStatus('error'); setAutoMsg(err?.error ?? 'Failed to record')
-      }
-      setTimeout(() => setAutoStatus(null), 2500)
-    } catch {
-      setGalleryError('No QR code detected. Try a clearer photo.')
-    }
-  }
-
-  function AutoBar() {
-    if (autoStatus === 'success') return (
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-[rgba(34,197,94,0.2)] border border-[rgba(34,197,94,0.5)] flex items-center justify-center">
-          <CheckCircle size={18} className="text-[#22c55e]" />
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-[#22c55e]">Recorded</p>
-          <p className="text-[10px] text-white/50">{autoMsg}</p>
-        </div>
-      </div>
-    )
-    if (autoStatus === 'error') return (
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-[rgba(239,68,68,0.2)] border border-[rgba(239,68,68,0.5)] flex items-center justify-center">
-          <AlertCircle size={18} className="text-[#ef4444]" />
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-[#ef4444]">Failed</p>
-          <p className="text-[10px] text-white/50">{autoMsg}</p>
-        </div>
-      </div>
-    )
-    if (autoStatus === 'cooldown') return (
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-[rgba(245,158,11,0.15)] border border-[rgba(245,158,11,0.4)] flex items-center justify-center">
-          <div className="w-4 h-4 rounded-full border-2 border-[#f59e0b] border-t-transparent animate-spin" />
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-[#f59e0b]">Cooldown</p>
-          <p className="text-[10px] text-white/50">{autoMsg}</p>
-        </div>
-      </div>
-    )
-    if (autoStatus === 'recording') return (
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-[rgba(0,212,255,0.15)] border border-[rgba(0,212,255,0.4)] flex items-center justify-center animate-pulse">
-          <QrCode size={18} className="text-[#00d4ff]" />
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-[#00d4ff]">Recording…</p>
-          <p className="text-[10px] text-white/50">{autoMsg}</p>
-        </div>
-      </div>
-    )
-    return (
-      <>
-        <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-[#00d4ff] animate-pulse" />
-          <p className="text-xs text-white/70 font-medium">Auto-scanning — hold QR code up to camera</p>
-        </div>
-        <p className="text-[11px] text-white/35 text-center leading-relaxed">
-          Each valid QR is recorded immediately · 5 s cooldown per person
-        </p>
-        {galleryError && <p className="text-[11px] text-red-400 text-center">{galleryError}</p>}
-        <button type="button" onClick={() => fileInputRef.current?.click()}
-          className="text-xs text-white/40 hover:text-white/70 transition-colors underline mt-1">
-          Use image from gallery instead
-        </button>
-      </>
-    )
-  }
-
-  return (
-    <>
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <button onClick={openScanner}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-[rgba(0,212,255,0.08)] border-[rgba(0,212,255,0.25)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.16)] transition-colors">
-            <Camera size={11} />Scan QR
-          </button>
-          <span className="text-[10px] text-slate-500">or enter manually:</span>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <p className="text-[10px] text-slate-500 mb-1">Victim ID (optional)</p>
-            <input value={evacueeRef} onChange={e => setEvacueeRef(e.target.value)} placeholder="From QR scan…"
-              className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none" />
-          </div>
-          <div>
-            <p className="text-[10px] text-slate-500 mb-1">Name (optional)</p>
-            <input value={evacueeName} onChange={e => setEvacueeName(e.target.value)} placeholder="Name…"
-              className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none" />
-          </div>
-        </div>
-      </div>
-
-      {/* Full-screen camera overlay — identical design to Admin QRScanField */}
-      {overlayOpen && (
-        <div className="fixed inset-0 z-50 bg-black flex flex-col">
-          <style>{`
-            #qr-fs-responder,#qr-fs-responder>div{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;padding:0!important;border:none!important;background:transparent!important;}
-            #qr-fs-responder video{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;object-fit:cover!important;}
-            #qr-fs-responder__scan_region{display:none!important;}
-            #qr-fs-responder__dashboard_section{display:none!important;}
-            #qr-fs-responder img{display:none!important;}
-          `}</style>
-
-          <div className="flex-1 relative overflow-hidden">
-            <div id="qr-fs-responder" />
-
-            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-              <div className="absolute inset-0 bg-black/40" />
-              <div className="relative z-10 w-[220px] h-[220px]">
-                <span className="absolute top-0 left-0 w-7 h-7 border-t-[3px] border-l-[3px] border-[#00d4ff] rounded-tl-sm" />
-                <span className="absolute top-0 right-0 w-7 h-7 border-t-[3px] border-r-[3px] border-[#00d4ff] rounded-tr-sm" />
-                <span className="absolute bottom-0 left-0 w-7 h-7 border-b-[3px] border-l-[3px] border-[#00d4ff] rounded-bl-sm" />
-                <span className="absolute bottom-0 right-0 w-7 h-7 border-b-[3px] border-r-[3px] border-[#00d4ff] rounded-br-sm" />
-                {autoStatus !== 'success' && (
-                  <div className="absolute left-1 right-1 h-[2px] bg-gradient-to-r from-transparent via-[#00d4ff] to-transparent opacity-80 animate-[scanBeam_1.8s_ease-in-out_infinite]" />
-                )}
-                {autoStatus === 'success' && (
-                  <div className="absolute inset-0 rounded bg-[rgba(34,197,94,0.25)] border-2 border-[#22c55e]" />
-                )}
-              </div>
-            </div>
-
-            <div className="absolute top-0 left-0 right-0 px-4 pt-4 pb-8 bg-gradient-to-b from-black/70 to-transparent flex items-center gap-3">
-              <button onClick={closeScanner} className="w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white/80 hover:text-white hover:bg-black/60 transition-colors text-base leading-none">✕</button>
-              <QrCode size={14} className="text-[#00d4ff]" />
-              <p className="text-sm font-semibold text-white/90">Auto-Record Evacuee QR</p>
-            </div>
-          </div>
-
-          <div className="bg-black/90 px-6 py-7 flex flex-col items-center gap-2.5">
-            <AutoBar />
-          </div>
-        </div>
-      )}
-      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleGalleryFile} />
-    </>
   )
 }
