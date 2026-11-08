@@ -115,11 +115,11 @@ export function ResponderHome() {
   const qrRef = useRef(null)
 
   // ── Derived stats ─────────────────────────────────────────────────────────
-  const activeList    = sosList.filter(r => r.rescue_status !== 'rescued')
-  const assignedCount = activeList.length
-  const criticalCount = activeList.filter(r => r.priority === 'CRITICAL').length
-  const pendingCount  = activeList.filter(r => !r.rescue_status || r.rescue_status === 'pending').length
-  const rescuedCount  = sosList.filter(r => r.rescue_status === 'rescued').length
+  const activeList          = sosList.filter(r => r.rescue_status !== 'rescued')
+  const assignedCount       = activeList.length
+  const criticalCount       = activeList.filter(r => r.priority === 'CRITICAL').length
+  const unacknowledgedCount = activeList.filter(r => !r.rescue_status || r.rescue_status === 'pending').length
+  const rescuedCount        = sosList.filter(r => r.rescue_status === 'rescued').length
 
   // ── Mesh stats polling ────────────────────────────────────────────────────
   useEffect(() => {
@@ -455,33 +455,33 @@ export function ResponderHome() {
           </div>
         </GlassCard>
 
-        {/* ── 2. Critical Rescue Alerts (Priority!) ───────────────────── */}
-        {criticalCount > 0 ? (
+        {/* ── 2. Unacknowledged SOS Banner ────────────────────────────── */}
+        {unacknowledgedCount > 0 ? (
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
             onClick={() => navigate('/responder/queue')}
-            className="glass rounded-xl px-5 pt-4 pb-5 border border-[rgba(239,68,68,0.5)] cursor-pointer hover:border-[rgba(239,68,68,0.8)] transition-all shadow-[0_0_16px_rgba(239,68,68,0.15)]"
+            className="glass rounded-xl px-5 pt-4 pb-5 border border-[rgba(245,158,11,0.5)] cursor-pointer hover:border-[rgba(245,158,11,0.8)] transition-all shadow-[0_0_16px_rgba(245,158,11,0.15)]"
           >
             {/* Icon · Number · Text — single horizontal row, all vertically centered */}
             <div className="flex items-center gap-4">
               {/* Large icon */}
-              <AlertTriangle size={44} className="text-[#ef4444] animate-pulse shrink-0" />
+              <AlertTriangle size={44} className="text-[#f59e0b] animate-pulse shrink-0" />
 
               {/* Huge count */}
-              <p className="text-[64px] font-black text-[#ef4444] leading-none shrink-0 tabular-nums">
-                {criticalCount}
+              <p className="text-[64px] font-black text-[#f59e0b] leading-none shrink-0 tabular-nums">
+                {unacknowledgedCount}
               </p>
 
               {/* Text stack */}
               <div className="flex flex-col gap-1 min-w-0">
-                <p className="text-sm font-black text-[#ef4444] uppercase tracking-wider leading-tight">
-                  CRITICAL ALERTS
+                <p className="text-sm font-black text-[#f59e0b] uppercase tracking-wider leading-tight">
+                  UNACKNOWLEDGED
                 </p>
                 <p className="text-[10px] text-slate-400">
-                  Immediate Response Needed
+                  Awaiting Acknowledgment
                 </p>
-                <div className="flex items-center gap-0.5 text-[10px] text-[#ef4444] font-semibold mt-0.5">
+                <div className="flex items-center gap-0.5 text-[10px] text-[#f59e0b] font-semibold mt-0.5">
                   View Priority Queue <ChevronRight size={11} />
                 </div>
               </div>
@@ -490,7 +490,7 @@ export function ResponderHome() {
         ) : (
           <div className="glass rounded-xl px-4 py-3 border border-[rgba(34,197,94,0.2)] flex items-center gap-3">
             <CheckCircle size={15} className="text-[#22c55e] shrink-0" />
-            <p className="text-xs text-slate-400">No critical alerts at this time</p>
+            <p className="text-xs text-slate-400">All SOS reports have been acknowledged</p>
           </div>
         )}
 
@@ -523,7 +523,7 @@ export function ResponderHome() {
               <span className="text-[10px] text-slate-500 uppercase tracking-wider">Pending</span>
               <Zap size={12} className="text-[#f97316] opacity-70" />
             </div>
-            <p className="text-3xl font-black text-[#f97316]">{pendingCount}</p>
+            <p className="text-3xl font-black text-[#f97316]">{unacknowledgedCount}</p>
             <p className="text-[10px] text-slate-500 mt-0.5">awaiting action</p>
           </div>
           <div className="glass rounded-xl p-3.5 border border-[rgba(255,255,255,0.08)]">
