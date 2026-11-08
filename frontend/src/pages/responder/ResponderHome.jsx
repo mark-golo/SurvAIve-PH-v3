@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   AlertTriangle, Home, Map, Radio, Settings, List, RefreshCw, Power,
   Star, WifiOff, QrCode, ChevronRight, CheckCircle, XCircle,
-  Users, Shield, Zap,
+  Users, Shield, Zap, Clock,
 } from 'lucide-react'
 import { MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
@@ -115,11 +115,12 @@ export function ResponderHome() {
   const qrRef = useRef(null)
 
   // ── Derived stats ─────────────────────────────────────────────────────────
-  const activeList    = sosList.filter(r => r.rescue_status !== 'rescued')
-  const assignedCount = activeList.length
-  const criticalCount = activeList.filter(r => r.priority === 'CRITICAL').length
-  const pendingCount  = activeList.filter(r => !r.rescue_status || r.rescue_status === 'pending').length
-  const rescuedCount  = sosList.filter(r => r.rescue_status === 'rescued').length
+  const activeList          = sosList.filter(r => r.rescue_status !== 'rescued')
+  const assignedCount       = activeList.length
+  const criticalCount       = activeList.filter(r => r.priority === 'CRITICAL').length
+  const unacknowledgedCount = activeList.filter(r => !r.rescue_status || r.rescue_status === 'pending').length
+  const pendingCount        = unacknowledgedCount
+  const rescuedCount        = sosList.filter(r => r.rescue_status === 'rescued').length
 
   // ── Mesh stats polling ────────────────────────────────────────────────────
   useEffect(() => {
@@ -508,15 +509,15 @@ export function ResponderHome() {
             <p className="text-[10px] text-slate-500 mt-0.5">victims in queue</p>
           </div>
           <div
-            onClick={criticalCount > 0 ? () => navigate('/responder/queue') : undefined}
-            className={`glass rounded-xl p-3.5 border border-[rgba(255,255,255,0.08)] transition-all ${criticalCount > 0 ? 'cursor-pointer hover:border-[rgba(239,68,68,0.3)]' : ''}`}
+            onClick={unacknowledgedCount > 0 ? () => navigate('/responder/queue') : undefined}
+            className={`glass rounded-xl p-3.5 border border-[rgba(255,255,255,0.08)] transition-all ${unacknowledgedCount > 0 ? 'cursor-pointer hover:border-[rgba(245,158,11,0.3)]' : ''}`}
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Critical</span>
-              <AlertTriangle size={12} className="text-[#ef4444] opacity-70" />
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Unacknowledged</span>
+              <Clock size={12} className="text-[#f59e0b] opacity-70" />
             </div>
-            <p className={`text-3xl font-black ${criticalCount > 0 ? 'text-[#ef4444]' : 'text-slate-500'}`}>{criticalCount}</p>
-            <p className="text-[10px] text-slate-500 mt-0.5">need immediate help</p>
+            <p className={`text-3xl font-black ${unacknowledgedCount > 0 ? 'text-[#f59e0b]' : 'text-slate-500'}`}>{unacknowledgedCount}</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">awaiting acknowledgment</p>
           </div>
           <div className="glass rounded-xl p-3.5 border border-[rgba(255,255,255,0.08)]">
             <div className="flex items-center justify-between mb-1">
