@@ -290,7 +290,7 @@ export function ResponderHome() {
   // ── QR Scanner (auto-record) ──────────────────────────────────────────────
   const COOLDOWN_MS = 5000
 
-  const recordEvacueeAuto = async ({ evacueeId, evacueeName: name }) => {
+  const recordEvacueeAuto = useCallback(async ({ evacueeId, evacueeName: name }) => {
     if (!respCenterId) throw new Error('Select a center first')
     await api.post('/evacuation_center_checkins', {
       center_id: respCenterId,
@@ -299,8 +299,8 @@ export function ResponderHome() {
       group_size: 1,
       checked_in_by: 'responder',
     })
-  }
-  onAutoRecordRef.current = recordEvacueeAuto
+  }, [respCenterId])
+  useEffect(() => { onAutoRecordRef.current = recordEvacueeAuto }, [recordEvacueeAuto])
 
   const handleGalleryFile = async (e) => {
     const file = e.target.files?.[0]
@@ -318,8 +318,9 @@ export function ResponderHome() {
         document.body.appendChild(el)
         return el
       })()
-      new Html5Qrcode(tmpId)
-      const result = await Html5Qrcode.scanFileV2(file, false)
+      const qr = new Html5Qrcode(tmpId)
+      const result = await qr.scanFileV2(file, false)
+      await qr.clear?.().catch(() => {})
       const text = result.decodedText?.trim() ?? ''
       if (!text.startsWith('SURVPH:EVACUEE:')) { setGalleryError('Not a valid evacuee QR image.'); return }
       const parts = text.split(':')
