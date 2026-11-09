@@ -137,13 +137,13 @@ function generateInsights(zones) {
     })
   }
 
-  // 4 — YOLO11 AI photo reports
+  // 4 — Florence-2 AI photo reports
   const totalPhotos = zones.reduce((s, z) => s + z.photoCount, 0)
   if (totalPhotos > 0) {
     const photoZones = zones.filter(z => z.photoCount > 0)
     insights.push({
       type: 'ai', icon: '🤖', color: '#00d4ff',
-      title: `YOLO11 Scene Reports — ${totalPhotos} Photo${totalPhotos > 1 ? 's' : ''}`,
+      title: `Florence-2 Scene Reports — ${totalPhotos} Photo${totalPhotos > 1 ? 's' : ''}`,
       body: `AI-analysed photos received from ${photoZones.map(z => z.barangay).join(', ')}. Scene classification data enhances situation confidence.`,
     })
   }
@@ -276,7 +276,7 @@ function ZoneBar({ zone, rank, isExpanded, onToggle }) {
                 )}
                 {zone.photoCount > 0 && (
                   <span className="text-[9px] px-2 py-0.5 rounded-full bg-[rgba(139,92,246,0.15)] border border-[rgba(139,92,246,0.3)] text-violet-300 font-medium">
-                    🤖 {zone.photoCount} YOLO11 photo report{zone.photoCount > 1 ? 's' : ''}
+                    🤖 {zone.photoCount} Florence-2 photo report{zone.photoCount > 1 ? 's' : ''}
                   </span>
                 )}
                 {zone.rescued > 0 && (

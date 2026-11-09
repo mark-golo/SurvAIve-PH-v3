@@ -67,11 +67,16 @@ export function RescueDetail() {
           vulnerabilities: Array.isArray(row.vulnerabilities) ? row.vulnerabilities : [],
           is_verified: !!row.is_verified,
           rescue_status: row.rescue_status,
-          // dual-mode SOS: YOLO11 AI analysis fields
-          sos_mode:            row.sos_mode            ?? 'status',
-          ai_scene_label:      row.ai_scene_label      ?? null,
-          ai_scene_confidence: row.ai_scene_confidence ?? null,
-          ai_detected_count:   row.ai_detected_count   ?? null,
+          // dual-mode SOS: Florence-2 AI analysis fields
+          sos_mode:             row.sos_mode             ?? 'status',
+          ai_scene_label:       row.ai_scene_label       ?? null,
+          ai_scene_confidence:  row.ai_scene_confidence  ?? null,
+          ai_detected_count:    row.ai_detected_count    ?? null,
+          ai_detailed_caption:  row.ai_detailed_caption  ?? null,
+          ai_objects:           row.ai_objects           ?? null,
+          ai_model_name:        row.ai_model_name        ?? null,
+          ai_processing_mode:   row.ai_processing_mode   ?? null,
+          ai_verification_status: row.ai_verification_status ?? 'unverified',
         })
         setRescueStatus(row.rescue_status ?? 'pending')
         setNotes(row.notes || '')
@@ -213,34 +218,65 @@ export function RescueDetail() {
           )}
         </GlassCard>
 
-        {/* YOLO11 AI Scene Analysis — shown only for Photo Mode reports */}
+        {/* Florence-2 AI Scene Analysis — shown only for Photo Mode reports */}
         {victim.sos_mode === 'photo' && victim.ai_scene_label && (
           <GlassCard>
-            <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">
-              🤖 YOLO11 AI Scene Analysis
-            </p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider">
+                🤖 Florence-2 Scene Analysis
+              </p>
+              <span className={`text-[9px] px-2 py-0.5 rounded-full border font-medium ${
+                victim.ai_verification_status === 'verified'
+                  ? 'bg-[rgba(34,197,94,0.1)] border-[rgba(34,197,94,0.3)] text-green-400'
+                  : victim.ai_verification_status === 'rejected'
+                  ? 'bg-[rgba(239,68,68,0.1)] border-[rgba(239,68,68,0.3)] text-red-400'
+                  : 'bg-[rgba(255,255,255,0.05)] border-[rgba(255,255,255,0.1)] text-slate-500'
+              }`}>
+                {victim.ai_verification_status ?? 'unverified'}
+              </span>
+            </div>
             <div className="space-y-2.5">
               <Detail
                 icon={Scan}
-                label="Scene Classification"
-                value={`${victim.ai_scene_label} · ${victim.ai_scene_confidence ?? '—'}% confidence`}
+                label="Scene Caption"
+                value={victim.ai_scene_label}
               />
+              {victim.ai_detailed_caption && (
+                <div className="glass rounded-xl p-2.5 border border-[rgba(139,92,246,0.15)]">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Detailed Caption</p>
+                  <p className="text-xs text-slate-300 leading-relaxed">{victim.ai_detailed_caption}</p>
+                </div>
+              )}
               {victim.ai_detected_count > 0 && (
                 <Detail
                   icon={Users}
-                  label="Detected Victims / Objects"
-                  value={`${victim.ai_detected_count} detected by YOLO11`}
+                  label="Detected Objects"
+                  value={`${victim.ai_detected_count} detected`}
                 />
               )}
+              {victim.ai_objects && (() => {
+                try {
+                  const objs = typeof victim.ai_objects === 'string'
+                    ? JSON.parse(victim.ai_objects) : victim.ai_objects
+                  const labels = Array.isArray(objs) ? [...new Set(objs.map(o => typeof o === 'string' ? o : o?.label).filter(Boolean))] : []
+                  return labels.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {labels.map((lbl, i) => (
+                        <span key={i}
+                          className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(139,92,246,0.1)] border border-[rgba(139,92,246,0.3)] text-violet-300">
+                          {lbl}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null
+                } catch { return null }
+              })()}
+              {victim.ai_model_name && (
+                <p className="text-[10px] text-slate-600 mt-1">
+                  Model: {victim.ai_model_name} · {victim.ai_processing_mode ?? 'online'}
+                </p>
+              )}
             </div>
-            {victim.ai_scene_confidence != null && (
-              <div className="mt-3 w-full bg-[rgba(255,255,255,0.05)] rounded-full h-1.5 overflow-hidden">
-                <div
-                  style={{ width: `${victim.ai_scene_confidence}%` }}
-                  className="h-full bg-gradient-to-r from-violet-500 to-cyan-500 rounded-full"
-                />
-              </div>
-            )}
           </GlassCard>
         )}
 

@@ -105,11 +105,16 @@ if ($method === 'POST') {
     if (!$isVerified) $score -= 10;
     $score = min(99, $score);
 
-    // Dual-mode SOS: YOLO11 AI analysis fields (null-safe)
-    $sosMode  = in_array($body['sos_mode'] ?? '', ['status', 'photo']) ? $body['sos_mode'] : 'status';
-    $aiLabel  = isset($body['ai_scene_label'])      ? substr(trim($body['ai_scene_label']), 0, 100) : null;
-    $aiConf   = isset($body['ai_scene_confidence']) ? max(0, min(100, (int)$body['ai_scene_confidence'])) : null;
-    $aiCount  = isset($body['ai_detected_count'])   ? max(0, min(255, (int)$body['ai_detected_count']))   : null;
+    // Dual-mode SOS: Florence-2 AI analysis fields (null-safe)
+    $sosMode           = in_array($body['sos_mode'] ?? '', ['status', 'photo']) ? $body['sos_mode'] : 'status';
+    $aiLabel           = isset($body['ai_scene_label'])      ? substr(trim($body['ai_scene_label']), 0, 100)   : null;
+    $aiConf            = isset($body['ai_scene_confidence']) ? max(0, min(100, (int)$body['ai_scene_confidence'])) : null;
+    $aiCount           = isset($body['ai_detected_count'])   ? max(0, min(255, (int)$body['ai_detected_count']))   : null;
+    $aiDetailedCaption = isset($body['ai_detailed_caption']) ? substr(trim($body['ai_detailed_caption']), 0, 1000) : null;
+    $aiObjects         = isset($body['ai_objects'])          ? json_encode(json_decode($body['ai_objects'], true))  : null;
+    $aiModelName       = isset($body['ai_model_name'])       ? substr(trim($body['ai_model_name']), 0, 50)          : null;
+    $aiProcessingMode  = in_array($body['ai_processing_mode'] ?? '', ['online', 'offline', 'queued'])
+                           ? $body['ai_processing_mode'] : null;
 
     $reporterName = isset($body['name']) ? substr(trim($body['name']), 0, 200) : null;
 
@@ -127,8 +132,9 @@ if ($method === 'POST') {
            victim_age_group, special_conditions, notes,
            is_verified, trust_score, ai_priority_score, rescue_status,
            sos_mode, ai_scene_label, ai_scene_confidence, ai_detected_count,
+           ai_detailed_caption, ai_objects, ai_model_name, ai_processing_mode,
            service_type, mesh_packet_id, relay_source, timestamp)
-        VALUES (?,?,?,?,?,?,?,?,?, ?,?,?, ?,?,?,'pending', ?,?,?,?, ?, ?,?, NOW())
+        VALUES (?,?,?,?,?,?,?,?,?, ?,?,?, ?,?,?,'pending', ?,?,?,?, ?,?,?,?, ?, ?,?, NOW())
     ");
     $stmt->execute([
         $userId,
@@ -150,6 +156,10 @@ if ($method === 'POST') {
         $aiLabel,
         $aiConf,
         $aiCount,
+        $aiDetailedCaption,
+        $aiObjects,
+        $aiModelName,
+        $aiProcessingMode,
         $serviceTypeJson,
         $meshPacketId,
         $relaySource,

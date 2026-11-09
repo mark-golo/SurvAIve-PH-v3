@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+# HuggingFace model cache (large binary files)
+~/.cache/huggingface/
+.cache/
+models/
+*.bin
+*.safetensors

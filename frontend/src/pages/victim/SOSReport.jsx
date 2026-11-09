@@ -14,7 +14,7 @@ import { useAuthStore } from '../../store/auth'
 import { db } from '../../lib/db'
 import { mesh, onBroadcastStatus } from '../../lib/mesh'
 import api from '../../lib/api'
-import { analyzeScene } from '../../lib/yolo11'
+import { analyzeScene } from '../../lib/florence2'
 import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
 import { setActiveSOS, updateACKState, clearActiveSOS, getActiveSOS, onActivityChange, logMeshEvent, setBroadcastSubState } from '../../lib/meshActivityStore'
@@ -81,6 +81,7 @@ export function SOSReport() {
   const [photoPreview, setPhotoPreview] = useState(null)
   const [aiAnalysis,   setAiAnalysis]   = useState(null)
   const [aiLoading,    setAiLoading]    = useState(false)
+  const [aiOffline,    setAiOffline]    = useState(false)
   // Camera live-view state
   const [showCamera,    setShowCamera]    = useState(false)
   const [cameraStream,  setCameraStream]  = useState(null)
@@ -211,6 +212,7 @@ export function SOSReport() {
     setPhotoFile(file)
     setPhotoPreview(URL.createObjectURL(file))
     setAiAnalysis(null)
+    setAiOffline(false)
   }
 
   // File-picker fallback (gallery / filesystem)
@@ -281,7 +283,11 @@ export function SOSReport() {
       }))
       setConditions(suggestedFields.special_conditions)
     } catch (err) {
-      console.error('[YOLO11] analyzeScene failed:', err)
+      if (err?.message === 'OFFLINE') {
+        setAiOffline(true)
+      } else {
+        console.error('[Florence-2] analyzeScene failed:', err)
+      }
     } finally {
       setAiLoading(false)
     }
@@ -295,6 +301,7 @@ export function SOSReport() {
       setPhotoFile(null)
       setPhotoPreview(null)
       setAiAnalysis(null)
+      setAiOffline(false)
     }
   }
 
@@ -312,11 +319,15 @@ export function SOSReport() {
       sos_mode:            sosMode,
       victim_id:           user?.victim_id ?? null,
       name:                user?.name      ?? null,
-      // Include YOLO11 analysis results only when Photo Mode was used with analysis
+      // Include Florence-2 analysis results only when Photo Mode was used with analysis
       ...(sosMode === 'photo' && aiAnalysis ? {
         ai_scene_label:       aiAnalysis.classification.label,
-        ai_scene_confidence:  aiAnalysis.classification.confidence,
+        ai_scene_confidence:  null,
         ai_detected_count:    aiAnalysis.detection.count,
+        ai_detailed_caption:  aiAnalysis.detailed_caption  ?? null,
+        ai_objects:           JSON.stringify(aiAnalysis.detection.objects),
+        ai_model_name:        aiAnalysis.model?.name       ?? 'Florence-2-base',
+        ai_processing_mode:   'online',
       } : {}),
     }
     // realPacketId is set below after generation — attached to payload before online submission
@@ -450,10 +461,10 @@ export function SOSReport() {
               )}
               {sosMode === 'photo' && aiAnalysis && (
                 <div className="glass rounded-xl p-3 border border-[rgba(139,92,246,0.3)]">
-                  <p className="text-xs text-violet-400 font-semibold mb-1">YOLO11 Scene Analysis</p>
+                  <p className="text-xs text-violet-400 font-semibold mb-1">Florence-2 Scene Analysis</p>
                   <p className="text-sm text-white font-bold">{aiAnalysis.classification.label}</p>
                   <p className="text-xs text-slate-400">
-                    {aiAnalysis.classification.confidence}% confidence · {aiAnalysis.detection.count} detected
+                    {aiAnalysis.detection.count} object{aiAnalysis.detection.count !== 1 ? 's' : ''} detected
                   </p>
                 </div>
               )}
@@ -523,10 +534,10 @@ export function SOSReport() {
               )}
               {sosMode === 'photo' && aiAnalysis && (
                 <div className="glass rounded-xl p-3 border border-[rgba(139,92,246,0.3)]">
-                  <p className="text-xs text-violet-400 font-semibold mb-1">YOLO11 Scene Analysis</p>
+                  <p className="text-xs text-violet-400 font-semibold mb-1">Florence-2 Scene Analysis</p>
                   <p className="text-sm text-white font-bold">{aiAnalysis.classification.label}</p>
                   <p className="text-xs text-slate-400">
-                    {aiAnalysis.classification.confidence}% confidence · {aiAnalysis.detection.count} detected
+                    {aiAnalysis.detection.count} object{aiAnalysis.detection.count !== 1 ? 's' : ''} detected
                   </p>
                 </div>
               )}
@@ -635,7 +646,7 @@ export function SOSReport() {
             >
               <GlassCard>
                 <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">
-                  📷 Scene Photo — YOLO11 Analysis
+                  📷 Scene Photo — Florence-2 Analysis
                 </p>
 
                 {/* Hidden file input — capture="environment" opens rear camera on Android */}
@@ -684,7 +695,7 @@ export function SOSReport() {
                     </div>
 
                     {/* Analyze button — shown before analysis */}
-                    {!aiAnalysis && (
+                    {!aiAnalysis && !aiOffline && (
                       <NeonButton
                         variant="violet"
                         onClick={runAIAnalysis}
@@ -692,8 +703,26 @@ export function SOSReport() {
                         className="w-full"
                       >
                         <Scan size={14} className="mr-2" />
-                        {aiLoading ? 'Analyzing with YOLO11…' : 'Analyze Scene with YOLO11'}
+                        {aiLoading ? 'Analyzing with Florence-2…' : 'Analyze Scene with Florence-2'}
                       </NeonButton>
+                    )}
+
+                    {/* Offline notice — Florence-2 service unreachable */}
+                    {aiOffline && !aiAnalysis && (
+                      <div className="glass rounded-xl p-3 border border-[rgba(245,158,11,0.3)]">
+                        <p className="text-xs text-[#f59e0b] font-medium mb-1">Florence-2 service unavailable</p>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Scene analysis requires a connection to the local AI service.
+                          You can still submit your SOS report in Status Mode, or{' '}
+                          <button
+                            type="button"
+                            onClick={() => { setAiOffline(false) }}
+                            className="underline text-[#f59e0b] hover:text-amber-300"
+                          >
+                            retry
+                          </button>.
+                        </p>
+                      </div>
                     )}
 
                     {/* AI Results — shown after analysis */}
@@ -705,31 +734,25 @@ export function SOSReport() {
                           animate={{ opacity: 1, y: 0 }}
                           className="space-y-2"
                         >
-                          {/* YOLO11 Classification */}
+                          {/* Florence-2 Scene Caption */}
                           <div className="glass rounded-xl p-3 border border-[rgba(139,92,246,0.25)]">
                             <p className="text-[10px] font-semibold text-violet-400 uppercase tracking-wider mb-2">
-                              YOLO11 Classification
+                              Scene Caption
                             </p>
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className="text-sm font-bold text-white">
-                                {aiAnalysis.classification.label}
-                              </span>
-                              <span className="text-xs font-semibold text-violet-300">
-                                {aiAnalysis.classification.confidence}%
-                              </span>
-                            </div>
-                            <div className="w-full bg-[rgba(255,255,255,0.06)] rounded-full h-1.5 overflow-hidden">
-                              <div
-                                style={{ width: `${aiAnalysis.classification.confidence}%` }}
-                                className="h-full bg-gradient-to-r from-violet-500 to-cyan-500 rounded-full transition-all"
-                              />
-                            </div>
+                            <p className="text-sm text-white leading-snug">
+                              {aiAnalysis.classification.label}
+                            </p>
+                            {aiAnalysis.detailed_caption && (
+                              <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                                {aiAnalysis.detailed_caption}
+                              </p>
+                            )}
                           </div>
 
-                          {/* YOLO11 Detection */}
+                          {/* Florence-2 Detected Objects */}
                           <div className="glass rounded-xl p-3 border border-[rgba(139,92,246,0.25)]">
                             <p className="text-[10px] font-semibold text-violet-400 uppercase tracking-wider mb-2">
-                              YOLO11 Detection
+                              Detected Objects
                             </p>
                             <p className="text-sm text-white font-bold mb-1.5">
                               {aiAnalysis.detection.count}{' '}
@@ -761,7 +784,7 @@ export function SOSReport() {
                           {/* Re-analyze option */}
                           <button
                             type="button"
-                            onClick={() => { setAiAnalysis(null); setPhotoFile(null); setPhotoPreview(null) }}
+                            onClick={() => { setAiAnalysis(null); setPhotoFile(null); setPhotoPreview(null); setAiOffline(false) }}
                             className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors underline"
                           >
                             Take a different photo
@@ -985,7 +1008,7 @@ export function SOSReport() {
         {sosMode === 'photo' && !aiAnalysis && photoFile && (
           <div className="glass rounded-xl p-3 border border-[rgba(245,158,11,0.3)]">
             <p className="text-xs text-[#f59e0b]">
-              ⚠ Run YOLO11 analysis before submitting, or switch to Status Mode.
+              ⚠ Analyze scene with Florence-2 before submitting, or switch to Status Mode.
             </p>
           </div>
         )}
