@@ -192,6 +192,7 @@ export function RespondersView() {
                   <select
                     value={r.assigned_responder_id ?? ''}
                     disabled={assigning.has(r.id)}
+                    style={{ colorScheme: 'light' }}
                     onChange={async (e) => {
                       const newId = e.target.value ? Number(e.target.value) : null
                       const oldId = r.assigned_responder_id
