@@ -481,12 +481,24 @@ async function post(path, body = {}) {
 
       if (!userInfo) throwErr('Account not fully set up. Contact your administrator.', 403)
 
-      // Block inactive responders from logging in
-      if (userInfo.role === 'responder') {
-        const { data: respRow } = await supabase
-          .from('responders').select('status').eq('contact_number', userInfo.contact_number).maybeSingle()
-        if (respRow?.status === 'inactive') {
-          throwErr('Your account has been disabled. Contact your administrator.', 403)
+      // Block inactive/deleted staff from logging in (all roles)
+      const staffTableMap = {
+        responder:       'responders',
+        admin:           'admins',
+        response_agency: 'response_agencies',
+      }
+      const staffTable = staffTableMap[userInfo.role]
+      if (staffTable) {
+        const { data: staffRow } = await supabase
+          .from(staffTable).select('status').eq('contact_number', userInfo.contact_number).maybeSingle()
+        if (!staffRow || staffRow.status === 'inactive') {
+          await supabase.auth.signOut().catch(() => {})
+          throwErr(
+            !staffRow
+              ? 'Account not found. Contact your administrator.'
+              : 'Your account has been disabled. Contact your administrator.',
+            403,
+          )
         }
       }
 
@@ -1060,7 +1072,45 @@ async function put(path, body = {}) {
     const { data, error } = await supabase
       .from('admins').update(updateData).eq('id', id).select().single()
     if (error) sbThrow(error)
+    if (password && updateData.contact_number) {
+      supabase.rpc('update_staff_password', {
+        p_contact_number: updateData.contact_number,
+        p_password: password,
+      }).catch(() => {})
+    }
     localFetch(`admins/${id}`, { method: 'PUT', body: JSON.stringify(body) }).catch(() => {})
+    return data
+  }
+
+  // ── Agency update: Supabase + password RPC (agencies have no PHP item endpoint) ──
+  if (resource === 'agencies') {
+    const { password, ...updateData } = body
+    const { data, error } = await supabase
+      .from('response_agencies').update(updateData).eq('id', id).select().single()
+    if (error) sbThrow(error)
+    if (password && updateData.contact_number) {
+      supabase.rpc('update_staff_password', {
+        p_contact_number: updateData.contact_number,
+        p_password: password,
+      }).catch(() => {})
+    }
+    localFetch(`agencies/${id}`, { method: 'PUT', body: JSON.stringify(body) }).catch(() => {})
+    return data
+  }
+
+  // ── Responder update by admin: Supabase + password RPC + PHP/MySQL ──
+  if (resource === 'responders' && id) {
+    const { password, ...updateData } = body
+    const { data, error } = await supabase
+      .from('responders').update(updateData).eq('id', id).select().single()
+    if (error) sbThrow(error)
+    if (password && updateData.contact_number) {
+      supabase.rpc('update_staff_password', {
+        p_contact_number: updateData.contact_number,
+        p_password: password,
+      }).catch(() => {})
+    }
+    localFetch(`responders/${id}`, { method: 'PUT', body: JSON.stringify(body) }).catch(() => {})
     return data
   }
 
@@ -1075,11 +1125,44 @@ async function del(path) {
   const { resource, id, table } = parsePath(path)
   if (!id) throwErr('ID required for delete')
 
-  // Admin delete: dual-write Supabase + PHP/MySQL
+  // Admin delete: dual-write Supabase + PHP/MySQL; also remove profiles row to block login
   if (resource === 'admins') {
+    const { data: staffRow } = await supabase
+      .from('admins').select('contact_number').eq('id', id).maybeSingle()
     const { error } = await supabase.from('admins').delete().eq('id', id)
     if (error) sbThrow(error)
+    if (staffRow?.contact_number) {
+      supabase.from('profiles').delete()
+        .eq('contact_number', staffRow.contact_number).catch(() => {})
+    }
     localFetch(`admins/${id}`, { method: 'DELETE' }).catch(() => {})
+    return {}
+  }
+
+  // Agency delete: remove from Supabase + profiles row
+  if (resource === 'agencies') {
+    const { data: staffRow } = await supabase
+      .from('response_agencies').select('contact_number').eq('id', id).maybeSingle()
+    const { error } = await supabase.from('response_agencies').delete().eq('id', id)
+    if (error) sbThrow(error)
+    if (staffRow?.contact_number) {
+      supabase.from('profiles').delete()
+        .eq('contact_number', staffRow.contact_number).catch(() => {})
+    }
+    return {}
+  }
+
+  // Responder delete: dual-write Supabase + PHP/MySQL; also remove profiles row
+  if (resource === 'responders') {
+    const { data: staffRow } = await supabase
+      .from('responders').select('contact_number').eq('id', id).maybeSingle()
+    const { error } = await supabase.from('responders').delete().eq('id', id)
+    if (error) sbThrow(error)
+    if (staffRow?.contact_number) {
+      supabase.from('profiles').delete()
+        .eq('contact_number', staffRow.contact_number).catch(() => {})
+    }
+    localFetch(`responders/${id}`, { method: 'DELETE' }).catch(() => {})
     return {}
   }
 
