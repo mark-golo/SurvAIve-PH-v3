@@ -114,7 +114,7 @@ const TABLE = {
 const FILTER_COLS = new Set([
   'municipality', 'province', 'barangay', 'status',
   'rescue_status', 'is_verified', 'duty_status',
-  'center_id', 'victim_id',
+  'center_id', 'victim_id', 'evacuee_id',
 ])
 
 function parsePath(rawPath) {

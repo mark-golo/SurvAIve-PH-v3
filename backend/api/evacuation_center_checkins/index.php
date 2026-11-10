@@ -17,8 +17,9 @@ function computeCapacityStatus($occupancy, $capacity) {
 if ($method === 'GET') {
     $where  = [];
     $params = [];
-    if (!empty($_GET['center_id'])) { $where[] = 'ci.center_id=?'; $params[] = (int)$_GET['center_id']; }
-    if (!empty($_GET['status']))    { $where[] = 'ci.status=?';     $params[] = $_GET['status']; }
+    if (!empty($_GET['center_id']))  { $where[] = 'ci.center_id=?';  $params[] = (int)$_GET['center_id']; }
+    if (!empty($_GET['status']))     { $where[] = 'ci.status=?';     $params[] = $_GET['status']; }
+    if (!empty($_GET['evacuee_id'])) { $where[] = 'ci.evacuee_id=?'; $params[] = $_GET['evacuee_id']; }
 
     $sql = "SELECT ci.id, ci.center_id, ec.name AS center_name, ci.evacuee_id, ci.evacuee_name,
                    ci.group_size, ci.checked_in_by, ci.checked_in_at, ci.status, ci.occupancy_event_id

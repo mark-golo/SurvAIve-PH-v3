@@ -428,6 +428,17 @@ export function EvacuationCenters() {
     if (!occCenterId) { setCheckError('Select a center first'); return }
     setCheckSaving(true); setCheckError('')
     try {
+      // If evacuee_id is provided, verify an active arrival exists at this center
+      if (checkEvacueeRef) {
+        const existing = await api.get(
+          `/evacuation_center_checkins?center_id=${occCenterId}&evacuee_id=${encodeURIComponent(checkEvacueeRef)}&status=Active`
+        )
+        if (!Array.isArray(existing) || existing.length === 0) {
+          setCheckError('No recorded arrival for this evacuee at this center.')
+          setCheckSaving(false)
+          return
+        }
+      }
       await api.post('/evacuation_center_checkouts', {
         center_id: occCenterId,
         evacuee_id: checkEvacueeRef || null,
@@ -914,6 +925,8 @@ export function EvacuationCenters() {
                   <QRScanField
                     onScan={({ evacueeId, evacueeName }) => { setCheckEvacueeRef(evacueeId); setCheckEvacueeName(evacueeName) }}
                     onAutoRecord={recordArrivalAuto}
+                    mode="arrival"
+                    centerId={occCenterId}
                     scannerMode={checkScannerMode}
                     setScannerMode={setCheckScannerMode}
                     evacueeRef={checkEvacueeRef}
@@ -940,6 +953,8 @@ export function EvacuationCenters() {
                   <QRScanField
                     onScan={({ evacueeId, evacueeName }) => { setCheckEvacueeRef(evacueeId); setCheckEvacueeName(evacueeName) }}
                     onAutoRecord={recordDepartureAuto}
+                    mode="departure"
+                    centerId={occCenterId}
                     scannerMode={checkScannerMode}
                     setScannerMode={setCheckScannerMode}
                     evacueeRef={checkEvacueeRef}
@@ -1316,19 +1331,24 @@ function CenterForm({ title, form, set, error, saving, onSave, onCancel }) {
 
 // onAutoRecord: when provided, QR detections are recorded immediately without closing the overlay.
 // The camera stays open for continuous scanning; a 5-second per-victim cooldown prevents duplicates.
-function QRScanField({ onScan, onAutoRecord, scannerMode, setScannerMode, evacueeRef, setEvacueeRef, evacueeName, setEvacueeName }) {
+function QRScanField({ onScan, onAutoRecord, mode, centerId, scannerMode, setScannerMode, evacueeRef, setEvacueeRef, evacueeName, setEvacueeName }) {
   const [overlayOpen, setOverlayOpen]   = useState(false)
   const [scanSuccess, setScanSuccess]   = useState(false)
   const [galleryError, setGalleryError] = useState('')
-  const [autoStatus, setAutoStatus]     = useState(null) // null | 'recording' | 'success' | 'error' | 'cooldown'
+  const [autoStatus, setAutoStatus]     = useState(null) // null | 'recording' | 'success' | 'error' | 'cooldown' | 'checking' | 'duplicate_arrival' | 'no_arrival' | 'already_done'
   const [autoMsg, setAutoMsg]           = useState('')
-  const qrRef          = useRef(null)
-  const fileInputRef   = useRef(null)
-  const recentScans    = useRef(new Map())   // evacueeId → timestamp
-  const onAutoRecordRef = useRef(onAutoRecord)
-  const COOLDOWN_MS    = 5000
+  const qrRef                 = useRef(null)
+  const fileInputRef          = useRef(null)
+  const recentScans           = useRef(new Map())   // evacueeId → timestamp
+  const processedThisSession  = useRef(new Set())   // evacueeIds recorded this session
+  const onAutoRecordRef       = useRef(onAutoRecord)
+  const modeRef               = useRef(mode)
+  const centerIdRef           = useRef(centerId)
+  const COOLDOWN_MS           = 5000
 
   useEffect(() => { onAutoRecordRef.current = onAutoRecord }, [onAutoRecord])
+  useEffect(() => { modeRef.current = mode }, [mode])
+  useEffect(() => { centerIdRef.current = centerId }, [centerId])
 
   useEffect(() => {
     if (!overlayOpen) return
@@ -1362,6 +1382,16 @@ function QRScanField({ onScan, onAutoRecord, scannerMode, setScannerMode, evacue
 
             if (onAutoRecordRef.current) {
               // ── Auto-record mode: stay open, record immediately ────────────
+
+              // 1. Already recorded this session (session-persistent block)
+              if (processedThisSession.current.has(eid)) {
+                setAutoStatus('already_done')
+                setAutoMsg(ename || eid)
+                setTimeout(() => setAutoStatus(null), 2000)
+                return
+              }
+
+              // 2. 5-second cooldown
               const lastScan = recentScans.current.get(eid)
               if (lastScan && Date.now() - lastScan < COOLDOWN_MS) {
                 const remaining = Math.ceil((COOLDOWN_MS - (Date.now() - lastScan)) / 1000)
@@ -1371,6 +1401,34 @@ function QRScanField({ onScan, onAutoRecord, scannerMode, setScannerMode, evacue
                 return
               }
               recentScans.current.set(eid, Date.now())
+
+              // 3. Pre-check DB: verify arrival exists before departure, block arrival dupe
+              if (centerIdRef.current && modeRef.current) {
+                setAutoStatus('checking')
+                setAutoMsg(ename || eid)
+                try {
+                  const existing = await api.get(
+                    `/evacuation_center_checkins?center_id=${centerIdRef.current}&evacuee_id=${encodeURIComponent(eid)}&status=Active`
+                  )
+                  const hasActive = Array.isArray(existing) && existing.length > 0
+                  if (modeRef.current === 'arrival' && hasActive) {
+                    setAutoStatus('duplicate_arrival')
+                    setAutoMsg(ename || eid)
+                    setTimeout(() => setAutoStatus(null), 3000)
+                    return
+                  }
+                  if (modeRef.current === 'departure' && !hasActive) {
+                    setAutoStatus('no_arrival')
+                    setAutoMsg(ename || eid)
+                    setTimeout(() => setAutoStatus(null), 3000)
+                    return
+                  }
+                } catch {
+                  // Pre-check failed (network issue) — allow recording to proceed
+                }
+              }
+
+              // 4. Record
               setAutoStatus('recording')
               setAutoMsg(ename || eid)
               try {
@@ -1381,6 +1439,7 @@ function QRScanField({ onScan, onAutoRecord, scannerMode, setScannerMode, evacue
                 ])
                 const displayName = resolvedName || ename || eid
                 setEvacueeRef(eid); setEvacueeName(resolvedName || ename)
+                processedThisSession.current.add(eid)
                 setAutoStatus('success')
                 setAutoMsg(displayName)
               } catch (err) {
@@ -1411,6 +1470,7 @@ function QRScanField({ onScan, onAutoRecord, scannerMode, setScannerMode, evacue
   function openScanner() {
     setScanSuccess(false); setGalleryError(''); setAutoStatus(null)
     recentScans.current.clear()
+    processedThisSession.current.clear()
     setOverlayOpen(true); setScannerMode(true)
   }
   function closeScanner() {
@@ -1457,16 +1517,45 @@ function QRScanField({ onScan, onAutoRecord, scannerMode, setScannerMode, evacue
 
       if (onAutoRecordRef.current) {
         // Auto-record mode: record from gallery image too
+
+        // 1. Already recorded this session
+        if (processedThisSession.current.has(eid)) {
+          setGalleryError(`${resolvedName || eid} was already recorded this session.`)
+          return
+        }
+
+        // 2. 5-second cooldown
         const lastScan = recentScans.current.get(eid)
         if (lastScan && Date.now() - lastScan < COOLDOWN_MS) {
           setGalleryError(`Already recorded — ${Math.ceil((COOLDOWN_MS - (Date.now() - lastScan)) / 1000)}s cooldown.`)
           return
         }
         recentScans.current.set(eid, Date.now())
+
+        // 3. Pre-check DB
+        if (centerIdRef.current && modeRef.current) {
+          try {
+            const existing = await api.get(
+              `/evacuation_center_checkins?center_id=${centerIdRef.current}&evacuee_id=${encodeURIComponent(eid)}&status=Active`
+            )
+            const hasActive = Array.isArray(existing) && existing.length > 0
+            if (modeRef.current === 'arrival' && hasActive) {
+              setGalleryError(`${resolvedName || eid} is already checked in at this center.`)
+              return
+            }
+            if (modeRef.current === 'departure' && !hasActive) {
+              setGalleryError(`${resolvedName || eid} has no recorded arrival at this center — departure blocked.`)
+              return
+            }
+          } catch { /* fail-open */ }
+        }
+
+        // 4. Record
         setAutoStatus('recording'); setAutoMsg(resolvedName || eid)
         try {
           await onAutoRecordRef.current({ evacueeId: eid, evacueeName: resolvedName || ename })
           setEvacueeRef(eid); setEvacueeName(resolvedName || ename)
+          processedThisSession.current.add(eid)
           setAutoStatus('success'); setAutoMsg(resolvedName || eid)
         } catch (err) {
           setAutoStatus('error'); setAutoMsg(err?.error ?? 'Failed to record')
@@ -1519,6 +1608,50 @@ function QRScanField({ onScan, onAutoRecord, scannerMode, setScannerMode, evacue
         </div>
       </div>
     )
+    if (autoStatus === 'checking') return (
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-[rgba(0,212,255,0.15)] border border-[rgba(0,212,255,0.4)] flex items-center justify-center">
+          <div className="w-4 h-4 rounded-full border-2 border-[#00d4ff] border-t-transparent animate-spin" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-[#00d4ff]">Verifying…</p>
+          <p className="text-[10px] text-white/50">{autoMsg}</p>
+        </div>
+      </div>
+    )
+    if (autoStatus === 'duplicate_arrival') return (
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-[rgba(245,158,11,0.2)] border border-[rgba(245,158,11,0.5)] flex items-center justify-center">
+          <AlertCircle size={18} className="text-[#f59e0b]" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-[#f59e0b]">Already Checked In</p>
+          <p className="text-[10px] text-white/50">{autoMsg}</p>
+        </div>
+      </div>
+    )
+    if (autoStatus === 'no_arrival') return (
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-[rgba(239,68,68,0.2)] border border-[rgba(239,68,68,0.5)] flex items-center justify-center">
+          <AlertCircle size={18} className="text-[#ef4444]" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-[#ef4444]">No Arrival on Record</p>
+          <p className="text-[10px] text-white/50">{autoMsg} — departure blocked</p>
+        </div>
+      </div>
+    )
+    if (autoStatus === 'already_done') return (
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-[rgba(0,212,255,0.15)] border border-[rgba(0,212,255,0.4)] flex items-center justify-center">
+          <CheckCircle size={18} className="text-[#00d4ff]" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-[#00d4ff]">Already Recorded</p>
+          <p className="text-[10px] text-white/50">{autoMsg} — recorded this session</p>
+        </div>
+      </div>
+    )
     if (autoStatus === 'recording') return (
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-full bg-[rgba(0,212,255,0.15)] border border-[rgba(0,212,255,0.4)] flex items-center justify-center animate-pulse">
@@ -1537,7 +1670,7 @@ function QRScanField({ onScan, onAutoRecord, scannerMode, setScannerMode, evacue
           <p className="text-xs text-white/70 font-medium">Auto-scanning — hold QR code up to camera</p>
         </div>
         <p className="text-[11px] text-white/35 text-center leading-relaxed">
-          Each valid QR is recorded immediately · 5 s cooldown per person
+          Each valid QR is recorded immediately · each person once per session
         </p>
         {galleryError && <p className="text-[11px] text-red-400 text-center">{galleryError}</p>}
         <button type="button" onClick={() => fileInputRef.current?.click()}
