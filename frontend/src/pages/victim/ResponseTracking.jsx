@@ -155,11 +155,8 @@ export function ResponseTracking() {
       if (r?.assigned_responder_id && isOnline) {
         try {
           const { data } = await supabase
-            .from('responders')
-            .select('id,unit_name,lat,lng,last_seen_at')
-            .eq('id', r.assigned_responder_id)
-            .single()
-          setResponder(data ?? null)
+            .rpc('get_responder_location_for_sos', { p_sos_id: Number(id) })
+          setResponder(data?.[0] ?? null)
         } catch {}
       }
       setLastSync(new Date())
@@ -280,8 +277,8 @@ export function ResponseTracking() {
               <div className="glass rounded-2xl overflow-hidden border border-[rgba(255,255,255,0.06)]">
                 <div className="flex items-center justify-between px-4 pt-3 pb-2">
                   <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Responder Location</p>
-                  {responder.last_seen && (
-                    <span className="text-[10px] text-slate-600">Updated {fmtTime(responder.last_seen)}</span>
+                  {responder.last_seen_at && (
+                    <span className="text-[10px] text-slate-600">Updated {fmtTime(responder.last_seen_at)}</span>
                   )}
                 </div>
                 <div style={{ height: '160px' }}>
