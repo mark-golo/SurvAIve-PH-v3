@@ -39,8 +39,6 @@ export function VictimTable() {
         priority:       r.priority,
         verified:       !!r.is_verified,
         rescue:         r.rescue_status,
-        sos_mode:       r.sos_mode ?? 'status',
-        ai_scene_label: r.ai_scene_label ?? null,
         lat:            r.lat ?? null,
         lng:            r.lng ?? null,
         flagged:           r.flagged           ?? false,
@@ -247,11 +245,6 @@ export function VictimTable() {
                     <td className="px-4 py-3">
                       <p className="text-sm font-medium text-white">{r.name}</p>
                       {r.flagged && <span className="text-[10px] text-[#ef4444] block">⚑ Flagged</span>}
-                      {r.sos_mode === 'photo' && r.ai_scene_label && (
-                        <span className="text-[10px] text-violet-400 block">
-                          📷 {r.ai_scene_label}
-                        </span>
-                      )}
                     </td>
                     <td className="px-4 py-3"><StatusBadge status={r.priority} /></td>
                     <td className="px-4 py-3 text-xs text-slate-400">{r.barangay}</td>

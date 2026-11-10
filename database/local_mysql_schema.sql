@@ -165,19 +165,6 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   assigned_responder_id  INT              DEFAULT NULL,
   rescue_status          ENUM('pending','acknowledged','en_route','on_scene','rescued','cannot_reach') NOT NULL DEFAULT 'pending',
   field_notes            TEXT             DEFAULT NULL,
-  -- dual-mode SOS: AI analysis fields (Florence-2)
-  sos_mode               VARCHAR(20)      NOT NULL DEFAULT 'status',
-  ai_scene_label         VARCHAR(100)     DEFAULT NULL,
-  ai_scene_confidence    TINYINT UNSIGNED DEFAULT NULL,
-  ai_detected_count      TINYINT UNSIGNED DEFAULT NULL,
-  -- dual-mode SOS: Florence-2 AI analysis fields
-  ai_detailed_caption    TEXT             DEFAULT NULL,
-  ai_objects             JSON             DEFAULT NULL,
-  ai_model_name          VARCHAR(50)      DEFAULT NULL,
-  ai_processing_mode     VARCHAR(20)      DEFAULT NULL,
-  ai_verification_status VARCHAR(20)      NOT NULL DEFAULT 'unverified',
-  ai_verified_by         INT              DEFAULT NULL,
-  ai_verified_at         TIMESTAMP        NULL DEFAULT NULL,
   service_type           JSON             DEFAULT NULL,
   -- mesh relay tracking
   mesh_packet_id         VARCHAR(36)      DEFAULT NULL,

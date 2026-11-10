@@ -778,15 +778,6 @@ async function post(path, body = {}) {
         is_verified:         isVerified,
         trust_score:         trustScore,
         mesh_packet_id:      body.mesh_packet_id      ?? null,
-        // dual-mode SOS: Florence-2 AI analysis fields
-        sos_mode:             body.sos_mode             ?? 'status',
-        ai_scene_label:       body.ai_scene_label       ?? null,
-        ai_scene_confidence:  body.ai_scene_confidence  ?? null,
-        ai_detected_count:    body.ai_detected_count    ?? null,
-        ai_detailed_caption:  body.ai_detailed_caption  ?? null,
-        ai_objects:           body.ai_objects           ?? null,
-        ai_model_name:        body.ai_model_name        ?? null,
-        ai_processing_mode:   body.ai_processing_mode   ?? null,
         service_type:        Array.isArray(body.service_type)
                                ? body.service_type
                                : (body.service_type ? [body.service_type] : null),

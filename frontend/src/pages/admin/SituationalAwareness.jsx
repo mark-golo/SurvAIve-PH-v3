@@ -49,8 +49,6 @@ function analyzeZones(reports) {
     const highCount     = zr.filter(r => r.priority === 'HIGH').length
     const avgScore      = Math.round(zr.reduce((s, r) => s + (r.ai_priority_score ?? 50), 0) / total)
     const criticalPct   = criticalCount / total
-    const photoCount    = zr.filter(r => r.sos_mode === 'photo').length
-
     // Surge: 3+ new reports in the last 30 minutes
     const recentCount    = zr.filter(r => r.minutes_ago < 30).length
     const isSurging      = recentCount >= 3 || (recentCount >= 2 && total >= 4)
@@ -89,7 +87,7 @@ function analyzeZones(reports) {
     return {
       barangay, total, unrescued, rescued,
       criticalCount, highCount, avgScore, criticalPct,
-      isSurging, recentCount, recentCritical, photoCount,
+      isSurging, recentCount, recentCritical,
       tag, tagColor, recommendation, sortPriority, evacScore,
       widthPct: Math.round((total / maxCount) * 100),
       reports: zr,
@@ -137,16 +135,6 @@ function generateInsights(zones) {
     })
   }
 
-  // 4 — Florence-2 AI photo reports
-  const totalPhotos = zones.reduce((s, z) => s + z.photoCount, 0)
-  if (totalPhotos > 0) {
-    const photoZones = zones.filter(z => z.photoCount > 0)
-    insights.push({
-      type: 'ai', icon: '🤖', color: '#00d4ff',
-      title: `Florence-2 Scene Reports — ${totalPhotos} Photo${totalPhotos > 1 ? 's' : ''}`,
-      body: `AI-analysed photos received from ${photoZones.map(z => z.barangay).join(', ')}. Scene classification data enhances situation confidence.`,
-    })
-  }
 
   return insights
 }
@@ -272,11 +260,6 @@ function ZoneBar({ zone, rank, isExpanded, onToggle }) {
                 {zone.isSurging && (
                   <span className="text-[9px] px-2 py-0.5 rounded-full bg-[rgba(249,115,22,0.15)] border border-[rgba(249,115,22,0.3)] text-[#f97316] font-medium">
                     ⚡ Surging — {zone.recentCount} new in 30 min
-                  </span>
-                )}
-                {zone.photoCount > 0 && (
-                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-[rgba(139,92,246,0.15)] border border-[rgba(139,92,246,0.3)] text-violet-300 font-medium">
-                    🤖 {zone.photoCount} Florence-2 photo report{zone.photoCount > 1 ? 's' : ''}
                   </span>
                 )}
                 {zone.rescued > 0 && (

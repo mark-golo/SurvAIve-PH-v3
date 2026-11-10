@@ -137,19 +137,6 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   rescue_status         TEXT NOT NULL DEFAULT 'pending'
                           CHECK (rescue_status IN ('pending','acknowledged','en_route','on_scene','rescued','cannot_reach')),
   field_notes           TEXT,
-  -- dual-mode SOS: AI analysis fields (Florence-2)
-  sos_mode              TEXT     NOT NULL DEFAULT 'status',
-  ai_scene_label        TEXT     DEFAULT NULL,
-  ai_scene_confidence   SMALLINT DEFAULT NULL,
-  ai_detected_count     SMALLINT DEFAULT NULL,
-  -- dual-mode SOS: Florence-2 AI analysis fields
-  ai_detailed_caption   TEXT     DEFAULT NULL,
-  ai_objects            JSONB    DEFAULT NULL,
-  ai_model_name         TEXT     DEFAULT NULL,
-  ai_processing_mode    TEXT     DEFAULT NULL,
-  ai_verification_status TEXT    NOT NULL DEFAULT 'unverified',
-  ai_verified_by        INT      DEFAULT NULL,
-  ai_verified_at        TIMESTAMPTZ DEFAULT NULL,
   created_at            TIMESTAMPTZ DEFAULT NOW(),
   synced_at             TIMESTAMPTZ,
   confirmed_by_name     TEXT DEFAULT NULL,

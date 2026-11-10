@@ -28,9 +28,6 @@ export function PriorityCard({ report, navigateTo, showAssignee = false }) {
           ) : (
             <span className="text-[10px] text-[#f59e0b] font-medium">Guest</span>
           )}
-          {report.sos_mode === 'photo' && (
-            <span className="text-[10px] text-violet-400 font-medium">📷 AI</span>
-          )}
         </div>
         <p className="font-semibold text-sm text-slate-200 truncate">{report.name ?? 'Anonymous'}</p>
         <p className="text-xs text-slate-400 mt-0.5 truncate">

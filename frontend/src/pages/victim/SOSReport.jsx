@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   AlertTriangle, MapPin, Users, FileText, Check,
-  Mic, Camera, Scan,
+  Mic,
   CloudLightning, HeartPulse, Flame, Shield, Anchor,
 } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
@@ -14,7 +14,6 @@ import { useAuthStore } from '../../store/auth'
 import { db } from '../../lib/db'
 import { mesh, onBroadcastStatus } from '../../lib/mesh'
 import api from '../../lib/api'
-import { analyzeScene } from '../../lib/florence2'
 import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
 import { setActiveSOS, updateACKState, clearActiveSOS, getActiveSOS, onActivityChange, logMeshEvent, setBroadcastSubState } from '../../lib/meshActivityStore'
@@ -74,20 +73,6 @@ export function SOSReport() {
   const [interimText,    setInterimText]    = useState('')
   const [voiceDetected,  setVoiceDetected]  = useState([])
   const recognitionRef = useRef(null)
-
-  // ── Dual-mode SOS state ──────────────────────────────────────────────────────
-  const [sosMode,      setSosMode]      = useState('status') // 'status' | 'photo'
-  const [photoFile,    setPhotoFile]    = useState(null)
-  const [photoPreview, setPhotoPreview] = useState(null)
-  const [aiAnalysis,   setAiAnalysis]   = useState(null)
-  const [aiLoading,    setAiLoading]    = useState(false)
-  const [aiOffline,    setAiOffline]    = useState(false)
-  // Camera live-view state
-  const [showCamera,    setShowCamera]    = useState(false)
-  const [cameraStream,  setCameraStream]  = useState(null)
-  const [cameraError,   setCameraError]   = useState(null)
-  const photoInputRef = useRef(null)
-  const videoRef      = useRef(null)
 
   // ── Effects ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -203,108 +188,6 @@ export function SOSReport() {
 
   const stopVoice = () => { recognitionRef.current?.stop(); setListening(false) }
 
-  // ── Photo mode helpers ───────────────────────────────────────────────────────
-
-  // Apply a File object from either camera capture or file picker
-  const applyPhotoFile = (file) => {
-    if (!file) return
-    if (photoPreview) URL.revokeObjectURL(photoPreview)
-    setPhotoFile(file)
-    setPhotoPreview(URL.createObjectURL(file))
-    setAiAnalysis(null)
-    setAiOffline(false)
-  }
-
-  // File-picker fallback (gallery / filesystem)
-  const handlePhotoSelect = (e) => applyPhotoFile(e.target.files?.[0])
-
-  // Open live camera via getUserMedia; fall back to file picker if unavailable
-  const handleCaptureClick = async () => {
-    setCameraError(null)
-    if (!navigator.mediaDevices?.getUserMedia) {
-      photoInputRef.current?.click()
-      return
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false,
-      })
-      setCameraStream(stream)
-      setShowCamera(true)
-      // Attach stream to video element after render
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          videoRef.current.play().catch(() => {})
-        }
-      }, 50)
-    } catch {
-      // Permission denied or no camera device — fall back to file picker
-      photoInputRef.current?.click()
-    }
-  }
-
-  // Stop camera stream and close live view
-  const stopCamera = () => {
-    cameraStream?.getTracks().forEach(t => t.stop())
-    setCameraStream(null)
-    setShowCamera(false)
-  }
-
-  // Capture current video frame to a File object
-  const captureFrame = () => {
-    const video = videoRef.current
-    if (!video) return
-    const canvas = document.createElement('canvas')
-    canvas.width  = video.videoWidth  || 1280
-    canvas.height = video.videoHeight || 720
-    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height)
-    canvas.toBlob((blob) => {
-      if (!blob) return
-      const file = new File([blob], `scene_${Date.now()}.jpg`, { type: 'image/jpeg' })
-      stopCamera()
-      applyPhotoFile(file)
-    }, 'image/jpeg', 0.92)
-  }
-
-  const runAIAnalysis = async () => {
-    if (!photoFile) return
-    setAiLoading(true)
-    try {
-      const result = await analyzeScene(photoFile)
-      setAiAnalysis(result)
-      // Auto-populate form fields from AI results (user can still adjust)
-      const { suggestedFields } = result
-      setForm(p => ({
-        ...p,
-        status:       suggestedFields.status,
-        people_count: Math.max(p.people_count, suggestedFields.people_count),
-      }))
-      setConditions(suggestedFields.special_conditions)
-    } catch (err) {
-      if (err?.message === 'OFFLINE') {
-        setAiOffline(true)
-      } else {
-        console.error('[Florence-2] analyzeScene failed:', err)
-      }
-    } finally {
-      setAiLoading(false)
-    }
-  }
-
-  const switchMode = (mode) => {
-    setSosMode(mode)
-    // Clear photo state when switching back to status mode
-    if (mode === 'status') {
-      if (photoPreview) URL.revokeObjectURL(photoPreview)
-      setPhotoFile(null)
-      setPhotoPreview(null)
-      setAiAnalysis(null)
-      setAiOffline(false)
-    }
-  }
-
   // ── Submit ────────────────────────────────────────────────────────────────────
   const submit = async () => {
     const svcArr = Array.isArray(form.service_type) ? form.service_type : [form.service_type]
@@ -316,19 +199,8 @@ export function SOSReport() {
       lng,
       victim_age_group:    ageGroup,
       special_conditions:  conditions.join(','),
-      sos_mode:            sosMode,
       victim_id:           user?.victim_id ?? null,
       name:                user?.name      ?? null,
-      // Include Florence-2 analysis results only when Photo Mode was used with analysis
-      ...(sosMode === 'photo' && aiAnalysis ? {
-        ai_scene_label:       aiAnalysis.classification.label,
-        ai_scene_confidence:  null,
-        ai_detected_count:    aiAnalysis.detection.count,
-        ai_detailed_caption:  aiAnalysis.detailed_caption  ?? null,
-        ai_objects:           JSON.stringify(aiAnalysis.detection.objects),
-        ai_model_name:        aiAnalysis.model?.name       ?? 'Florence-2-base',
-        ai_processing_mode:   'online',
-      } : {}),
     }
     // realPacketId is set below after generation — attached to payload before online submission
 
@@ -459,15 +331,6 @@ export function SOSReport() {
                   </p>
                 </div>
               )}
-              {sosMode === 'photo' && aiAnalysis && (
-                <div className="glass rounded-xl p-3 border border-[rgba(139,92,246,0.3)]">
-                  <p className="text-xs text-violet-400 font-semibold mb-1">Florence-2 Scene Analysis</p>
-                  <p className="text-sm text-white font-bold">{aiAnalysis.classification.label}</p>
-                  <p className="text-xs text-slate-400">
-                    {aiAnalysis.detection.count} object{aiAnalysis.detection.count !== 1 ? 's' : ''} detected
-                  </p>
-                </div>
-              )}
             </>
           ) : (
             /* ── Mesh / offline path ────────────────────────────────────────── */
@@ -532,15 +395,6 @@ export function SOSReport() {
                   </p>
                 </div>
               )}
-              {sosMode === 'photo' && aiAnalysis && (
-                <div className="glass rounded-xl p-3 border border-[rgba(139,92,246,0.3)]">
-                  <p className="text-xs text-violet-400 font-semibold mb-1">Florence-2 Scene Analysis</p>
-                  <p className="text-sm text-white font-bold">{aiAnalysis.classification.label}</p>
-                  <p className="text-xs text-slate-400">
-                    {aiAnalysis.detection.count} object{aiAnalysis.detection.count !== 1 ? 's' : ''} detected
-                  </p>
-                </div>
-              )}
               <div className="glass rounded-xl p-3 border border-[rgba(245,158,11,0.2)]">
                 <p className="text-xs text-slate-400 leading-relaxed">
                   Your SOS is broadcast via mesh. Status updates above as nearby devices acknowledge it.
@@ -598,206 +452,6 @@ export function SOSReport() {
             <p className="text-xs text-slate-400 mt-0.5">Profile auto-filled from your account</p>
           )}
         </div>
-
-        {/* ── Mode Toggle ─────────────────────────────────────────────────────── */}
-        <GlassCard>
-          <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-3">
-            SOS Report Mode
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { mode: 'status', emoji: '📋', label: 'Status Mode',  sub: 'Select your situation manually' },
-              { mode: 'photo',  emoji: '📷', label: 'Photo Mode',   sub: 'AI analyzes your scene photo' },
-            ].map(opt => (
-              <button
-                key={opt.mode}
-                type="button"
-                onClick={() => switchMode(opt.mode)}
-                className={`rounded-xl py-3 flex flex-col items-center gap-1 transition-all border ${
-                  sosMode === opt.mode
-                    ? 'bg-gradient-to-r from-[#00d4ff] to-[#0ea5e9] border-[#00d4ff]'
-                    : 'glass border-[rgba(255,255,255,0.08)] hover:border-[rgba(255,255,255,0.2)]'
-                }`}
-              >
-                <span className="text-lg">{opt.emoji}</span>
-                <span
-                  className="text-xs font-bold"
-                  style={{ color: sosMode === opt.mode ? '#050a18' : '#94a3b8' }}
-                >
-                  {opt.label}
-                </span>
-                <span className={`text-[10px] text-center px-2 leading-tight ${sosMode === opt.mode ? 'text-[#1e293b]' : 'text-slate-500'}`}>
-                  {opt.sub}
-                </span>
-              </button>
-            ))}
-          </div>
-        </GlassCard>
-
-        {/* ── Photo Mode Panel ─────────────────────────────────────────────────── */}
-        <AnimatePresence>
-          {sosMode === 'photo' && (
-            <motion.div
-              key="photo-panel"
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
-            >
-              <GlassCard>
-                <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">
-                  📷 Scene Photo — Florence-2 Analysis
-                </p>
-
-                {/* Hidden file input — capture="environment" opens rear camera on Android */}
-                <input
-                  ref={photoInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="hidden"
-                  onChange={handlePhotoSelect}
-                />
-
-                {!photoPreview ? (
-                  /* Tap-to-capture area — opens live camera via getUserMedia */
-                  <button
-                    type="button"
-                    onClick={handleCaptureClick}
-                    className="w-full glass rounded-xl border-2 border-dashed border-[rgba(139,92,246,0.35)]
-                               py-8 flex flex-col items-center gap-2
-                               hover:border-[rgba(139,92,246,0.65)] transition-all"
-                  >
-                    <Camera size={28} className="text-violet-400" />
-                    <span className="text-sm text-slate-300 font-medium">Tap to open camera</span>
-                    <span className="text-xs text-slate-500 text-center px-4">
-                      Point at the scene and capture · used for AI analysis only
-                    </span>
-                  </button>
-                ) : (
-                  <div className="space-y-3">
-
-                    {/* Preview + Change button */}
-                    <div className="relative rounded-xl overflow-hidden border border-[rgba(139,92,246,0.35)]">
-                      <img
-                        src={photoPreview}
-                        alt="Captured scene"
-                        className="w-full h-44 object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleCaptureClick}
-                        className="absolute top-2 right-2 glass rounded-lg px-2.5 py-1
-                                   text-[10px] font-medium text-slate-200 hover:text-white transition-colors"
-                      >
-                        Retake
-                      </button>
-                    </div>
-
-                    {/* Analyze button — shown before analysis */}
-                    {!aiAnalysis && !aiOffline && (
-                      <NeonButton
-                        variant="violet"
-                        onClick={runAIAnalysis}
-                        loading={aiLoading}
-                        className="w-full"
-                      >
-                        <Scan size={14} className="mr-2" />
-                        {aiLoading ? 'Analyzing with Florence-2…' : 'Analyze Scene with Florence-2'}
-                      </NeonButton>
-                    )}
-
-                    {/* Offline notice — Florence-2 service unreachable */}
-                    {aiOffline && !aiAnalysis && (
-                      <div className="glass rounded-xl p-3 border border-[rgba(245,158,11,0.3)]">
-                        <p className="text-xs text-[#f59e0b] font-medium mb-1">Florence-2 service unavailable</p>
-                        <p className="text-[11px] text-slate-400 leading-relaxed">
-                          Scene analysis requires a connection to the local AI service.
-                          You can still submit your SOS report in Status Mode, or{' '}
-                          <button
-                            type="button"
-                            onClick={() => { setAiOffline(false) }}
-                            className="underline text-[#f59e0b] hover:text-amber-300"
-                          >
-                            retry
-                          </button>.
-                        </p>
-                      </div>
-                    )}
-
-                    {/* AI Results — shown after analysis */}
-                    <AnimatePresence>
-                      {aiAnalysis && (
-                        <motion.div
-                          key="ai-results"
-                          initial={{ opacity: 0, y: 6 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="space-y-2"
-                        >
-                          {/* Florence-2 Scene Caption */}
-                          <div className="glass rounded-xl p-3 border border-[rgba(139,92,246,0.25)]">
-                            <p className="text-[10px] font-semibold text-violet-400 uppercase tracking-wider mb-2">
-                              Scene Caption
-                            </p>
-                            <p className="text-sm text-white leading-snug">
-                              {aiAnalysis.classification.label}
-                            </p>
-                            {aiAnalysis.detailed_caption && (
-                              <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-                                {aiAnalysis.detailed_caption}
-                              </p>
-                            )}
-                          </div>
-
-                          {/* Florence-2 Detected Objects */}
-                          <div className="glass rounded-xl p-3 border border-[rgba(139,92,246,0.25)]">
-                            <p className="text-[10px] font-semibold text-violet-400 uppercase tracking-wider mb-2">
-                              Detected Objects
-                            </p>
-                            <p className="text-sm text-white font-bold mb-1.5">
-                              {aiAnalysis.detection.count}{' '}
-                              person{aiAnalysis.detection.count !== 1 ? 's' : ''} / object
-                              {aiAnalysis.detection.count !== 1 ? 's' : ''} detected
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {[...new Set(aiAnalysis.detection.objects)].map((obj, i) => (
-                                <span
-                                  key={i}
-                                  className="text-[10px] px-2 py-0.5 rounded-full
-                                             bg-[rgba(139,92,246,0.1)] border border-[rgba(139,92,246,0.3)]
-                                             text-violet-300"
-                                >
-                                  {obj}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-
-                          {/* Auto-populated notice */}
-                          <div className="glass rounded-xl p-2.5 border border-[rgba(0,212,255,0.2)]">
-                            <p className="text-[10px] text-[#00d4ff] leading-relaxed">
-                              ✓ AI pre-filled status, conditions &amp; people count below.
-                              Review and adjust if needed before submitting.
-                            </p>
-                          </div>
-
-                          {/* Re-analyze option */}
-                          <button
-                            type="button"
-                            onClick={() => { setAiAnalysis(null); setPhotoFile(null); setPhotoPreview(null); setAiOffline(false) }}
-                            className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors underline"
-                          >
-                            Take a different photo
-                          </button>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                )}
-              </GlassCard>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* ── Emergency Service ────────────────────────────────────────────────── */}
         <GlassCard>
@@ -864,15 +518,11 @@ export function SOSReport() {
         </GlassCard>
 
         {/* ── Emergency Status ─────────────────────────────────────────────────── */}
-        {/* Shown in both modes; in Photo Mode shows AI-suggested value */}
         <GlassCard>
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider">
               Emergency Status
             </p>
-            {sosMode === 'photo' && aiAnalysis && (
-              <span className="text-[10px] text-violet-400">🤖 AI-suggested</span>
-            )}
           </div>
           <GlassSelect
             label="Current Situation *"
@@ -894,7 +544,7 @@ export function SOSReport() {
           <div className="space-y-3">
             <GlassInput
               type="number"
-              label={sosMode === 'photo' && aiAnalysis ? 'Number of People (AI-detected)' : 'Number of People'}
+              label="Number of People"
               min={1}
               max={99}
               icon={Users}
@@ -1004,21 +654,11 @@ export function SOSReport() {
           />
         </GlassCard>
 
-        {/* Photo Mode guard — require analysis before allowing submit */}
-        {sosMode === 'photo' && !aiAnalysis && photoFile && (
-          <div className="glass rounded-xl p-3 border border-[rgba(245,158,11,0.3)]">
-            <p className="text-xs text-[#f59e0b]">
-              ⚠ Analyze scene with Florence-2 before submitting, or switch to Status Mode.
-            </p>
-          </div>
-        )}
-
         <NeonButton
           variant="red"
           size="lg"
           onClick={submit}
           loading={loading}
-          disabled={sosMode === 'photo' && photoFile != null && aiAnalysis == null}
           className="w-full"
         >
           Send Emergency SOS
@@ -1028,76 +668,6 @@ export function SOSReport() {
 
       <MobileNavBar items={NAV} />
 
-      {/* ── Live Camera Overlay ──────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {showCamera && (
-          <motion.div
-            key="camera-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="fixed inset-0 z-50 bg-black flex flex-col"
-          >
-            {/* Viewfinder */}
-            <div className="flex-1 relative overflow-hidden">
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-              {/* Crosshair guide */}
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-48 h-48 border-2 border-white/30 rounded-2xl" />
-              </div>
-              {/* Header */}
-              <div className="absolute top-0 left-0 right-0 px-4 pt-safe pb-3
-                              bg-gradient-to-b from-black/70 to-transparent flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={stopCamera}
-                  className="text-white/80 hover:text-white transition-colors"
-                >
-                  ✕
-                </button>
-                <p className="text-sm font-semibold text-white/90">Point camera at disaster scene</p>
-              </div>
-              {/* Error message */}
-              {cameraError && (
-                <div className="absolute bottom-28 left-4 right-4 bg-black/70 rounded-xl p-3">
-                  <p className="text-xs text-[#f59e0b] text-center">{cameraError}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Controls */}
-            <div className="bg-black/90 px-6 py-8 flex flex-col items-center gap-4">
-              {/* Shutter button */}
-              <button
-                type="button"
-                onClick={captureFrame}
-                className="w-18 h-18 rounded-full border-4 border-white/80 bg-white/20
-                           hover:bg-white/35 active:scale-95 transition-all
-                           flex items-center justify-center shadow-[0_0_30px_rgba(255,255,255,0.2)]"
-                style={{ width: '72px', height: '72px' }}
-              >
-                <Camera size={28} className="text-white" />
-              </button>
-              <p className="text-xs text-white/50">Tap to capture</p>
-              {/* File picker fallback */}
-              <button
-                type="button"
-                onClick={() => { stopCamera(); photoInputRef.current?.click() }}
-                className="text-xs text-white/40 hover:text-white/70 transition-colors underline"
-              >
-                Use file from gallery instead
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   )
 }
