@@ -26,6 +26,7 @@ export function RespondersView() {
   const [sosReports, setSosReports] = useState([])
   const [sosLoading, setSosLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('all')
+  const [assigning, setAssigning] = useState(new Set())
 
   // Date helpers
   const todayStr = () => new Date().toISOString().slice(0, 10)
@@ -174,9 +175,6 @@ export function RespondersView() {
 
           {filteredReports.map(r => {
             const rs = RESCUE_STATUS[r.rescue_status ?? 'pending'] ?? RESCUE_STATUS.pending
-            const teamName = r.assigned_responder_id
-              ? (responders.find(t => t.id === r.assigned_responder_id)?.name ?? null)
-              : null
             return (
               <div key={r.id} className="glass rounded-xl p-3 mb-2 border border-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.12)] transition-colors">
                 <div className="flex items-center justify-between mb-1">
@@ -189,9 +187,39 @@ export function RespondersView() {
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-500">{r.barangay}{r.municipality ? ` · ${r.municipality}` : ''}</p>
-                {teamName && (
-                  <p className="text-[10px] text-[#00d4ff] mt-0.5 font-medium">Submitted by: {teamName}</p>
-                )}
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-[10px] text-slate-500 shrink-0">Assign:</span>
+                  <select
+                    value={r.assigned_responder_id ?? ''}
+                    disabled={assigning.has(r.id)}
+                    onChange={async (e) => {
+                      const newId = e.target.value ? Number(e.target.value) : null
+                      const oldId = r.assigned_responder_id
+                      setSosReports(prev => prev.map(x =>
+                        x.id === r.id ? { ...x, assigned_responder_id: newId } : x
+                      ))
+                      setAssigning(prev => new Set([...prev, r.id]))
+                      try {
+                        await api.put(`/sos/${r.id}`, { assigned_responder_id: newId })
+                      } catch {
+                        setSosReports(prev => prev.map(x =>
+                          x.id === r.id ? { ...x, assigned_responder_id: oldId } : x
+                        ))
+                      } finally {
+                        setAssigning(prev => { const s = new Set(prev); s.delete(r.id); return s })
+                      }
+                    }}
+                    className="flex-1 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-[rgba(0,212,255,0.4)] cursor-pointer disabled:opacity-40"
+                  >
+                    <option value="">— Unassigned —</option>
+                    {responders.map(resp => (
+                      <option key={resp.id} value={resp.id}>
+                        {resp.name}{resp.unit_name ? ` · ${resp.unit_name}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {assigning.has(r.id) && <span className="text-[9px] text-slate-500 shrink-0">Saving…</span>}
+                </div>
                 {r.notes && (
                   <p className="text-[10px] text-slate-400 mt-1.5 italic border-t border-[rgba(255,255,255,0.05)] pt-1.5">
                     "{r.notes}"
