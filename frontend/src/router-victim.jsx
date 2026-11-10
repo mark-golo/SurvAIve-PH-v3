@@ -18,11 +18,16 @@ import { GuestChallenge } from './pages/victim/GuestChallenge'
 import { VictimSignup }   from './pages/victim/VictimSignup'
 
 // Victim app screens
-import { HomeScreen }     from './pages/victim/HomeScreen'
-import { SOSReport }      from './pages/victim/SOSReport'
-import { MeshStatus }     from './pages/victim/MeshStatus'
-import { LocalMap }       from './pages/victim/LocalMap'
-import { VictimSettings } from './pages/victim/VictimSettings'
+import { HomeScreen }          from './pages/victim/HomeScreen'
+import { SOSReport }           from './pages/victim/SOSReport'
+import { SOSCenter }           from './pages/victim/SOSCenter'
+import { IncidentHistory }     from './pages/victim/IncidentHistory'
+import { ResponseTracking }     from './pages/victim/ResponseTracking'
+import { ResponseTrackingList } from './pages/victim/ResponseTrackingList'
+import { RescueFeedback }      from './pages/victim/RescueFeedback'
+import { MeshStatus }          from './pages/victim/MeshStatus'
+import { LocalMap }            from './pages/victim/LocalMap'
+import { VictimSettings }      from './pages/victim/VictimSettings'
 
 /** Guard: redirects to landing if the user is not authenticated as a victim */
 function VictimGuard() {
@@ -43,9 +48,14 @@ export const victimRouter = createHashRouter([
   {
     element: <VictimGuard />,
     children: [
-      { path: '/home',     element: <HomeScreen /> },
-      { path: '/sos',      element: <SOSReport /> },
-      { path: '/mesh',     element: <MeshStatus /> },
+      { path: '/home',             element: <HomeScreen /> },
+      { path: '/sos',             element: <SOSCenter /> },
+      { path: '/sos/new',         element: <SOSReport /> },
+      { path: '/sos/history',     element: <IncidentHistory /> },
+      { path: '/sos/tracking',    element: <ResponseTrackingList /> },
+      { path: '/sos/:id/feedback', element: <RescueFeedback /> },
+      { path: '/sos/:id',         element: <ResponseTracking /> },
+      { path: '/mesh',            element: <MeshStatus /> },
       { path: '/map',      element: <LocalMap /> },
       { path: '/settings', element: <VictimSettings /> },
     ],

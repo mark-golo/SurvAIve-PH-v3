@@ -21,6 +21,7 @@ import { VictimQueue }       from './pages/responder/VictimQueue'
 import { RescueDetail }      from './pages/responder/RescueDetail'
 import { FieldMap }          from './pages/responder/FieldMap'
 import { MeshRelay }         from './pages/responder/MeshRelay'
+import { ResponderHistory }  from './pages/responder/ResponderHistory'
 import { ResponderSettings } from './pages/responder/ResponderSettings'
 
 /** Guard: redirects to login if the user is not authenticated as a responder */
@@ -43,7 +44,8 @@ export const responderRouter = createHashRouter([
       element: <ResponderLayout />,
       children: [
         { path: '/responder',              element: <ResponderHome /> },
-        { path: '/responder/queue',        element: <VictimQueue /> },
+        { path: '/responder/queue',         element: <VictimQueue /> },
+        { path: '/responder/queue/history', element: <ResponderHistory /> },
         { path: '/responder/rescue/:id',   element: <RescueDetail /> },
         { path: '/responder/map',          element: <FieldMap /> },
         { path: '/responder/relay',        element: <MeshRelay /> },

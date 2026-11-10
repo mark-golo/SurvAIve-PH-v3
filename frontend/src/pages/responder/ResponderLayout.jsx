@@ -157,7 +157,7 @@ export function ResponderLayout() {
       try {
         const { data } = await supabase
           .from('sos_reports')
-          .select('id, name, barangay, municipality, created_at, timestamp')
+          .select('id, name, barangay, municipality, created_at')
           .order('created_at', { ascending: false })
           .limit(100)
         ;(data ?? []).forEach(r => { fetched.add(r.id); rows.push(r) })

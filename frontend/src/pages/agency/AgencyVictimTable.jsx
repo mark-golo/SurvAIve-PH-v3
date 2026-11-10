@@ -133,9 +133,13 @@ export function AgencyVictimTable() {
   const agencyId   = scope?.id ?? null
 
   return (
-    <div className="flex flex-col h-full">
-      <AcknowledgmentPanel agencyType={agencyType} agencyId={agencyId} />
-      <VictimTable />
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="shrink-0 max-h-64 overflow-y-auto">
+        <AcknowledgmentPanel agencyType={agencyType} agencyId={agencyId} />
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <VictimTable />
+      </div>
     </div>
   )
 }

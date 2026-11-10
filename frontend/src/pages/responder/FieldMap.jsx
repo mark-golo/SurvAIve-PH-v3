@@ -208,7 +208,7 @@ export function FieldMap() {
   const [profile, setProfile]   = useState(null)
   const [scannerOpen, setScannerOpen] = useState(false)
 
-  const activeAssigned = assigned.filter(v => v.rescue_status !== 'rescued')
+  const activeAssigned = assigned.filter(v => v.rescue_status !== 'rescued' && v.lat != null && v.lng != null)
   const clusters = useMemo(() => clusterSOS(activeAssigned), [activeAssigned])
 
   const muni = scope?.municipality
@@ -365,7 +365,7 @@ export function FieldMap() {
           ))}
 
           {/* Evacuation centers */}
-          {centers.map(c => (
+          {centers.filter(c => c.lat != null && c.lng != null).map(c => (
             <Marker key={`ec-${c.id}`} position={[c.lat, c.lng]} icon={shelterIcon(c.status)}>
               <Popup>
                 <div className="bg-[#0f172a] text-white text-xs p-3 rounded-xl min-w-[170px]">
