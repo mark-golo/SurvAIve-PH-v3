@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Clock, ChevronRight, WifiOff, Map, Radio, Settings, Home, MessageSquare, RefreshCw } from 'lucide-react'
+import { Clock, ChevronRight, Map, Radio, Settings, Home, MessageSquare, RefreshCw } from 'lucide-react'
 import { MobileNavBar, TopBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
@@ -138,7 +138,7 @@ export function IncidentHistory() {
     }
   }
 
-  useEffect(() => { if (isOnline) { load() } else { setLoading(false) } }, [isOnline, reloadKey])
+  useEffect(() => { load() }, [reloadKey])
 
   // Auto-refresh so completed rescues appear without manual navigation
   useEffect(() => {
@@ -194,12 +194,7 @@ export function IncidentHistory() {
       )}
 
       <main className="flex-1 overflow-y-auto px-4 pb-nav space-y-2 pt-2">
-        {!isOnline ? (
-          <div className="flex flex-col items-center gap-3 mt-12 text-slate-500">
-            <WifiOff size={28} />
-            <p className="text-sm">Incident history requires an internet connection.</p>
-          </div>
-        ) : loading ? (
+        {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="w-8 h-8 rounded-full border-2 border-[#00d4ff] border-t-transparent animate-spin" />
           </div>

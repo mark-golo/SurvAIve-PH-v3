@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { CheckCircle, Clock, WifiOff, RefreshCw, AlertOctagon, Home, MessageSquare, Map, Radio, Settings } from 'lucide-react'
+import { CheckCircle, Clock, RefreshCw, AlertOctagon, Home, MessageSquare, Map, Radio, Settings } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
@@ -10,6 +10,9 @@ import api from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { db } from '../../lib/db'
 import { fmtSosId } from '../../lib/format'
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 
 const RESCUE_STATUS_LABELS = {
   pending:      { label: 'Awaiting Acknowledgment', color: 'text-slate-400',  bg: 'bg-slate-700'     },
@@ -56,6 +59,17 @@ function fmtTime(ts) {
   return new Date(ts).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+const responderPinIcon = () => L.divIcon({
+  className: '',
+  html: `<div style="width:18px;height:18px;background:#00d4ff;border:3px solid white;border-radius:50%;box-shadow:0 0 10px #00d4ff"></div>`,
+  iconSize: [18, 18], iconAnchor: [9, 9],
+})
+const sosPinIcon = () => L.divIcon({
+  className: '',
+  html: `<div style="width:18px;height:18px;background:#ef4444;border:3px solid white;border-radius:50%;box-shadow:0 0 10px #ef4444"></div>`,
+  iconSize: [18, 18], iconAnchor: [9, 9],
+})
+
 // v2 — IncidentHistory card style
 export function ResponseTracking() {
   const { id }    = useParams()
@@ -74,6 +88,8 @@ export function ResponseTracking() {
   const [loading,   setLoading] = useState(true)
   const [lastSync,  setLastSync]= useState(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [responder, setResponder] = useState(null)
+  const prevStatusRef = useRef(undefined)
 
   async function load() {
     setLoading(true)
@@ -101,14 +117,50 @@ export function ResponseTracking() {
 
       setReport(r ?? null)
 
-      // Fetch status events from Supabase
+      // Fire a local notification if rescue_status changed since last load (native only)
+      if (
+        r?.rescue_status &&
+        prevStatusRef.current !== undefined &&
+        r.rescue_status !== prevStatusRef.current &&
+        window.Capacitor?.isNativePlatform?.()
+      ) {
+        try {
+          const { LocalNotifications } = await import('@capacitor/local-notifications')
+          const label = RESCUE_STATUS_LABELS[r.rescue_status]?.label ?? r.rescue_status
+          await LocalNotifications.schedule({
+            notifications: [{
+              id: Math.abs(Number(r.id) * 10 + Object.keys(RESCUE_STATUS_LABELS).indexOf(r.rescue_status) + 1),
+              title: 'Rescue Status Update',
+              body: `Your rescue status changed to: ${label}`,
+              schedule: { at: new Date(Date.now() + 100) },
+            }],
+          })
+        } catch {}
+      }
+      prevStatusRef.current = r?.rescue_status ?? null
+
+      // Fetch status events from Supabase (graceful fail when offline)
       if (r) {
-        const { data } = await supabase
-          .from('sos_status_events')
-          .select('id,event_type,old_status,new_status,message,created_at,actor_role,actor_name_snapshot')
-          .eq('sos_id', id)
-          .order('created_at', { ascending: true })
-        setEvents(data ?? [])
+        try {
+          const { data } = await supabase
+            .from('sos_status_events')
+            .select('id,event_type,old_status,new_status,message,created_at,actor_role,actor_name_snapshot')
+            .eq('sos_id', id)
+            .order('created_at', { ascending: true })
+          setEvents(data ?? [])
+        } catch {}
+      }
+
+      // Fetch assigned responder's current GPS location
+      if (r?.assigned_responder_id && isOnline) {
+        try {
+          const { data } = await supabase
+            .from('responders')
+            .select('id,unit_name,lat,lng,last_seen')
+            .eq('id', r.assigned_responder_id)
+            .single()
+          setResponder(data ?? null)
+        } catch {}
       }
       setLastSync(new Date())
     } catch (err) {
@@ -118,7 +170,7 @@ export function ResponseTracking() {
     }
   }
 
-  useEffect(() => { if (isOnline) { load() } else { setLoading(false) } }, [isOnline, id, reloadKey])
+  useEffect(() => { load() }, [id, reloadKey])
 
   // Auto-refresh when responder updates this SOS's rescue_status via Realtime
   useEffect(() => {
@@ -140,6 +192,19 @@ export function ResponseTracking() {
     return () => clearInterval(poll)
   }, [isOnline, id])
 
+  // Live responder location updates via Realtime
+  useEffect(() => {
+    if (!isOnline || !report?.assigned_responder_id) return
+    const ch = supabase.channel(`rt-rsp-${report.assigned_responder_id}`)
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'responders',
+          filter: `id=eq.${report.assigned_responder_id}` },
+        payload => setResponder(prev => prev ? { ...prev, ...payload.new } : payload.new)
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [report?.assigned_responder_id, isOnline])
+
   // Build timeline steps — merge system events with derived steps
   function buildTimeline(r, evts) {
     const statusAt = (targetStatus) => {
@@ -155,19 +220,6 @@ export function ResponseTracking() {
       { label: 'Responder On Scene',       done: ['on_scene','rescued','cannot_reach'].includes(r?.rescue_status), ts: statusAt('on_scene') },
       { label: 'Rescue / Assistance Completed', done: r?.rescue_status === 'rescued',  ts: r?.confirmed_at ?? statusAt('rescued') },
     ]
-  }
-
-  if (!isOnline) {
-    return (
-      <div className={`h-screen flex flex-col bg-mesh${isLight ? ' light-theme' : ''}`}>
-        <TopBar title={pageTitle} onBack />
-        <div className="flex flex-col items-center gap-3 mt-16 text-slate-500 p-4">
-          <WifiOff size={28} />
-          <p className="text-sm text-center">Response tracking requires an internet connection.</p>
-        </div>
-        <MobileNavBar items={NAV} />
-      </div>
-    )
   }
 
   return (
@@ -223,6 +275,43 @@ export function ResponseTracking() {
               </div>
             </div>
 
+            {/* Responder Location — only shown when a responder is assigned and has GPS */}
+            {responder?.lat != null && responder?.lng != null && report?.rescue_status !== 'rescued' && (
+              <div className="glass rounded-2xl overflow-hidden border border-[rgba(255,255,255,0.06)]">
+                <div className="flex items-center justify-between px-4 pt-3 pb-2">
+                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Responder Location</p>
+                  {responder.last_seen && (
+                    <span className="text-[10px] text-slate-600">Updated {fmtTime(responder.last_seen)}</span>
+                  )}
+                </div>
+                <div style={{ height: '160px' }}>
+                  <MapContainer
+                    key={`${responder.lat}-${responder.lng}`}
+                    center={[responder.lat, responder.lng]}
+                    zoom={14}
+                    style={{ height: '100%', background: '#0a1628' }}
+                    zoomControl={false}
+                    dragging={false}
+                    scrollWheelZoom={false}
+                    doubleClickZoom={false}
+                  >
+                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
+                    <Marker position={[responder.lat, responder.lng]} icon={responderPinIcon()}>
+                      <Popup><div className="text-xs">{responder.unit_name ?? 'Responder'}</div></Popup>
+                    </Marker>
+                    {report?.lat != null && report?.lng != null && (
+                      <Marker position={[report.lat, report.lng]} icon={sosPinIcon()}>
+                        <Popup><div className="text-xs">Your SOS Location</div></Popup>
+                      </Marker>
+                    )}
+                  </MapContainer>
+                </div>
+                <div className="px-4 py-2">
+                  <p className="text-xs text-slate-400">{responder.unit_name ?? 'Assigned Responder'}</p>
+                </div>
+              </div>
+            )}
+
             {/* Timeline */}
             <div className="glass rounded-2xl p-4 border border-[rgba(255,255,255,0.06)]">
                 <div className="flex items-center justify-between mb-4">
@@ -247,7 +336,7 @@ export function ResponseTracking() {
                       <div className="flex-1 pb-2">
                         <p className={`text-sm font-medium ${done ? 'text-white' : 'text-slate-600'}`}>{label}</p>
                         <p className="text-[10px] text-slate-600 mt-0.5">
-                          {ts ? fmtTime(ts) : <span className="italic">Pending</span>}
+                          {ts ? fmtTime(ts) : (done ? null : <span className="italic">Pending</span>)}
                         </p>
                       </div>
                     </div>
