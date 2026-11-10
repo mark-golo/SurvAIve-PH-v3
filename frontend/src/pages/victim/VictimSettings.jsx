@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { setXamppHost, localFetch } from '../../lib/api'
+import { loadLocalCredentials, storeLocalCredentials, hashPIN, generateSalt } from '../../lib/deviceAuth'
 import api from '../../lib/api'
 import { QRCodeSVG } from 'qrcode.react'
 import {
@@ -195,6 +196,13 @@ export function VictimSettings() {
         method: 'PUT',
         body: JSON.stringify({ current_password: currentPin, new_password: newPin }),
       })
+      // Keep phone's offline PIN in sync with the XAMPP change
+      const existing = loadLocalCredentials()
+      if (existing) {
+        const newSalt = generateSalt()
+        const newHash = await hashPIN(newPin, newSalt)
+        storeLocalCredentials(existing.victimId, newHash, newSalt, existing.deviceKey, existing.user)
+      }
       setCurrentPin(''); setNewPin(''); setConfirmPin('')
       setPinMsg({ ok: true, text: 'PIN changed successfully.' })
     } catch (err) {

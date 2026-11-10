@@ -214,7 +214,7 @@ export function ResponderSettings() {
         }
       } catch (localErr) {
         // XAMPP unreachable + online → Supabase Auth fallback
-        if (!localErr.status && getNetworkOnline()) {
+        if ((!localErr.status || localErr.status === 401) && getNetworkOnline()) {
           const { error: updErr } = await supabase.auth.updateUser({ password: newPw })
           if (updErr) throw new Error(updErr.message ?? 'Failed to change password.')
         } else {
