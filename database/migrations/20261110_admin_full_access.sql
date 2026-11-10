@@ -5,6 +5,7 @@
 
 -- 1. Drop the superadmin-only write policy (superadmin role is retired).
 DROP POLICY IF EXISTS "superadmin manage admins" ON admins;
+DROP POLICY IF EXISTS "admin manage admins" ON admins;
 
 -- 2. Allow admin (and superadmin as a no-op alias) to manage all admin rows.
 --    WITH CHECK mirrors USING so both reads and writes are gated the same way.
