@@ -229,25 +229,18 @@ export function RescueDetail() {
         <GlassCard>
           <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-3">Rescue Actions</p>
           {/* Accept Assignment — links this responder to the report */}
-          {victim.assigned_responder_id !== responderProfile?.id ? (
-            <button
-              onClick={acceptAssignment}
-              disabled={submitting || !responderProfile}
-              className="w-full mb-3 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all border
-                         bg-[rgba(0,212,255,0.08)] border-[rgba(0,212,255,0.3)] text-[#00d4ff]
-                         hover:bg-[rgba(0,212,255,0.16)] active:scale-[0.98]
-                         disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <UserCheck size={14} />
-              {submitting ? 'Accepting…' : 'Accept Assignment'}
-            </button>
-          ) : (
-            <div className="w-full mb-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2
-                            bg-[rgba(0,212,255,0.05)] border border-[rgba(0,212,255,0.2)] text-[#00d4ff]/60">
-              <CheckCircle size={12} />
-              Assignment Accepted
-            </div>
-          )}
+          <button
+            onClick={acceptAssignment}
+            disabled={submitting || !responderProfile}
+            className={`w-full mb-3 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all border ${
+              victim?.assigned_responder_id === responderProfile?.id
+                ? 'bg-[#00d4ff] border-[#00d4ff] text-black'
+                : 'bg-[rgba(0,212,255,0.08)] border-[rgba(0,212,255,0.3)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.16)] active:scale-[0.98]'
+            } disabled:opacity-40 disabled:cursor-not-allowed`}
+          >
+            <UserCheck size={14} />
+            {submitting ? 'Accepting…' : 'Accept Assignment'}
+          </button>
 
           {/* Acknowledge SOS — full-width prominence button above the action grid */}
           <button
@@ -276,8 +269,11 @@ export function RescueDetail() {
             ))}
           </div>
           {rescueStatus && (
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
               <p className="text-xs text-slate-500">Current:</p>
+              {victim?.assigned_responder_id === responderProfile?.id && (
+                <StatusBadge status="ACCEPTED" />
+              )}
               <StatusBadge status={rescueStatus.toUpperCase().replace('_', ' ')} pulse={rescueStatus === 'en_route'} />
               {elapsed && <p className="text-xs text-slate-500">On scene {elapsed}s</p>}
             </div>
