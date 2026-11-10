@@ -942,7 +942,19 @@ async function post(path, body = {}) {
 
     const { data: adminRow, error: adminErr } = await supabase
       .from('admins').insert(adminData).select().single()
-    if (adminErr) sbThrow(adminErr)
+    if (adminErr) {
+      // Auth user was already created above — log it so the team can remove the orphaned account.
+      supabase.from('activity_logs').insert({
+        actor_role: 'admin',
+        action: 'Failed admin creation — orphaned auth account',
+        details: JSON.stringify({ email, uid, reason: adminErr.message }),
+        created_at: new Date().toISOString(),
+      }).catch(() => {})
+      throwErr(
+        `Account created but profile save failed — please remove the sign-in account for ${email}. Reason: ${adminErr.message}`,
+        500,
+      )
+    }
     return adminRow
   }
 
@@ -1041,6 +1053,17 @@ async function put(path, body = {}) {
   }
 
   if (!id) throwErr('ID required for update')
+
+  // ── Admin update: dual-write Supabase + PHP/MySQL (password hash lives in MySQL) ──
+  if (resource === 'admins') {
+    const { password, ...updateData } = body
+    const { data, error } = await supabase
+      .from('admins').update(updateData).eq('id', id).select().single()
+    if (error) sbThrow(error)
+    localFetch(`admins/${id}`, { method: 'PUT', body: JSON.stringify(body) }).catch(() => {})
+    return data
+  }
+
   const { password: _pw, ...updateData } = body
   const { data, error } = await supabase.from(table).update(updateData).eq('id', id).select().single()
   if (error) sbThrow(error)
@@ -1051,6 +1074,14 @@ async function put(path, body = {}) {
 async function del(path) {
   const { resource, id, table } = parsePath(path)
   if (!id) throwErr('ID required for delete')
+
+  // Admin delete: dual-write Supabase + PHP/MySQL
+  if (resource === 'admins') {
+    const { error } = await supabase.from('admins').delete().eq('id', id)
+    if (error) sbThrow(error)
+    localFetch(`admins/${id}`, { method: 'DELETE' }).catch(() => {})
+    return {}
+  }
 
   // Constituent delete: remove victims row + profiles row (blocks login; auth user remains)
   if (resource === 'constituents') {

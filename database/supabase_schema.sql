@@ -483,16 +483,14 @@ CREATE POLICY "responder update own"
   );
 
 -- ── admins policies ───────────────────────────────────────────
-CREATE POLICY "superadmin manage admins"
+-- superadmin role retired; admin is now the top elevated role.
+CREATE POLICY "admin manage admins"
   ON admins FOR ALL
   USING (
-    (auth.jwt() -> 'app_metadata' ->> 'role') = 'superadmin'
-  );
-
-CREATE POLICY "admin read self"
-  ON admins FOR SELECT
-  USING (
-    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'superadmin')
+  )
+  WITH CHECK (
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'superadmin')
   );
 
 -- ── superadmins policies ──────────────────────────────────────
