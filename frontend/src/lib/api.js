@@ -1073,7 +1073,7 @@ async function put(path, body = {}) {
       .from('admins').update(updateData).eq('id', id).select().single()
     if (error) sbThrow(error)
     if (password && updateData.contact_number) {
-      supabase.rpc('update_staff_password', {
+      await supabase.rpc('update_staff_password', {
         p_contact_number: updateData.contact_number,
         p_password: password,
       }).catch(() => {})
@@ -1089,7 +1089,7 @@ async function put(path, body = {}) {
       .from('response_agencies').update(updateData).eq('id', id).select().single()
     if (error) sbThrow(error)
     if (password && updateData.contact_number) {
-      supabase.rpc('update_staff_password', {
+      await supabase.rpc('update_staff_password', {
         p_contact_number: updateData.contact_number,
         p_password: password,
       }).catch(() => {})
@@ -1105,7 +1105,7 @@ async function put(path, body = {}) {
       .from('responders').update(updateData).eq('id', id).select().single()
     if (error) sbThrow(error)
     if (password && updateData.contact_number) {
-      supabase.rpc('update_staff_password', {
+      await supabase.rpc('update_staff_password', {
         p_contact_number: updateData.contact_number,
         p_password: password,
       }).catch(() => {})

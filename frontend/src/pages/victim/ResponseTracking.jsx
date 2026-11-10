@@ -156,7 +156,7 @@ export function ResponseTracking() {
         try {
           const { data } = await supabase
             .from('responders')
-            .select('id,unit_name,lat,lng,last_seen')
+            .select('id,unit_name,lat,lng,last_seen_at')
             .eq('id', r.assigned_responder_id)
             .single()
           setResponder(data ?? null)

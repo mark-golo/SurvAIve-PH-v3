@@ -185,7 +185,7 @@ export function RespondersView() {
           {filteredReports.map(r => {
             const rs = RESCUE_STATUS[r.rescue_status ?? 'pending'] ?? RESCUE_STATUS.pending
             return (
-              <div key={r.id} className="glass rounded-xl p-3 mb-2 border border-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.12)] transition-colors">
+              <div key={r.id} style={{ position: 'relative', zIndex: openDropdown === r.id ? 10 : 'auto' }} className="glass rounded-xl p-3 mb-2 border border-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.12)] transition-colors">
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-sm font-semibold text-white truncate pr-2">{r.name ?? 'Anonymous'}</p>
                   <span
