@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { Home, List, Map, Radio, Settings, QrCode, X, CheckCircle, AlertCircle, UserCheck } from 'lucide-react'
+import { Home, List, Map, Radio, Settings } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/api'
@@ -53,149 +53,6 @@ function FlyTo({ pos }) {
   return null
 }
 
-function QRScanPanel({ centers, onClose, onCheckInComplete }) {
-  const [scanStage, setScanStage] = useState('scanning') // 'scanning' | 'confirm' | 'done' | 'error'
-  const [scanResult, setScanResult] = useState(null)
-  const [selCenter, setSelCenter] = useState('')
-  const [groupSize, setGroupSize] = useState(1)
-  const [saving, setSaving] = useState(false)
-  const [errorMsg, setErrorMsg] = useState('')
-
-  useEffect(() => {
-    if (scanStage !== 'scanning') return
-    let scanner = null
-    const id = 'qr-reader-fm'
-    const timer = setTimeout(async () => {
-      try {
-        const { Html5QrcodeScanner } = await import('html5-qrcode')
-        scanner = new Html5QrcodeScanner(id, { fps: 10, qrbox: 220 }, false)
-        scanner.render(
-          (text) => {
-            scanner.clear().catch(() => {})
-            if (text.startsWith('SURVPH:EVACUEE:')) {
-              const parts = text.split(':')
-              setScanResult({ evacueeId: parts[2] ?? '', evacueeName: parts[3] ?? '' })
-              setScanStage('confirm')
-            } else {
-              setErrorMsg('Invalid QR code — expected a victim QR code.')
-              setScanStage('error')
-            }
-          },
-          () => {}
-        )
-      } catch { setErrorMsg('Camera not available.'); setScanStage('error') }
-    }, 100)
-    return () => {
-      clearTimeout(timer)
-      if (scanner) scanner.clear().catch(() => {})
-    }
-  }, [scanStage])
-
-  async function submitCheckin() {
-    if (!selCenter) { setErrorMsg('Select a center'); return }
-    setSaving(true); setErrorMsg('')
-    try {
-      await api.post('/evacuation_center_checkins', {
-        center_id: selCenter,
-        evacuee_id: scanResult?.evacueeId || null,
-        evacuee_name: scanResult?.evacueeName || null,
-        group_size: groupSize,
-        checked_in_by: 'responder',
-      })
-      setScanStage('done')
-      onCheckInComplete?.()
-    } catch (e) { setErrorMsg(e?.error ?? 'Failed to record check-in') }
-    finally { setSaving(false) }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 bg-[rgba(0,0,0,0.85)] flex flex-col">
-      <div className="flex items-center justify-between p-4 border-b border-[rgba(255,255,255,0.08)]">
-        <div className="flex items-center gap-2">
-          <QrCode size={16} className="text-[#00d4ff]" />
-          <p className="text-sm font-semibold text-white">Scan Evacuee QR</p>
-        </div>
-        <button onClick={onClose} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-[rgba(255,255,255,0.08)]">
-          <X size={16} />
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {scanStage === 'scanning' && (
-          <>
-            <p className="text-xs text-slate-400 text-center">Point the camera at the evacuee's QR code</p>
-            <div id="qr-reader-fm" className="rounded-xl overflow-hidden" />
-          </>
-        )}
-
-        {scanStage === 'confirm' && scanResult && (
-          <div className="space-y-4">
-            <div className="glass rounded-xl p-4 flex items-center gap-3">
-              <UserCheck size={20} className="text-[#22c55e] shrink-0" />
-              <div>
-                <p className="text-xs text-slate-400">Victim scanned</p>
-                <p className="text-sm font-semibold text-white">{scanResult.evacueeName || 'Unknown name'}</p>
-                <p className="text-[10px] text-slate-500 font-mono">{scanResult.evacueeId}</p>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs text-slate-400 mb-1.5">Destination Center</p>
-                <select value={selCenter} onChange={e => setSelCenter(e.target.value)}
-                  className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(0,212,255,0.2)] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[rgba(0,212,255,0.5)]">
-                  <option value="">Select center…</option>
-                  {centers.filter(c => c.status !== 'closed').map(c => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.status})</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 mb-1.5">Group Size</p>
-                <input type="number" min="1" value={groupSize} onChange={e => setGroupSize(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(0,212,255,0.2)] rounded-lg px-3 py-2 text-sm text-white focus:outline-none" />
-              </div>
-            </div>
-            {errorMsg && <p className="text-xs text-[#ef4444]">{errorMsg}</p>}
-            <div className="flex gap-2">
-              <button onClick={submitCheckin} disabled={saving}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-[#22c55e] text-white disabled:opacity-50">
-                {saving ? 'Recording…' : 'Confirm Arrival'}
-              </button>
-              <button onClick={() => { setScanStage('scanning'); setScanResult(null) }}
-                className="px-4 py-2.5 rounded-xl text-sm font-semibold bg-[rgba(255,255,255,0.08)] text-slate-300">
-                Rescan
-              </button>
-            </div>
-          </div>
-        )}
-
-        {scanStage === 'done' && (
-          <div className="flex flex-col items-center gap-4 py-8">
-            <CheckCircle size={48} className="text-[#22c55e]" />
-            <p className="text-sm font-semibold text-white">Arrival Recorded</p>
-            <p className="text-xs text-slate-400 text-center">The evacuee's check-in has been saved.</p>
-            <button onClick={() => { setScanStage('scanning'); setScanResult(null); setSelCenter(''); setGroupSize(1) }}
-              className="px-6 py-2 rounded-xl text-sm font-semibold bg-[rgba(0,212,255,0.15)] text-[#00d4ff] border border-[rgba(0,212,255,0.3)]">
-              Scan Another
-            </button>
-          </div>
-        )}
-
-        {scanStage === 'error' && (
-          <div className="flex flex-col items-center gap-4 py-8">
-            <AlertCircle size={48} className="text-[#ef4444]" />
-            <p className="text-sm font-semibold text-white">Scan Failed</p>
-            <p className="text-xs text-slate-400 text-center">{errorMsg}</p>
-            <button onClick={() => { setScanStage('scanning'); setErrorMsg('') }}
-              className="px-6 py-2 rounded-xl text-sm font-semibold bg-[rgba(0,212,255,0.15)] text-[#00d4ff] border border-[rgba(0,212,255,0.3)]">
-              Try Again
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
 
 export function FieldMap() {
   const navigate = useNavigate()
@@ -206,7 +63,6 @@ export function FieldMap() {
   const [myPos, setMyPos]       = useState(null)
   const [gpsError, setGpsError] = useState(false)
   const [profile, setProfile]   = useState(null)
-  const [scannerOpen, setScannerOpen] = useState(false)
 
   const activeAssigned = assigned.filter(v => v.rescue_status !== 'rescued' && v.lat != null && v.lng != null)
   const clusters = useMemo(() => clusterSOS(activeAssigned), [activeAssigned])
@@ -415,18 +271,6 @@ export function FieldMap() {
             )
           })}
         </MapContainer>
-      </div>
-
-      {/* QR Scanner panel */}
-      {scannerOpen && <QRScanPanel centers={centers} onClose={() => setScannerOpen(false)} onCheckInComplete={loadCenters} />}
-
-      {/* QR Scan button */}
-      <div className="px-3 pb-2">
-        <button onClick={() => setScannerOpen(true)}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold bg-[rgba(0,212,255,0.12)] text-[#00d4ff] border border-[rgba(0,212,255,0.2)] hover:bg-[rgba(0,212,255,0.2)] transition-colors mb-2">
-          <QrCode size={15} />
-          Scan Evacuee QR — Record Arrival
-        </button>
       </div>
 
       {/* Legend */}
