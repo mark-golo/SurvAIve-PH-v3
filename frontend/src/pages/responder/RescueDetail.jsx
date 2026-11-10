@@ -239,7 +239,7 @@ export function RescueDetail() {
             } disabled:opacity-40 disabled:cursor-not-allowed`}
           >
             <UserCheck size={14} />
-            {submitting ? 'Accepting…' : 'Accept Assignment'}
+            {submitting ? 'Accepting…' : victim?.assigned_responder_id === responderProfile?.id ? 'Assignment Accepted' : 'Accept Assignment'}
           </button>
 
           {/* Acknowledge SOS — full-width prominence button above the action grid */}
