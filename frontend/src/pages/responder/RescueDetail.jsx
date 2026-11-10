@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { getResponderTheme } from '../../lib/victimTheme'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MapPin, Users, Phone, Navigation, CheckCircle, XCircle, AlertTriangle, Home, List, Map, Radio, Settings } from 'lucide-react'
+import { MapPin, Users, Phone, Navigation, CheckCircle, XCircle, AlertTriangle, UserCheck, Home, List, Map, Radio, Settings } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -67,6 +67,7 @@ export function RescueDetail() {
           vulnerabilities: Array.isArray(row.vulnerabilities) ? row.vulnerabilities : [],
           is_verified: !!row.is_verified,
           rescue_status: row.rescue_status,
+          assigned_responder_id: row.assigned_responder_id ?? null,
         })
         setRescueStatus(row.rescue_status ?? 'pending')
         setNotes(row.notes || '')
@@ -92,7 +93,10 @@ export function RescueDetail() {
     if (newStatus === 'on_scene') setTimer(Date.now())
     setRescueStatus(newStatus)
     if (victim?.id) {
-      const payload = { rescue_status: newStatus }
+      const payload = {
+        rescue_status: newStatus,
+        ...(responderProfile?.id && { assigned_responder_id: responderProfile.id }),
+      }
       if (newStatus === 'rescued') {
         payload.confirmed_by_name = responderProfile?.name ?? null
         payload.confirmed_at = new Date().toISOString()
@@ -119,6 +123,19 @@ export function RescueDetail() {
       } catch {
         // local state already reflects the change; failure is surfaced by submitReport if needed
       }
+    }
+  }
+
+  const acceptAssignment = async () => {
+    if (!responderProfile?.id) return
+    setSubmitting(true)
+    try {
+      await api.put(`/sos/${victim.id}`, { assigned_responder_id: responderProfile.id })
+      setVictim(prev => ({ ...prev, assigned_responder_id: responderProfile.id }))
+    } catch {
+      alert('Could not accept assignment. Please try again.')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -211,6 +228,27 @@ export function RescueDetail() {
         {/* Rescue status */}
         <GlassCard>
           <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-3">Rescue Actions</p>
+          {/* Accept Assignment — links this responder to the report */}
+          {victim.assigned_responder_id !== responderProfile?.id ? (
+            <button
+              onClick={acceptAssignment}
+              disabled={submitting || !responderProfile}
+              className="w-full mb-3 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all border
+                         bg-[rgba(0,212,255,0.08)] border-[rgba(0,212,255,0.3)] text-[#00d4ff]
+                         hover:bg-[rgba(0,212,255,0.16)] active:scale-[0.98]
+                         disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <UserCheck size={14} />
+              {submitting ? 'Accepting…' : 'Accept Assignment'}
+            </button>
+          ) : (
+            <div className="w-full mb-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2
+                            bg-[rgba(0,212,255,0.05)] border border-[rgba(0,212,255,0.2)] text-[#00d4ff]/60">
+              <CheckCircle size={12} />
+              Assignment Accepted
+            </div>
+          )}
+
           {/* Acknowledge SOS — full-width prominence button above the action grid */}
           <button
             onClick={() => updateStatus('acknowledged')}
