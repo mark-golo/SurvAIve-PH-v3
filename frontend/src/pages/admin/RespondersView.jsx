@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Radio, MapPin } from 'lucide-react'
+import { Radio, MapPin, ChevronDown } from 'lucide-react'
 
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/api'
@@ -27,6 +27,7 @@ export function RespondersView() {
   const [sosLoading, setSosLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('all')
   const [assigning, setAssigning] = useState(new Set())
+  const [openDropdown, setOpenDropdown] = useState(null)
 
   // Date helpers
   const todayStr = () => new Date().toISOString().slice(0, 10)
@@ -95,6 +96,14 @@ export function RespondersView() {
     window.addEventListener('sos:new-insert', h)
     return () => window.removeEventListener('sos:new-insert', h)
   }, [])
+
+  // Close custom dropdown when clicking outside
+  useEffect(() => {
+    if (!openDropdown) return
+    const handler = () => setOpenDropdown(null)
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [openDropdown])
 
   // Online polling — keeps responder assignment list fresh
   useEffect(() => {
@@ -189,36 +198,63 @@ export function RespondersView() {
                 <p className="text-[10px] text-slate-500">{r.barangay}{r.municipality ? ` · ${r.municipality}` : ''}</p>
                 <div className="mt-2 flex items-center gap-2">
                   <span className="text-[10px] text-slate-500 shrink-0">Assign:</span>
-                  <select
-                    value={r.assigned_responder_id ?? ''}
-                    disabled={assigning.has(r.id)}
-                    style={{ colorScheme: 'light' }}
-                    onChange={async (e) => {
-                      const newId = e.target.value ? Number(e.target.value) : null
-                      const oldId = r.assigned_responder_id
-                      setSosReports(prev => prev.map(x =>
-                        x.id === r.id ? { ...x, assigned_responder_id: newId } : x
-                      ))
-                      setAssigning(prev => new Set([...prev, r.id]))
-                      try {
-                        await api.put(`/sos/${r.id}`, { assigned_responder_id: newId })
-                      } catch {
-                        setSosReports(prev => prev.map(x =>
-                          x.id === r.id ? { ...x, assigned_responder_id: oldId } : x
-                        ))
-                      } finally {
-                        setAssigning(prev => { const s = new Set(prev); s.delete(r.id); return s })
-                      }
-                    }}
-                    className="flex-1 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-[rgba(0,212,255,0.4)] cursor-pointer disabled:opacity-40"
-                  >
-                    <option value="">— Unassigned —</option>
-                    {responders.map(resp => (
-                      <option key={resp.id} value={resp.id}>
-                        {resp.name}{resp.unit_name ? ` · ${resp.unit_name}` : ''}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative flex-1">
+                    <button
+                      disabled={assigning.has(r.id)}
+                      onClick={(e) => { e.stopPropagation(); setOpenDropdown(openDropdown === r.id ? null : r.id) }}
+                      className="w-full flex items-center justify-between gap-1 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-[rgba(0,212,255,0.4)] disabled:opacity-40"
+                    >
+                      <span className="truncate">
+                        {r.assigned_responder_id
+                          ? (responders.find(rr => rr.id === r.assigned_responder_id)?.name ?? '…')
+                          : '— Unassigned —'}
+                      </span>
+                      <ChevronDown size={10} className="shrink-0 text-slate-400" />
+                    </button>
+                    {openDropdown === r.id && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute top-full left-0 right-0 mt-1 z-50 rounded-lg border border-[rgba(255,255,255,0.15)] bg-[#1a2035] shadow-xl overflow-hidden"
+                      >
+                        {[
+                          { id: null, label: '— Unassigned —' },
+                          ...responders.map(rr => ({ id: rr.id, label: rr.name + (rr.unit_name ? ` · ${rr.unit_name}` : '') })),
+                        ].map(opt => {
+                          const isSelected = opt.id === null ? !r.assigned_responder_id : opt.id === r.assigned_responder_id
+                          return (
+                            <button
+                              key={opt.id ?? 'unassigned'}
+                              onClick={async () => {
+                                setOpenDropdown(null)
+                                const newId = opt.id ?? null
+                                const oldId = r.assigned_responder_id
+                                setSosReports(prev => prev.map(x =>
+                                  x.id === r.id ? { ...x, assigned_responder_id: newId } : x
+                                ))
+                                setAssigning(prev => new Set([...prev, r.id]))
+                                try {
+                                  await api.put(`/sos/${r.id}`, { assigned_responder_id: newId })
+                                } catch {
+                                  setSosReports(prev => prev.map(x =>
+                                    x.id === r.id ? { ...x, assigned_responder_id: oldId } : x
+                                  ))
+                                } finally {
+                                  setAssigning(prev => { const s = new Set(prev); s.delete(r.id); return s })
+                                }
+                              }}
+                              className={`w-full text-left px-3 py-2 text-[10px] transition-colors ${
+                                isSelected
+                                  ? 'bg-[rgba(0,212,255,0.15)] text-[#00d4ff]'
+                                  : 'text-white hover:bg-[rgba(255,255,255,0.08)]'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
                   {assigning.has(r.id) && <span className="text-[9px] text-slate-500 shrink-0">Saving…</span>}
                 </div>
                 {r.notes && (
