@@ -92,7 +92,10 @@ export function ResponseFeedback() {
 
       if (fromDate) q = q.gte('created_at', fromDate)
       if (toDate)   q = q.lte('created_at', toDate + 'T23:59:59')
-      if (minRating) q = q.gte('rating', Number(minRating))
+      if (minRating) {
+        if (minRating === '1') q = q.eq('rating', 1)
+        else q = q.gte('rating', Number(minRating))
+      }
       if (tab !== 'all') q = q.eq('target_type', tab === 'responder' ? 'responder' : 'agency')
 
       const { data, error } = await q
@@ -221,7 +224,9 @@ export function ResponseFeedback() {
           <select value={minRating} onChange={e => setMinRating(e.target.value)}
             className="bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg px-2 py-2 text-xs text-slate-300">
             <option value="">All ratings</option>
-            {[5,4,3,2,1].map(n => <option key={n} value={n}>{n}★ & above</option>)}
+            {[5,4,3,2,1].map(n => (
+              <option key={n} value={n}>{n === 1 ? '1★' : `${n}★ & above`}</option>
+            ))}
           </select>
           <button onClick={load}
             className="px-3 py-2 rounded-lg text-xs text-[#00d4ff] border border-[rgba(0,212,255,0.3)] hover:bg-[rgba(0,212,255,0.1)] flex items-center gap-1.5 transition-all">
