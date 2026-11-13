@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase'
 import { getNetworkOnline } from '../../lib/capacitor'
 import { useAuthStore } from '../../store/auth'
 import { fmtSosId } from '../../lib/format'
+import api from '../../lib/api'
 
 // ── Acknowledgment Panel ──────────────────────────────────────────────────────
 // Shows agency-level acknowledgment actions for each pending SOS.
@@ -23,6 +24,14 @@ function AcknowledgmentPanel({ agencyType, agencyId }) {
     if (!isOnline || !agencyType) return
     setLoading(true)
     try {
+      // Exclude SOS already actioned by this agency type (any status).
+      // This ensures acknowledged/unable_to_respond SOS don't reappear after navigation.
+      const { data: actioned } = await supabase
+        .from('sos_response_assignments')
+        .select('sos_id')
+        .eq('agency_type', agencyType)
+      const actionedIds = (actioned ?? []).map(r => r.sos_id)
+
       let q = supabase
         .from('sos_reports')
         .select('id,barangay,municipality,status,rescue_status,service_type,created_at,name')
@@ -31,6 +40,7 @@ function AcknowledgmentPanel({ agencyType, agencyId }) {
         .order('created_at', { ascending: false })
         .limit(20)
       if (muni) q = q.eq('municipality', muni)
+      if (actionedIds.length > 0) q = q.not('id', 'in', `(${actionedIds.join(',')})`)
       const { data } = await q
       setPendingSOS(data ?? [])
     } catch (err) {
@@ -57,6 +67,12 @@ function AcknowledgmentPanel({ agencyType, agencyId }) {
         .from('sos_response_assignments')
         .upsert(insertRow, { onConflict: 'sos_id,agency_type' })
       if (error) throw error
+      // For 'acknowledged': also update sos_reports.rescue_status so the VictimTable
+      // reflects it and other agencies' panels won't show it as pending.
+      // 'unable_to_respond' intentionally leaves rescue_status='pending' for other agencies.
+      if (status === 'acknowledged') {
+        api.put(`/sos/${sosId}`, { rescue_status: 'acknowledged' }).catch(() => {})
+      }
       setPendingSOS(prev => prev.filter(r => r.id !== sosId))
     } catch (err) {
       console.error('[AcknowledgmentPanel] acknowledge failed:', err)

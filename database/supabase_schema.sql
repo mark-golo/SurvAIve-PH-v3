@@ -847,7 +847,8 @@ CREATE TABLE IF NOT EXISTS sos_response_assignments (
   decline_reason        TEXT,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (sos_id, agency_id)
+  UNIQUE (sos_id, agency_id),
+  UNIQUE (sos_id, agency_type)
 );
 CREATE INDEX IF NOT EXISTS idx_sra_sos_id        ON sos_response_assignments (sos_id);
 CREATE INDEX IF NOT EXISTS idx_sra_agency_status ON sos_response_assignments (agency_id, status);

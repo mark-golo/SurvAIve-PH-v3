@@ -1032,12 +1032,7 @@ async function put(path, body = {}) {
     if (typeof body.removed_from_view === 'boolean')   updatePayload.removed_from_view = body.removed_from_view
     if (body.status !== undefined)                     updatePayload.status = body.status
     if (body.confirmed_by_role !== undefined)          updatePayload.confirmed_by_role = body.confirmed_by_role
-    // Supabase CHECK constraint rejects 'acknowledged' — skip rescue_status and rely on
-    // confirmed_by_name as the acknowledgment marker; normalizeSos derives the status on read.
     const supaPayload = { ...updatePayload }
-    if (supaPayload.rescue_status === 'acknowledged') {
-      delete supaPayload.rescue_status
-    }
     const [supaResult, phpResult] = await Promise.allSettled([
       supabase.from('sos_reports').update(supaPayload).eq('id', Number(id)),
       localFetch(`sos/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
