@@ -243,9 +243,22 @@ function PolicyBriefPanel({ recommendations, statuses, muni, generatedAt }) {
     <div className="glass rounded-2xl border border-[rgba(0,212,255,0.15)] overflow-hidden">
       <style>{`
         @media print {
-          body > *:not(#policy-brief-root) { display: none !important; }
-          #policy-brief-root { display: block !important; padding: 32px; color: #000; background: #fff; }
-          .no-print { display: none !important; }
+          body * { visibility: hidden; }
+          #policy-brief-root, #policy-brief-root * { visibility: visible; }
+          #policy-brief-root {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            padding: 32px;
+            background: #ffffff !important;
+          }
+          #policy-brief-root, #policy-brief-root * {
+            color: #111 !important;
+            background-color: transparent !important;
+            border-color: #d1d5db !important;
+            box-shadow: none !important;
+          }
+          #policy-brief-root h2 { color: #1d4ed8 !important; }
+          .no-print { display: none !important; visibility: hidden; }
         }
       `}</style>
 
