@@ -117,7 +117,7 @@ export function ConstituentRegistry() {
     setSaving(true)
     try {
       const vid = generateVictimId()
-      const res = await api.post('/constituents', { ...addForm, municipality: muni, victim_id: vid })
+      const res = await api.post('/constituents', { ...addForm, municipality: muni, victim_id: vid, trust_score: 'ADMIN_ENTRY' })
       setData(prev => [...prev, {
         id: res.id, name: addForm.name, contact: addForm.contact_number,
         barangay: addForm.barangay, household: Number(addForm.household_count),
