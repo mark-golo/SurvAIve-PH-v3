@@ -49,6 +49,14 @@ export const useAuthStore = create(
         set({ token: null, user: null, role: null, isGuest: false, scope: null })
       },
 
+      // Synchronous session clear for the login page — clears stale state
+      // immediately so there is no race with an incoming login() call.
+      // Supabase sign-out is fire-and-forget: it never calls set() after firing.
+      clearSession: () => {
+        set({ token: null, user: null, role: null, isGuest: false, scope: null })
+        supabase.auth.signOut().catch(() => {})
+      },
+
       updateUser: (updates) => set((s) => ({ user: { ...s.user, ...updates } })),
 
       isAuthenticated: () => !!(get().token || get().isGuest),
