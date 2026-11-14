@@ -74,20 +74,32 @@ export async function localFetch(path, opts = {}) {
     token = stored?.state?.token ?? null
   } catch { /* ignore */ }
 
-  const res = await fetch(localPhpUrl(path), {
-    ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(opts.headers ?? {}),
-    },
-  })
-  const json = await res.json().catch(() => ({}))
-  if (!res.ok) {
-    const msg = json.error ?? `Local request failed (${res.status})`
-    throw Object.assign(new Error(msg), { error: msg, status: res.status })
+  // 8-second timeout: fail fast when XAMPP is not reachable so callers can
+  // fall through to the Supabase fallback without waiting for the OS TCP timeout
+  // (which can be 30–75 s on Android when the host IP is unreachable).
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 8000)
+  try {
+    const res = await fetch(localPhpUrl(path), {
+      ...opts,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(opts.headers ?? {}),
+      },
+    })
+    clearTimeout(timer)
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      const msg = json.error ?? `Local request failed (${res.status})`
+      throw Object.assign(new Error(msg), { error: msg, status: res.status })
+    }
+    return json
+  } catch (err) {
+    clearTimeout(timer)
+    throw err
   }
-  return json
 }
 
 const TABLE = {

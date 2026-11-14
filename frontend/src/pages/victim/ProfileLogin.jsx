@@ -111,7 +111,12 @@ export function ProfileLogin() {
       navigate('/home')
 
     } catch (e) {
-      setError(e.error ?? e.message ?? 'Sign in failed. Check your Victim ID and PIN.')
+      const raw = e.error ?? e.message ?? 'Sign in failed. Check your Victim ID and PIN.'
+      if (/failed to fetch|aborted|network/i.test(raw)) {
+        setError('Unable to connect. Please check your internet connection or connect to the SurvAIve Wi-Fi hotspot.')
+      } else {
+        setError(raw)
+      }
     }
     setLoading(false)
   }

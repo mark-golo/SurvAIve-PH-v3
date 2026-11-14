@@ -163,6 +163,8 @@ export function VictimSignup() {
       const raw = e.error ?? e.message ?? 'Registration failed. Please try again.'
       if (/already exists|duplicate|unique constraint/i.test(raw)) {
         setError('This contact number is already registered. Go back to Step 1 and sign in instead.')
+      } else if (/failed to fetch|aborted|network/i.test(raw)) {
+        setError('Unable to connect. Please check your internet connection or connect to the SurvAIve Wi-Fi hotspot.')
       } else {
         setError(raw)
       }
