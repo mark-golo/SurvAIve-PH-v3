@@ -20,6 +20,7 @@ END$$;
 
 -- 2. RPC: resolve the assigned responder's current GPS coordinates for a given SOS.
 --    Called by ResponseTracking.jsx on initial load.
+DROP FUNCTION IF EXISTS get_responder_location_for_sos(BIGINT);
 CREATE OR REPLACE FUNCTION get_responder_location_for_sos(p_sos_id BIGINT)
 RETURNS TABLE(
   lat           DOUBLE PRECISION,
@@ -34,6 +35,7 @@ RETURNS TABLE(
 $$ LANGUAGE sql;
 
 -- 3. RPC: upsert a responder's live GPS position (called by FieldMap.jsx).
+DROP FUNCTION IF EXISTS update_responder_location(TEXT, DOUBLE PRECISION, DOUBLE PRECISION);
 CREATE OR REPLACE FUNCTION update_responder_location(
   p_contact_number TEXT,
   p_lat            DOUBLE PRECISION,
