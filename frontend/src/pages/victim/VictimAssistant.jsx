@@ -296,14 +296,14 @@ export function VictimAssistant() {
                       </p>
                     </div>
                     <div className="flex gap-1">
-                      {['en', 'fil'].map(l => (
-                        <button key={l} onClick={() => setLang(l)}
+                      {[{ key: 'en', label: 'EN' }, { key: 'fil', label: 'FIL' }, { key: 'bis', label: 'Bisaya' }].map(({ key, label }) => (
+                        <button key={key} onClick={() => setLang(key)}
                           className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${
-                            lang === l
+                            lang === key
                               ? 'bg-[rgba(34,197,94,0.15)] text-[#22c55e] border-[rgba(34,197,94,0.4)]'
                               : 'glass text-slate-500 border-[rgba(255,255,255,0.1)]'
                           }`}>
-                          {l === 'en' ? 'EN' : 'FIL'}
+                          {label}
                         </button>
                       ))}
                     </div>

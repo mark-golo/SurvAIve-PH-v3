@@ -17,6 +17,7 @@ import { fetchWeather } from '../../lib/weatherService'
 import { assessDelay } from '../../lib/ai/erdiEngine'
 import { ERDIPanel } from '../../components/ui/ERDIPanel'
 import { AIReviewPanel } from '../../components/ui/AIReviewPanel'
+import { parseFieldNotes } from '../../lib/ai/responderIntelligence'
 
 
 const ACTIONS = [
@@ -61,6 +62,7 @@ export function RescueDetail() {
   const [sosEvents,     setSosEvents]     = useState([])
   const [weatherRisk,   setWeatherRisk]   = useState(null)
   const [erdiAssessment,setErdiAssessment]= useState(null)
+  const [notesDraft,    setNotesDraft]    = useState(null)
 
   useEffect(() => {
     api.get(`/sos/${id}`)
@@ -393,13 +395,69 @@ export function RescueDetail() {
 
         {/* Field notes */}
         <GlassCard>
-          <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-3">Field Notes</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider">Field Notes</p>
+            {notes.length >= 20 && victim?.rescue_status !== 'rescued' && (
+              <button
+                onClick={() => setNotesDraft(parseFieldNotes(notes, { centerNames: [] }))}
+                className="text-[10px] px-2 py-1 rounded-xl bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.25)] text-[#00d4ff] font-semibold hover:bg-[rgba(0,212,255,0.18)] transition-colors"
+              >
+                AI: Analyze Notes
+              </button>
+            )}
+          </div>
           <GlassTextarea
             placeholder="Describe the scene, actions taken, equipment used…"
             value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            onChange={(e) => { setNotes(e.target.value); setNotesDraft(null) }}
             rows={3}
           />
+          {notesDraft && (
+            <div className="mt-2 rounded-xl p-3 border border-[rgba(0,212,255,0.15)] bg-[rgba(0,212,255,0.05)] space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-bold text-[#00d4ff] uppercase tracking-wider">AI Notes Summary</p>
+                <button onClick={() => setNotesDraft(null)} className="text-slate-500 hover:text-slate-300 text-xs">✕</button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {notesDraft.rescued_count != null && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(34,197,94,0.15)] border border-[rgba(34,197,94,0.3)] text-[#22c55e] font-medium">
+                    ✓ {notesDraft.rescued_count} rescued
+                  </span>
+                )}
+                {notesDraft.destination && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(139,92,246,0.15)] border border-[rgba(139,92,246,0.3)] text-[#a78bfa] font-medium">
+                    → {notesDraft.destination}
+                  </span>
+                )}
+                {notesDraft.medical_needs?.map(m => (
+                  <span key={m} className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(249,115,22,0.15)] border border-[rgba(249,115,22,0.3)] text-[#f97316] font-medium">
+                    ⚕ {m}
+                  </span>
+                ))}
+              </div>
+              {notesDraft.missingFields?.length > 0 && (
+                <div className="space-y-0.5">
+                  {notesDraft.missingFields.map(f => (
+                    <p key={f} className="text-[10px] text-amber-400">⚠ Missing: {f.replace(/_/g, ' ')}</p>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  const lines = []
+                  if (notesDraft.rescued_count != null) lines.push(`Rescued: ${notesDraft.rescued_count}`)
+                  if (notesDraft.destination) lines.push(`Destination: ${notesDraft.destination}`)
+                  if (notesDraft.medical_needs?.length) lines.push(`Medical: ${notesDraft.medical_needs.join(', ')}`)
+                  lines.push(`Notes: ${notes}`)
+                  navigator.clipboard?.writeText(lines.join('\n')).catch(() => {})
+                }}
+                className="text-[10px] px-2 py-1 rounded-xl bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.1)] text-slate-400 hover:text-slate-200 font-medium"
+              >
+                Copy Draft
+              </button>
+              <p className="text-[10px] text-slate-600">AI-generated draft — verify before submitting.</p>
+            </div>
+          )}
         </GlassCard>
 
         {/* ERDI — delay intelligence (hidden after rescue/cannot_reach) */}

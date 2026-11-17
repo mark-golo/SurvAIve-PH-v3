@@ -6,6 +6,7 @@
 export const DISCLAIMER = {
   en:  'General safety guidance only — always follow official instructions from responders and authorized agencies.',
   fil: 'Pangkalahatang gabay pangkaligtasan lamang — laging sundin ang opisyal na tagubilin ng mga responder at awtorisadong ahensya.',
+  bis: 'Kinatibuk-ang giya sa kaligtasan lamang — kanunay sundon ang opisyal nga sugo sa mga responder ug awtorisadong awtoridad.',
 }
 
 const KB = {
@@ -33,6 +34,17 @@ const KB = {
         ],
         warnings: ['Huwag lumangoy sa baha.', 'Iwasan ang mga nahulog na linya ng kuryente.'],
       },
+      bis: {
+        title: 'Kaligtasan sa Baha',
+        steps: [
+          'Adto sa pinakataas nga luwas nga bahin sa balay o lig-on nga bilding.',
+          'Ayaw lakaw o magmaneho sa nagdagayday nga baha — 15 cm ra ang makabali sa imong tiil.',
+          'Patya ang kuryente sa main breaker kung nagsulod na ang tubig sa balay.',
+          'Tipigan ang baterya sa telepono; mapadala ang SOS usa ra ka beses.',
+          'Maghulat sa responder sa taas ug makita nga dapit kung luwas.',
+        ],
+        warnings: ['Ayaw langa sa baha.', 'Likayi ang mga nahulog nga linya sa kuryente.'],
+      },
     },
     earthquake: {
       en: {
@@ -57,6 +69,17 @@ const KB = {
         ],
         warnings: ['Huwag gumamit ng elevator.', 'Huwag magsindi ng posporo — baka may gas leak.'],
       },
+      bis: {
+        title: 'Kaligtasan sa Linog',
+        steps: [
+          'Yapa, takop, ug kupot sa ilalim sa lig-on nga lamesa hangtod mohunong ang pagkurog.',
+          'Palayo sa bintana, salamin, ug bug-at nga butang nga mahimong mahulog.',
+          'Kung nabilanggo sa guba, kumadto sa tubo o pader aron makit-an ka sa rescuer.',
+          'Hulaton ang aftershocks; ayaw sulod pag-usab sa guba nga bilding.',
+          'Kung duul sa dagat human sa kusog nga linog, dali adto sa taas nga dapit.',
+        ],
+        warnings: ['Ayaw gamita ang elevator.', 'Ayaw sugnora ang posporo — basin adunay gas leak.'],
+      },
     },
     typhoon: {
       en: {
@@ -78,6 +101,16 @@ const KB = {
           'Huwag lumabas kapag biglang kumalma — babalik ang malakas na hangin.',
         ],
         warnings: ['Iwasan ang tabing-ilog, tabing-dagat, at madulas na gulod.'],
+      },
+      bis: {
+        title: 'Kaligtasan sa Bagyo',
+        steps: [
+          'Pabilin sa sulod, palayo sa bintana; adto sa pinaka-lig-on nga bahin sa balay.',
+          'Sunda ang opisyal nga sugo sa evacuation gikan sa barangay o MDRRMO.',
+          'Andama ang tubig, pagkaon, flashlight, ug naka-charge nga telepono sa usa ka bag.',
+          'Ayaw gawas kung kalit nga naghilom — mobalik ang kusog nga hangin.',
+        ],
+        warnings: ['Likayi ang kilid sa suba, kilid sa dagat, ug madahilis nga bungdo.'],
       },
     },
     landslide: {
@@ -101,6 +134,16 @@ const KB = {
         ],
         warnings: ['Huwag maghukay mag-isa para sa mga naipit — hintayin ang responder.'],
       },
+      bis: {
+        title: 'Kaligtasan sa Pagdahili sa Yuta',
+        steps: [
+          'Palayo sa pikas nga direksyon sa pagdahili, dili pababa sa agianan niini.',
+          'Pamati sa dagundong o lagutok nga timailhan sa laing pagdahili.',
+          'Palayo sa lugar sa pagdahili; mahimong mobalik ang pagdahili.',
+          'Iapil sa SOS ang katapusang nahibaw-ang dapit sa mga nabiling.',
+        ],
+        warnings: ['Ayaw mag-ukab mag-inusara alang sa mga nabilanggo — hulaton ang responder.'],
+      },
     },
     general: {
       en: {
@@ -120,6 +163,16 @@ const KB = {
           'Magpadala ng isang SOS na may lokasyon, bilang ng tao, at sitwasyon.',
           'Tipirin ang baterya: hinaan ang liwanag ng screen, isara ang ibang apps.',
           'Sundin ang tagubilin ng barangay at MDRRMO.',
+        ],
+        warnings: [],
+      },
+      bis: {
+        title: 'Kaligtasan sa Kalamidad',
+        steps: [
+          'Adto sa labing luwas nga dapit ug pabilin nga magkauban.',
+          'Magpadala ug usa ka SOS nga adunay lokasyon, gidaghanon sa tawo, ug sitwasyon.',
+          'Tipigan ang baterya: panaphonan ang kahayag sa screen, sirado ang uban apps.',
+          'Sunda ang sugo sa barangay ug MDRRMO.',
         ],
         warnings: [],
       },
@@ -147,6 +200,16 @@ const KB = {
         ],
         warnings: ['Huwag bunutin ang bagay na nakabaon sa sugat — diinan ang paligid nito.'],
       },
+      bis: {
+        title: 'Grabe nga Pagdugo',
+        steps: [
+          'Pindota nang padayon ang samad gamit ang pinakaputli nga tela.',
+          'Ayaw buhata ang tela; dagdag pa ug laing tela kung magpahiagus ang dugo.',
+          'Kung bukton o tiil ang nagdugo, itaas kini nga mas taas sa kasingkasing samtang naka-pindot.',
+          'Paiinit ug pabantayan ang pasyente samtang naghulat sa responder.',
+        ],
+        warnings: ['Ayaw buhata ang butang nga naghimutang sa samad — pindota ang palibot niini.'],
+      },
     },
     unconscious: {
       en: {
@@ -171,6 +234,17 @@ const KB = {
         ],
         warnings: ['Huwag painumin o pakainin ang taong walang malay.'],
       },
+      bis: {
+        title: 'Tawo nga Walay Panimuot',
+        steps: [
+          'Susaa kung motubag: tapika pag-ayo ang abaga ug tawga ang iyang ngalan.',
+          'Susaa kung nagginhawa: bantayi ang pagtaas sa dughan hangtod 10 segundo.',
+          'Kung nagginhawa, ihigda siya sa kilid (recovery position) ug bantayi.',
+          'Kung WALA magginhawa ug mahibalo ka, sugdi ang chest compressions sa tunga sa dughan.',
+          'Isulat sa SOS: "walay panimuot / wala magginhawa".',
+        ],
+        warnings: ['Ayaw painuma o pakaona ang tawo nga walay panimuot.'],
+      },
     },
     general: {
       en: {
@@ -192,6 +266,16 @@ const KB = {
           'Maghanda ng malinaw na daanan at taga-gabay para sa mga responder.',
         ],
         warnings: ['Hindi ito diagnosis — ilarawan ang sintomas sa mga responder.'],
+      },
+      bis: {
+        title: 'Medikal nga Emergency',
+        steps: [
+          'Pabilin nga pahulaya ug bantayi ang pasyente.',
+          'Isulat sa SOS notes ang mga simtoma, sakit, ug giinumang tambal.',
+          'Ayaw hatagi ug tambal, pagkaon, o ilimnon gawas kung sugo sa medikal nga tauhan.',
+          'Andama ang klaro nga agianan ug magtugon para sa mga responder.',
+        ],
+        warnings: ['Dili kini diagnosis — ihulagway ang mga simtoma sa mga responder.'],
       },
     },
   },
@@ -219,6 +303,17 @@ const KB = {
         ],
         warnings: ['Huwag gumamit ng tubig sa sunog mula sa kuryente o mantika.', 'Huwag magtago sa loob — lumabas.'],
       },
+      bis: {
+        title: 'Kaligtasan sa Sunog',
+        steps: [
+          'Gawas dayon ug ayaw na mobalik alang sa mga butang.',
+          'Yukbo sa ilalim sa aso; gapang kung kinahanglan, tabonan ang ilong ug baba.',
+          'Hikapa ang pinto gamit ang likod sa kamot — ayaw bukhara ang mainit nga pinto.',
+          'Paggawas, palayo sa bilding ug ihilway ang tanan.',
+          'Kung nasunog ang sinina: hunong, humba, ug mugol.',
+        ],
+        warnings: ['Ayaw gamita ang tubig sa sunog gikan sa kuryente o mantika.', 'Ayaw magtago sulod — gawas.'],
+      },
     },
     general: {
       en: {
@@ -238,6 +333,15 @@ const KB = {
           'Isama sa SOS kung may naipit at ang eksaktong palapag o kwarto.',
         ],
         warnings: ['Ang usok ang pangunahing pumapatay — yumuko at lumabas agad.'],
+      },
+      bis: {
+        title: 'Emergency sa Sunog / Aso',
+        steps: [
+          'Palabasa dayon ang tanan; ayaw labana mag-inusara ang nagkuyanap nga kalayo.',
+          'Isira ang mga pinto paggawas aron pabagalan ang pagkuyanap sa kalayo.',
+          'Iapil sa SOS kung adunay nabilanggo ug ang eksaktong salog o kwarto.',
+        ],
+        warnings: ['Ang aso ang nag-unang nagpatay — yukbo ug gawas dayon.'],
       },
     },
   },
@@ -263,6 +367,16 @@ const KB = {
         ],
         warnings: ['Kaligtasan mo ang una — huwag makialam para lang maka-video.'],
       },
+      bis: {
+        title: 'Emergency sa Seguridad',
+        steps: [
+          'Adto sa luwas ug masiraduhang dapit, palayo sa hulga.',
+          'Pugngi ang imong kaugalingon; i-silent ang telepono samtang nagpadala ug SOS.',
+          'Itala ang luwas mong nakita: pila sila, adunay armas ba, asa padulong.',
+          'Ayaw atubanga o sundon ang bisan kinsa — hulaton ang pulis.',
+        ],
+        warnings: ['Ang imong kaligtasan ang una — ayaw mag-apil para makakuha ug video.'],
+      },
     },
   },
   pcg: {
@@ -287,6 +401,16 @@ const KB = {
         ],
         warnings: ['Huwag lumangoy papunta sa pampang maliban kung tiyak na malapit ito.'],
       },
+      bis: {
+        title: 'Nabaliskad nga Sakayan',
+        steps: [
+          'Pabilin sa sakayan kung lumulutaw pa — mas sayon kining makita kaysa sa manlalangoy.',
+          'Kupti ang bisan unsa nga lumulutaw; tipigan ang kusog, likayi ang paglangoy nga walay rason.',
+          'Magtipon-tipon ang grupo; mag-abrasong bilog aron magpabilin nga makita ug init.',
+          'Sunyasan ang rescuer gamit ang hayag nga tela o suga sa telepono sa gabii.',
+        ],
+        warnings: ['Ayaw langa padulong sa baybayon gawas kung siguradong duul kini.'],
+      },
     },
     general: {
       en: {
@@ -306,6 +430,15 @@ const KB = {
           'Magsama-sama at magbantay ng rescue vessel.',
         ],
         warnings: ['Sundin ang tagubilin ng Coast Guard kapag nakausap na.'],
+      },
+      bis: {
+        title: 'Emergency sa Dagat',
+        steps: [
+          'Isul-ob dayon ang life jacket o kupti ang lumulutaw.',
+          'Ipadala ang SOS nga adunay katapusang posisyon, ngalan sa barko, ug gidaghanon sa sakay.',
+          'Magtipon-tipon ug magbantay sa rescue vessel.',
+        ],
+        warnings: ['Sunda ang sugo sa Coast Guard kung nakugnit na.'],
       },
     },
   },
@@ -331,6 +464,16 @@ const KB = {
         ],
         warnings: [],
       },
+      bis: {
+        title: 'Giya sa Emergency',
+        steps: [
+          'Pabilin nga malinawon ug adto sa labing luwas nga dapit.',
+          'Magpadala ug usa ka SOS nga adunay lokasyon, gidaghanon sa tawo, ug nahitabo.',
+          'Tipigan ang baterya — panaphonan ang screen ug isira ang uban apps.',
+          'Pabilin kung diin ka makita sa responder, gawas kung delikado.',
+        ],
+        warnings: [],
+      },
     },
   },
 }
@@ -343,7 +486,7 @@ const CONDITION_TO_KB = {
   medical_emergency:   ['hospital', 'general'],
 }
 
-export function getAvailableLanguages() { return ['en', 'fil'] }
+export function getAvailableLanguages() { return ['en', 'fil', 'bis'] }
 
 // → { title, steps[], warnings[], source, disclaimer }
 // Resolution: service+subtype → service general → condition mapping → universal.

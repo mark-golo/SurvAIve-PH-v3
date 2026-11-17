@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { buildStructuredSOS } from '../../lib/ai/emergencyIntelligence'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   AlertTriangle, MapPin, Users, FileText, Check,
@@ -44,6 +45,10 @@ export function SOSReport() {
   const aiPrefill = location.state?.aiPrefill ?? null
   const [showAiBanner, setShowAiBanner] = useState(!!aiPrefill)
 
+  // ── AI completeness hints — only shown on direct entry (not when aiPrefill already active)
+  const [sosHint,         setSosHint]         = useState(null)
+  const [hintDismissed,   setHintDismissed]   = useState(false)
+
   // ── Form state ───────────────────────────────────────────────────────────────
   const [form, setForm] = useState({
     status:       aiPrefill?.form?.status ?? location.state?.status ?? 'trapped',
@@ -86,6 +91,19 @@ export function SOSReport() {
       handlePromise.then(h => h.remove()).catch(() => {})
     }
   }, [])
+
+  // ── AI completeness hint — debounced, only on direct entry (not aiPrefill path)
+  useEffect(() => {
+    if (aiPrefill || hintDismissed) return
+    if (form.notes.length < 25) { setSosHint(null); return }
+    const timer = setTimeout(() => {
+      try {
+        const result = buildStructuredSOS(form.notes, { isVerified: !isGuest })
+        setSosHint(result)
+      } catch { setSosHint(null) }
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [form.notes, aiPrefill, hintDismissed, isGuest])
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
   const f = (k) => (v) => setForm(p => ({ ...p, [k]: typeof v === 'function' ? v(p[k]) : v }))
@@ -548,6 +566,41 @@ export function SOSReport() {
             rows={4}
           />
         </GlassCard>
+
+        {/* AI completeness hints — only shown on direct entry */}
+        {sosHint && !hintDismissed && (
+          <div className="glass rounded-2xl p-3 border border-[rgba(0,212,255,0.2)] bg-[rgba(0,212,255,0.04)] space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-bold text-[#00d4ff] uppercase tracking-wider">AI Analysis</p>
+              <button onClick={() => setHintDismissed(true)} className="text-slate-500 hover:text-slate-300 text-xs">✕</button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {sosHint.classification.serviceTypes.map(s => (
+                <span key={s} className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(0,212,255,0.12)] border border-[rgba(0,212,255,0.3)] text-[#00d4ff] font-medium capitalize">
+                  {s === 'mdrrmo' ? 'Disaster' : s === 'hospital' ? 'Medical' : s === 'bfp' ? 'Fire' : s === 'pnp' ? 'Security' : s === 'pcg' ? 'Maritime' : s}
+                </span>
+              ))}
+              {sosHint.entities.victimCount != null && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(139,92,246,0.12)] border border-[rgba(139,92,246,0.3)] text-[#a78bfa] font-medium">
+                  {sosHint.entities.victimCount} {sosHint.entities.victimCount === 1 ? 'person' : 'people'}
+                </span>
+              )}
+              {sosHint.entities.conditions.map(c => (
+                <span key={c} className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(239,68,68,0.12)] border border-[rgba(239,68,68,0.3)] text-[#ef4444] font-medium capitalize">
+                  {c.replace(/_/g, ' ')}
+                </span>
+              ))}
+            </div>
+            {sosHint.missingFields.length > 0 && (
+              <div className="space-y-0.5">
+                {sosHint.missingFields.map(mf => (
+                  <p key={mf.field} className="text-[10px] text-amber-400">⚠ {mf.prompt}</p>
+                ))}
+              </div>
+            )}
+            <p className="text-[10px] text-slate-600">AI analysis — tap Use in SOS or type to refine.</p>
+          </div>
+        )}
 
         <NeonButton
           variant="red"
