@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Map, Sparkles, Settings, MessageSquare, Battery, Satellite, Home, Wifi, WifiOff, ShieldCheck, ShieldAlert } from 'lucide-react'
+import { Map, Sparkles, Settings, MessageSquare, Battery, Satellite, Home, Wifi, WifiOff, ShieldCheck, ShieldAlert, AlertTriangle } from 'lucide-react'
 import { SOSButton } from '../../components/ui/SOSButton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { MobileNavBar } from '../../components/ui/NavBar'
@@ -192,6 +192,7 @@ export function HomeScreen() {
   const [isOnline, setIsOnline] = useState(getNetworkOnline())
   const [gpsState, setGpsState] = useState('unknown') // 'active' | 'denied' | 'unknown'
   const [battery, setBattery]   = useState(null)      // null = API not available
+  const [unsafeSuggestion, setUnsafeSuggestion] = useState(false)
 
   useEffect(() => {
     document.title = 'SurvAIve PH – Home'
@@ -301,10 +302,42 @@ export function HomeScreen() {
                       p_new_status: dbStatus,
                     })
                     if (error) throw error
+                    if (s.value === 'unsafe') setUnsafeSuggestion(true)
                   }}
                 />
               ))}
             </div>
+            {/* §2.5 UNSAFE → SOS suggestion */}
+            {unsafeSuggestion && (
+              <div className="glass rounded-2xl border border-[rgba(239,68,68,0.25)] bg-[rgba(239,68,68,0.04)] p-4 space-y-3 mt-3">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle size={14} className="text-red-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-bold text-red-400 mb-1">Need Rescue Assistance?</p>
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      You've reported UNSAFE. If you need rescue, submitting an SOS report
+                      with more details helps responders reach you faster.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/sos/new')}
+                    className="flex-1 text-xs font-semibold py-2 px-3 rounded-xl bg-[rgba(239,68,68,0.2)] border border-[rgba(239,68,68,0.35)] text-red-400 hover:bg-[rgba(239,68,68,0.3)] transition-colors"
+                  >
+                    Submit SOS Report
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUnsafeSuggestion(false)}
+                    className="text-xs py-2 px-3 rounded-xl bg-[rgba(255,255,255,0.05)] text-slate-400 hover:bg-[rgba(255,255,255,0.1)] transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

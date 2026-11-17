@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { getResponderTheme } from '../../lib/victimTheme'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MapPin, Users, Phone, Navigation, CheckCircle, XCircle, AlertTriangle, UserCheck, Home, List, Map, Sparkles, Settings, Radio } from 'lucide-react'
+import { MapPin, Users, Phone, Navigation, CheckCircle, XCircle, AlertTriangle, UserCheck, Home, List, Map, Sparkles, Settings, Radio, Brain, ChevronDown } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -17,7 +17,7 @@ import { fetchWeather } from '../../lib/weatherService'
 import { assessDelay } from '../../lib/ai/erdiEngine'
 import { ERDIPanel } from '../../components/ui/ERDIPanel'
 import { AIReviewPanel } from '../../components/ui/AIReviewPanel'
-import { parseFieldNotes } from '../../lib/ai/responderIntelligence'
+import { parseFieldNotes, summarizeSOS } from '../../lib/ai/responderIntelligence'
 
 
 const ACTIONS = [
@@ -64,6 +64,7 @@ export function RescueDetail() {
   const [weatherRisk,   setWeatherRisk]   = useState(null)
   const [erdiAssessment,setErdiAssessment]= useState(null)
   const [notesDraft,    setNotesDraft]    = useState(null)
+  const [briefingExpanded, setBriefingExpanded] = useState(true)
 
   useEffect(() => {
     api.get(`/sos/${id}`)
@@ -252,6 +253,9 @@ export function RescueDetail() {
     }
   }
 
+  // §3.1 AI Mission Briefing — computed from loaded SOS report
+  const briefing = useMemo(() => victim ? summarizeSOS(victim) : null, [victim])
+
   const elapsed = timer ? Math.floor((Date.now() - timer) / 1000) : null
 
   if (dataLoading) return (
@@ -295,6 +299,62 @@ export function RescueDetail() {
             </div>
           </div>
         </div>
+
+        {/* AI Mission Briefing — §3.1 §3.2 */}
+        {briefing && (
+          <div className="glass rounded-2xl border border-[rgba(139,92,246,0.25)] overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setBriefingExpanded(e => !e)}
+              className="w-full flex items-center gap-2 px-4 py-3"
+            >
+              <Brain size={13} className="text-violet-400 shrink-0" />
+              <div className="flex-1 text-left">
+                <p className="text-xs font-bold text-violet-300">AI Mission Briefing</p>
+                <p className="text-[11px] text-slate-400 truncate">{briefing.headline}</p>
+              </div>
+              <ChevronDown size={13} className="text-slate-500 shrink-0 transition-transform"
+                style={{ transform: briefingExpanded ? 'rotate(180deg)' : 'none' }} />
+            </button>
+            {briefingExpanded && (
+              <div className="px-4 pb-4 space-y-2 border-t border-[rgba(255,255,255,0.06)]">
+                <p className="text-xs text-slate-300 leading-relaxed pt-3">{briefing.narrative}</p>
+                {briefing.missingInfo?.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {briefing.missingInfo.map((m, i) => (
+                      <span key={i} className="text-[10px] px-2 py-0.5 rounded-full
+                        bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.3)] text-amber-400">
+                        ⚠ {m}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {briefing.priority?.factors?.length > 0 && (
+                  <div className="pt-1 border-t border-[rgba(255,255,255,0.05)]">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 font-semibold">
+                      Priority Factors
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {briefing.priority.factors.map((f, i) => (
+                        <span key={i} className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                          style={{
+                            color: f.points > 0 ? '#ef4444' : '#22c55e',
+                            background: f.points > 0 ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)',
+                            border: `1px solid ${f.points > 0 ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}`,
+                          }}>
+                          {f.label} {f.points > 0 ? `+${f.points}` : f.points}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <p className="text-[10px] text-slate-600 italic">
+                  AI-generated summary — verify against full report below.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Victim details */}
         <GlassCard>

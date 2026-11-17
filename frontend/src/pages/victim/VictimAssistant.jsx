@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sparkles, Send, ChevronDown, ChevronUp, AlertTriangle,
-  BookOpen, Check, WifiOff,
+  BookOpen, Check, WifiOff, MapPin,
   Home, Map, Settings, MessageSquare, FileText,
 } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
@@ -50,6 +50,7 @@ export function VictimAssistant() {
   const [draft,    setDraft]    = useState(null)  // user-editable copy of form fields
   const [showWhy,  setShowWhy]  = useState(false)
   const [lang,     setLang]     = useState('en')
+  const [landmark, setLandmark] = useState('')
 
   const analyze = () => {
     const text = input.trim()
@@ -64,6 +65,9 @@ export function VictimAssistant() {
       ageGroup:     result.ageGroup,
       conditions:   result.conditions,
     })
+    if (result.entities?.landmarks?.length > 0) {
+      setLandmark(result.entities.landmarks[0])
+    }
     setShowWhy(false)
   }
 
@@ -83,7 +87,7 @@ export function VictimAssistant() {
             status:       draft.status,
             people_count: draft.people_count,
             service_type: draft.service_type,
-            notes:        draft.notes,
+            notes:        draft.notes + (landmark ? ` Near ${landmark}.` : ''),
           },
           ageGroup:   draft.ageGroup,
           conditions: draft.conditions,
@@ -284,6 +288,24 @@ export function VictimAssistant() {
                   </p>
                 </GlassCard>
               )}
+
+              {/* ── Landmark input — §2.4 ────────────────────────────────── */}
+              <GlassCard>
+                <label className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold flex items-center gap-1 mb-1.5">
+                  <MapPin size={10} className="text-[#00d4ff]" />
+                  Nearby Landmark (optional)
+                </label>
+                <input
+                  type="text"
+                  value={landmark}
+                  onChange={e => setLandmark(e.target.value)}
+                  placeholder="e.g. near the public school, beside the church…"
+                  className="w-full text-xs rounded-xl bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.1)] px-3 py-2 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-[rgba(0,212,255,0.4)]"
+                />
+                <p className="text-[9px] text-slate-600 mt-1">
+                  Helps responders locate you when GPS alone is insufficient.
+                </p>
+              </GlassCard>
 
               {/* ── Safety instructions ───────────────────────────────────── */}
               {instructions && (
