@@ -303,11 +303,27 @@ async function get(path) {
     }
   }
 
-  // ── Province reports — always served from local XAMPP MySQL ─────────────────
+  // ── Province reports — Supabase primary, XAMPP merge for hotspot-only rows ──
   if (resource === 'province_reports') {
-    const qs = params.toString()
-    const rows = await localFetch(`province_reports${qs ? '?' + qs : ''}`)
-    return Array.isArray(rows) ? rows : (rows ? [rows] : [])
+    const prov = params.get('province')
+    if (!prov) return []
+    const { data, error } = await supabase
+      .from('province_reports')
+      .select('id, province, date, label, total, critical, rescued, reporting, saved_at')
+      .eq('province', prov)
+      .order('date', { ascending: false })
+      .limit(90)
+    if (error) sbThrow(error)
+    try {
+      const qs = params.toString()
+      const mysqlRows = await localFetch(`province_reports${qs ? '?' + qs : ''}`)
+      if (Array.isArray(mysqlRows) && mysqlRows.length) {
+        const sbDates = new Set((data ?? []).map(r => r.date))
+        const mysqlOnly = mysqlRows.filter(r => !sbDates.has(r.date))
+        return [...(data ?? []), ...mysqlOnly]
+      }
+    } catch { /* XAMPP not running */ }
+    return data ?? []
   }
 
   // ── Offline: route all reads to local XAMPP PHP backend ─────────────────────
@@ -442,9 +458,18 @@ async function get(path) {
 async function post(path, body = {}) {
   const { resource, table, params } = parsePath(path)
 
-  // ── Province reports — always written to local XAMPP MySQL ──────────────────
+  // ── Province reports — Supabase primary, XAMPP mirror fire-and-forget ───────
   if (resource === 'province_reports') {
-    return localFetch('province_reports', { method: 'POST', body: JSON.stringify(body) })
+    const { province, date, label = '', total = 0, critical = 0, rescued = 0, reporting = 0 } = body
+    const { error } = await supabase
+      .from('province_reports')
+      .upsert(
+        { province, date, label, total, critical, rescued, reporting, saved_at: new Date().toISOString() },
+        { onConflict: 'province,date' }
+      )
+    if (error) sbThrow(error)
+    localFetch('province_reports', { method: 'POST', body: JSON.stringify(body) }).catch(() => {})
+    return { ok: true }
   }
 
   // ── Auth endpoints ──
@@ -630,34 +655,17 @@ async function post(path, body = {}) {
         trust_score:                    'HIGH',
       }
 
-      // Try local XAMPP PHP first — works in dev (XAMPP running) and on the admin
-      // Wi-Fi hotspot (offline Mode 2). Falls back to Supabase when XAMPP is not
-      // reachable (e.g. production PWA without a hotspot).
-      try {
-        const phpRes = await localFetch('auth/register', { method: 'POST', body: JSON.stringify(body) })
-
-        // Mirror to Supabase so the admin Constituent Registry (which reads Supabase
-        // when online) can see the new victim. Requires victims_device_register RLS
-        // policy — see database/migration_device_auth.sql Part 2.
-        // Fire-and-forget: PHP insert already succeeded, Supabase is best-effort.
-        supabase.from('victims').insert(victimData).then(() => {}).catch(() => {})
-
-        return phpRes
-      } catch (phpErr) {
-        // Re-throw business errors (4xx) — only swallow network/connectivity errors
-        // so that a PHP 409 "already exists" is NOT silently swallowed and replaced
-        // by a raw Supabase unique-constraint error on the fallback path.
-        if (phpErr.status && phpErr.status < 500) throw phpErr
-        // XAMPP not reachable — fall through to Supabase-only insert below.
-      }
-
-      // Supabase fallback: insert victim row directly with the anon key.
+      // Supabase-first: insert victim row directly with the anon key.
       // Do NOT use .select() after insert — "staff read victims" SELECT policy blocks
       // anon from reading back the row, causing PostgREST to raise a false RLS error
       // even when the INSERT itself succeeds.
       const { error: ve } = await supabase
         .from('victims').insert(victimData)
       if (ve) sbThrow(ve)
+
+      // Mirror to XAMPP (dev / Wi-Fi hotspot support) — fire-and-forget.
+      // Silently fails in production when XAMPP is not running.
+      localFetch('auth/register', { method: 'POST', body: JSON.stringify(body) }).catch(() => {})
 
       const user = {
         id:             null, // DB-generated id not readable by anon; not needed for offline token
@@ -683,31 +691,7 @@ async function post(path, body = {}) {
         return localFetch('auth/victim-login', { method: 'POST', body: JSON.stringify(body) })
       }
 
-      // Online: try PHP first — covers victims who are in MySQL only
-      try {
-        const phpRes = await localFetch('auth/victim-login', { method: 'POST', body: JSON.stringify(body) })
-        if (phpRes?.user) {
-          // Mirror victim to Supabase so the SOS user_id link works on next submit
-          const m = phpRes.user
-          supabase.from('victims').upsert({
-            victim_id:      m.victim_id      ?? body.victim_id,
-            name:           m.name           ?? null,
-            contact_number: m.contact_number ?? null,
-            province:       m.province       ?? null,
-            municipality:   m.municipality   ?? null,
-            barangay:       m.barangay       ?? null,
-            sitio:          m.sitio          ?? null,
-            emergency_contact_name:         m.emergency_contact_name         ?? null,
-            emergency_contact_number:       m.emergency_contact_number       ?? null,
-            emergency_contact_relationship: m.emergency_contact_relationship ?? null,
-          }, { onConflict: 'victim_id' }).then(() => {}).catch(() => {})
-        }
-        return phpRes
-      } catch {
-        // XAMPP not running → fall through to Supabase path
-      }
-
-      // Supabase path: victim is already in Supabase — verify client-side
+      // Online: Supabase-first — verify victim directly, no XAMPP timeout
       const { data: victim, error: qe } = await supabase
         .from('victims')
         .select('id, name, contact_number, province, municipality, barangay, sitio, emergency_contact_name, emergency_contact_number, emergency_contact_relationship, pin_hash, device_key_hash, pin_salt, status')
@@ -743,6 +727,25 @@ async function post(path, body = {}) {
         emergency_contact_number:       victim.emergency_contact_number ?? null,
         emergency_contact_relationship: victim.emergency_contact_relationship ?? null,
       }
+      // Mirror to XAMPP (dev / hotspot sync) — fire-and-forget
+      localFetch('auth/victim-login', { method: 'POST', body: JSON.stringify(body) })
+        .then(phpRes => {
+          if (phpRes?.user) {
+            const m = phpRes.user
+            supabase.from('victims').upsert({
+              victim_id:                      m.victim_id                      ?? body.victim_id,
+              name:                           m.name                           ?? null,
+              contact_number:                 m.contact_number                 ?? null,
+              province:                       m.province                       ?? null,
+              municipality:                   m.municipality                   ?? null,
+              barangay:                       m.barangay                       ?? null,
+              sitio:                          m.sitio                          ?? null,
+              emergency_contact_name:         m.emergency_contact_name         ?? null,
+              emergency_contact_number:       m.emergency_contact_number       ?? null,
+              emergency_contact_relationship: m.emergency_contact_relationship ?? null,
+            }, { onConflict: 'victim_id' }).catch(() => {})
+          }
+        }).catch(() => {})
       return { token: createOfflineToken(user), user }
     }
 

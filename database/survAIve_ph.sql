@@ -195,6 +195,22 @@ CREATE TABLE IF NOT EXISTS `sos_status_events` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
+-- Province Reports (daily aggregate snapshots — superadmin ops reports)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS province_reports (
+  id        INT           AUTO_INCREMENT PRIMARY KEY,
+  province  VARCHAR(100)  NOT NULL,
+  date      DATE          NOT NULL,
+  label     VARCHAR(100)  NOT NULL DEFAULT '',
+  total     INT           NOT NULL DEFAULT 0,
+  critical  INT           NOT NULL DEFAULT 0,
+  rescued   INT           NOT NULL DEFAULT 0,
+  reporting INT           NOT NULL DEFAULT 0,
+  saved_at  TIMESTAMP     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_province_date (province, date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
 -- Escalations
 -- ============================================================
 CREATE TABLE IF NOT EXISTS escalations (
