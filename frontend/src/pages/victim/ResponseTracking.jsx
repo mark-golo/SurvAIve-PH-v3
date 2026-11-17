@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { CheckCircle, Clock, RefreshCw, AlertOctagon, Home, MessageSquare, Map, Radio, Settings } from 'lucide-react'
+import { CheckCircle, Clock, RefreshCw, AlertOctagon, Home, MessageSquare, Map, Sparkles, Settings } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
@@ -50,7 +50,7 @@ const NAV = [
   { icon: Home,          label: 'Home',     path: '/home'     },
   { icon: MessageSquare, label: 'SOS',      path: '/sos'      },
   { icon: Map,           label: 'Map',      path: '/map'      },
-  { icon: Radio,         label: 'Mesh',     path: '/mesh'     },
+  { icon: Sparkles,      label: 'AI',       path: '/assistant' },
   { icon: Settings,      label: 'Settings', path: '/settings' },
 ]
 

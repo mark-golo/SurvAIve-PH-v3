@@ -93,7 +93,6 @@ CREATE TABLE IF NOT EXISTS responders (
   assigned_zone     VARCHAR(200) DEFAULT NULL,
   assigned_barangay VARCHAR(100) DEFAULT NULL,
   duty_status       ENUM('on_duty','standby') NOT NULL DEFAULT 'standby',
-  active_mesh_relay TINYINT(1)   NOT NULL DEFAULT 0,
   -- GPS columns synced from Supabase (not in original survAIve_ph.sql)
   lat               DOUBLE       DEFAULT NULL,
   lng               DOUBLE       DEFAULT NULL,
@@ -166,9 +165,8 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   rescue_status          ENUM('pending','acknowledged','en_route','on_scene','rescued','cannot_reach') NOT NULL DEFAULT 'pending',
   field_notes            TEXT             DEFAULT NULL,
   service_type           JSON             DEFAULT NULL,
-  -- mesh relay tracking
+  -- SOS dedup UUID (client-generated; also the guest SOS lookup key)
   mesh_packet_id         VARCHAR(36)      DEFAULT NULL,
-  relay_source           VARCHAR(50)      DEFAULT NULL,
   -- offline-tracking columns (not in Supabase)
   dismissed              TINYINT(1)       NOT NULL DEFAULT 0,
   flagged                TINYINT(1)       NOT NULL DEFAULT 0,
@@ -306,16 +304,6 @@ CREATE TABLE IF NOT EXISTS escalations (
   FOREIGN KEY (escalated_by) REFERENCES admins(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
--- ── Mesh Events (relay simulation log) ────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS mesh_events (
-  id         INT          AUTO_INCREMENT PRIMARY KEY,
-  device_id  VARCHAR(50)  NOT NULL,
-  event_type VARCHAR(50)  NOT NULL,
-  data       JSON         DEFAULT NULL,
-  timestamp  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_device (device_id)
-) ENGINE=InnoDB;
-
 -- ── Audit / Activity Logs ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS activity_logs (
   id           BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -355,7 +343,7 @@ ALTER TABLE admins
   ADD COLUMN IF NOT EXISTS trust_score VARCHAR(20) DEFAULT 'HIGH'    AFTER is_verified;
 
 ALTER TABLE responders
-  ADD COLUMN IF NOT EXISTS lat             DOUBLE    DEFAULT NULL AFTER active_mesh_relay,
+  ADD COLUMN IF NOT EXISTS lat             DOUBLE    DEFAULT NULL AFTER assigned_barangay,
   ADD COLUMN IF NOT EXISTS lng             DOUBLE    DEFAULT NULL AFTER lat,
   ADD COLUMN IF NOT EXISTS last_seen_at    TIMESTAMP NULL DEFAULT NULL AFTER lng;
 
@@ -374,7 +362,6 @@ ALTER TABLE sos_reports
   ADD COLUMN IF NOT EXISTS synced_to_cloud       TINYINT(1)   NOT NULL DEFAULT 0 AFTER dismissed,
   ADD COLUMN IF NOT EXISTS synced_at             TIMESTAMP    NULL DEFAULT NULL AFTER synced_to_cloud,
   ADD COLUMN IF NOT EXISTS mesh_packet_id        VARCHAR(36)  DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS relay_source          VARCHAR(50)  DEFAULT NULL,
   -- service_type: replace VARCHAR with JSON for multi-select array storage
   MODIFY COLUMN service_type JSON DEFAULT NULL;
 

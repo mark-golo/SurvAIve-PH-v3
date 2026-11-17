@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Star, CheckCircle, WifiOff, AlertOctagon, Send, ChevronLeft, Home, MessageSquare, Map, Radio, Settings } from 'lucide-react'
+import { Star, CheckCircle, WifiOff, AlertOctagon, Send, ChevronLeft, Home, MessageSquare, Map, Sparkles, Settings } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
@@ -14,7 +14,7 @@ const NAV = [
   { icon: Home,          label: 'Home',     path: '/home'     },
   { icon: MessageSquare, label: 'SOS',      path: '/sos'      },
   { icon: Map,           label: 'Map',      path: '/map'      },
-  { icon: Radio,         label: 'Mesh',     path: '/mesh'     },
+  { icon: Sparkles,      label: 'AI',       path: '/assistant' },
   { icon: Settings,      label: 'Settings', path: '/settings' },
 ]
 

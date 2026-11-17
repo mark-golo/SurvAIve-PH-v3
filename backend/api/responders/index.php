@@ -20,7 +20,7 @@ if ($method === 'GET') {
     if (!empty($_GET['municipality'])) { $where[] = 'municipality=?'; $params[] = $_GET['municipality']; }
 
     $sql = "SELECT id, name, municipality, team_id, unit_name, assigned_zone,
-                   assigned_barangay, duty_status, active_mesh_relay
+                   assigned_barangay, duty_status
             FROM responders"
          . ($where ? ' WHERE ' . implode(' AND ', $where) : '')
          . ' ORDER BY duty_status DESC';
@@ -30,10 +30,10 @@ if ($method === 'GET') {
 }
 
 if ($method === 'PUT') {
-    // Responder updates own duty/relay/zone
+    // Responder updates own duty/zone
     $auth    = requireAuth('responder');
     $body    = json_decode(file_get_contents('php://input'), true) ?? [];
-    $allowed = ['duty_status', 'active_mesh_relay', 'assigned_zone', 'assigned_barangay'];
+    $allowed = ['duty_status', 'assigned_zone', 'assigned_barangay'];
     $sets    = [];
     $params  = [];
     foreach ($allowed as $f) {
@@ -56,8 +56,8 @@ if ($method === 'POST') {
     $stmt = $db->prepare("
         INSERT INTO responders
           (name, contact_number, gmail, province, municipality, barangay, password_hash, status,
-           team_id, unit_name, assigned_zone, assigned_barangay, duty_status, active_mesh_relay)
-        VALUES (?,?,?,?,?,?,?,'active', ?,?,?,?,'standby',0)
+           team_id, unit_name, assigned_zone, assigned_barangay, duty_status)
+        VALUES (?,?,?,?,?,?,?,'active', ?,?,?,?,'standby')
     ");
     $stmt->execute([
         $body['name'],

@@ -301,16 +301,16 @@ function ResponderTable({ rows, loading, editId, form, setForm, showPw, setShowP
     <table className="w-full">
       <thead>
         <tr className="border-b border-[rgba(255,255,255,0.06)]">
-          {['Name', 'Unit / Team', 'Zone', 'Barangay', 'Duty', 'Relay', 'Actions'].map(h => (
+          {['Name', 'Unit / Team', 'Zone', 'Barangay', 'Duty', 'Actions'].map(h => (
             <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
           ))}
         </tr>
       </thead>
       <tbody>
         {loading
-          ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">Loading…</td></tr>
+          ? <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">Loading…</td></tr>
           : rows.length === 0
-            ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">No responders found</td></tr>
+            ? <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">No responders found</td></tr>
             : rows.map(row => (
                 <>
                   <tr key={row.id} className="border-b border-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.02)]">
@@ -325,16 +325,11 @@ function ResponderTable({ rows, loading, editId, form, setForm, showPw, setShowP
                         {row.duty_status === 'on_duty' ? 'On Duty' : 'Standby'}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs ${row.active_mesh_relay ? 'text-[#00d4ff]' : 'text-slate-600'}`}>
-                        {row.active_mesh_relay ? '● Active' : '○ Off'}
-                      </span>
-                    </td>
                     <td className="px-4 py-3"><RowActions onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} /></td>
                   </tr>
                   {editId === row.id && (
                     <tr key={`edit-${row.id}`} className="bg-[rgba(34,197,94,0.03)]">
-                      <td colSpan={7} className="px-4 py-3">
+                      <td colSpan={6} className="px-4 py-3">
                         <StaffForm isAdmin={false} isAgency={false} isEdit title={`Edit — ${row.name}`} form={form} setForm={setForm} showPw={showPw} setShowPw={setShowPw} error={error} saving={saving} onSave={onSave} onCancel={onCancel} prov={prov} />
                       </td>
                     </tr>

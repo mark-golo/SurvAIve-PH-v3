@@ -37,7 +37,7 @@ export function LandingAuth() {
             Surv<span className="text-[#00d4ff]">AI</span>ve PH
           </h1>
           <p className="text-xs text-slate-400 leading-relaxed text-center px-2">
-            An AI-Powered Offline Mesh Communication and Victim Rescue Coordination System for Disaster-Prone Communities
+            An AI-Powered Emergency Response and Victim Rescue Coordination System for Disaster-Prone Communities
           </p>
           <div className="flex justify-center mt-3">
             <FeatureIcons />

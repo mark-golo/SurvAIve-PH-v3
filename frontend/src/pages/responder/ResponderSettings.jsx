@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  User, MapPin, Radio, List, Map, Settings, Home,
+  User, MapPin, Sparkles, List, Map, Settings, Home,
   Server, Check, Sun, Bell, Volume2, Eye, Zap, VolumeX,
   Shield, Lock, Loader, CheckCircle, AlertCircle, ChevronDown,
   Info, HelpCircle, FileText,
@@ -20,7 +20,7 @@ const NAV = [
   { icon: Home,     label: 'Home',     path: '/responder'          },
   { icon: List,     label: 'Queue',    path: '/responder/queue'    },
   { icon: Map,      label: 'Map',      path: '/responder/map'      },
-  { icon: Radio,    label: 'Mesh',     path: '/responder/relay'    },
+  { icon: Sparkles, label: 'AI',       path: '/responder/assistant' },
   { icon: Settings, label: 'Settings', path: '/responder/settings' },
 ]
 
@@ -476,10 +476,10 @@ export function ResponderSettings() {
           <RowAccordion title="About SurvAIve PH" icon={Info} iconColor="text-slate-400">
             <div className="space-y-2 mt-2">
               <p className="text-xs text-slate-400 leading-relaxed">
-                <span className="text-white font-semibold">SurvAIve PH</span> is an AI-powered mesh-network emergency response system built for the Philippines.
+                <span className="text-white font-semibold">SurvAIve PH</span> is an AI-powered emergency response and rescue coordination system built for the Philippines.
               </p>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Features include real-time SOS dispatch, responder queue management, offline mesh communication, and smart evacuation center coordination.
+                Features include real-time SOS dispatch, responder queue management, an AI field response assistant, and smart evacuation center coordination.
               </p>
               <p className="text-xs text-slate-500">Version 3.0 · 2024</p>
             </div>

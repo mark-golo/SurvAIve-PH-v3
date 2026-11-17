@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Clock, WifiOff, Home, List, Map, Radio, Settings, RefreshCw } from 'lucide-react'
+import { Clock, WifiOff, Home, List, Map, Sparkles, Settings, RefreshCw } from 'lucide-react'
 import { MobileNavBar, TopBar } from '../../components/ui/NavBar'
 import { PriorityCard } from '../../components/ui/PriorityCard'
 import { NeonButton } from '../../components/ui/NeonButton'
@@ -13,7 +13,7 @@ const NAV = [
   { icon: Home,     label: 'Home',     path: '/responder'          },
   { icon: List,     label: 'Queue',    path: '/responder/queue'    },
   { icon: Map,      label: 'Map',      path: '/responder/map'      },
-  { icon: Radio,    label: 'Mesh',     path: '/responder/relay'    },
+  { icon: Sparkles, label: 'AI',       path: '/responder/assistant' },
   { icon: Settings, label: 'Settings', path: '/responder/settings' },
 ]
 

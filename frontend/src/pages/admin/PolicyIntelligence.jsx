@@ -103,20 +103,20 @@ function analyzeData(reports, centers, responders, muni) {
     })
   }
 
-  // 5. Communication infrastructure (always present — mesh data not directly queryable)
+  // 5. Communication & AI readiness (always present — connectivity data not directly queryable)
   recs.push({
     id: 'communication-infrastructure',
     category: 'Communication Infrastructure',
-    title: 'Emergency Communication Network Coverage',
+    title: 'Emergency Communication Redundancy and AI-Assisted Triage Readiness',
     priority: 'medium',
-    issue: 'Offline mesh communication capability should be assessed for full barangay coverage.',
-    evidence: 'Based on offline mesh communication architecture in SurvAIve PH system',
-    dataSource: 'Mesh network architecture and system design records',
-    finding: `SurvAIve PH relies on offline mesh communication in connectivity-limited areas. Ensuring adequate relay infrastructure in geographically isolated barangays is critical for reliable emergency reporting and coordination during connectivity failures.`,
-    recommendation: 'Establish designated emergency communication relay points in high-risk and connectivity-challenged barangays. Train barangay emergency personnel on mesh communication system use.',
+    issue: 'Connectivity redundancy and AI-assisted triage procedures should be assessed for full barangay coverage.',
+    evidence: 'Based on the connectivity-dependent reporting architecture of the SurvAIve PH system',
+    dataSource: 'System architecture and barangay connectivity records',
+    finding: `SurvAIve PH depends on internet connectivity for real-time SOS delivery, with on-device AI assistance and local queuing when offline. Connectivity dead zones in geographically isolated barangays delay report synchronization, and AI-generated triage recommendations require trained personnel to review them during surge periods.`,
+    recommendation: 'Maintain redundant communication channels (SMS hotlines, satellite or radio fallback) for connectivity-challenged barangays, and train MDRRMO personnel to review AI-assisted triage recommendations before acting on them.',
     office: 'MDRRMO, Municipal ICT Office (if applicable), BDRRMCs',
     instrument: 'Municipal Ordinance, Executive Order, or Administrative Program',
-    outcome: 'Improved emergency communication coverage and more reliable information relay across all barangays.',
+    outcome: 'Reliable emergency reporting across all barangays and accountable, human-verified use of AI triage support.',
   })
 
   return recs

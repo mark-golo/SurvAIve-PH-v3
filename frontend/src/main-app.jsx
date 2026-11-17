@@ -6,14 +6,8 @@ import { router } from './router'
 import { initCapacitor } from './lib/capacitor'
 import { db } from './lib/db'
 import api from './lib/api'
-import { startMeshSync } from './lib/meshSync'
-import { mesh } from './lib/mesh'
-import { deviceSettings } from './lib/deviceSettings'
 
 initCapacitor()
-startMeshSync()
-mesh.getStats().catch(() => {})  // eagerly trigger ensureStarted() so the native listener is registered before any UI opens
-deviceSettings.init()
 
 function App() {
   useEffect(() => {

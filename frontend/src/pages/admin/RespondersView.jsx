@@ -292,10 +292,6 @@ export function RespondersView() {
               </div>
               <div className="text-xs text-slate-500 space-y-1">
                 <p className="flex items-center gap-1"><MapPin size={10} /> {r.assigned_zone ?? '—'}</p>
-                <p className="flex items-center gap-1">
-                  <Radio size={10} className={r.active_mesh_relay ? 'text-[#22c55e]' : ''} />
-                  {r.active_mesh_relay ? 'Relay Active' : 'Relay Off'}
-                </p>
               </div>
               {selected === r.id && (
                 <div className="mt-3 pt-3 border-t border-[rgba(255,255,255,0.06)]">
@@ -321,9 +317,9 @@ export function RespondersView() {
 
           {!loading && responders.length > 0 && (
             <div className="glass rounded-xl p-3 border border-[rgba(0,212,255,0.15)]">
-              <p className="text-[11px] text-[#00d4ff] font-semibold mb-1">Mesh Coverage</p>
+              <p className="text-[11px] text-[#00d4ff] font-semibold mb-1">Duty Coverage</p>
               <p className="text-xs text-slate-400">
-                {responders.filter(r => r.active_mesh_relay).length} responder(s) active as relay nodes
+                {responders.filter(r => r.duty_status === 'on_duty').length} responder(s) currently on duty
               </p>
             </div>
           )}

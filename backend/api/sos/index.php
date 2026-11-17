@@ -113,15 +113,13 @@ if ($method === 'POST') {
     $serviceTypes    = array_values(array_filter((array)$rawTypes, fn($t) => in_array($t, $validTypes, true)));
     $serviceTypeJson = !empty($serviceTypes) ? json_encode($serviceTypes) : null;
 
-    $relaySource = isset($body['relay_source']) ? substr(trim($body['relay_source']), 0, 50) : null;
-
     $stmt = $db->prepare("
         INSERT INTO sos_reports
           (user_id, name, barangay, municipality, province, lat, lng, status, people_count,
            victim_age_group, special_conditions, notes,
            is_verified, trust_score, ai_priority_score, rescue_status,
-           service_type, mesh_packet_id, relay_source, timestamp)
-        VALUES (?,?,?,?,?,?,?,?,?, ?,?,?, ?,?,?,'pending', ?, ?,?, NOW())
+           service_type, mesh_packet_id, timestamp)
+        VALUES (?,?,?,?,?,?,?,?,?, ?,?,?, ?,?,?,'pending', ?, ?, NOW())
     ");
     $stmt->execute([
         $userId,
@@ -141,7 +139,6 @@ if ($method === 'POST') {
         $score,
         $serviceTypeJson,
         $meshPacketId,
-        $relaySource,
     ]);
 
     if ($userId) {

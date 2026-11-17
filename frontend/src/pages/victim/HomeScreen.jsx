@@ -1,11 +1,10 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Map, Radio, Settings, MessageSquare, Battery, Satellite, Home, Wifi, WifiOff, ShieldCheck, ShieldAlert } from 'lucide-react'
+import { Map, Sparkles, Settings, MessageSquare, Battery, Satellite, Home, Wifi, WifiOff, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { SOSButton } from '../../components/ui/SOSButton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { MobileNavBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
-import { mesh } from '../../lib/mesh'
 import { useState, useEffect, useRef } from 'react'
 import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
@@ -182,7 +181,7 @@ const NAV = [
   { icon: Home,            label: 'Home',   path: '/home'     },
   { icon: MessageSquare,   label: 'SOS',    path: '/sos'      },
   { icon: Map,             label: 'Map',    path: '/map'      },
-  { icon: Radio,           label: 'Mesh',   path: '/mesh'     },
+  { icon: Sparkles,        label: 'AI',     path: '/assistant' },
   { icon: Settings,        label: 'Settings',path: '/settings' },
 ]
 
@@ -190,20 +189,9 @@ export function HomeScreen() {
   const navigate = useNavigate()
   const { user, isGuest } = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
-  const [peerCount, setPeerCount] = useState(0)
   const [isOnline, setIsOnline] = useState(getNetworkOnline())
   const [gpsState, setGpsState] = useState('unknown') // 'active' | 'denied' | 'unknown'
   const [battery, setBattery]   = useState(null)      // null = API not available
-
-  useEffect(() => {
-    const loadPeers = async () => {
-      const s = await mesh.getStats()
-      setPeerCount(s.peersNearby ?? 0)
-    }
-    loadPeers()
-    const t = setInterval(loadPeers, 5000)
-    return () => clearInterval(t)
-  }, [])
 
   useEffect(() => {
     document.title = 'SurvAIve PH – Home'
@@ -333,14 +321,12 @@ export function HomeScreen() {
           </motion.div>
           <motion.div
             whileTap={{ scale: 0.97 }}
-            onClick={() => navigate('/mesh')}
-            className="glass rounded-2xl p-4 cursor-pointer hover:border-[rgba(34,197,94,0.3)] transition-all border border-[rgba(255,255,255,0.08)]"
+            onClick={() => navigate('/assistant')}
+            className="glass rounded-2xl p-4 cursor-pointer hover:border-[rgba(0,212,255,0.3)] transition-all border border-[rgba(255,255,255,0.08)]"
           >
-            <Radio size={20} className={peerCount > 0 ? 'text-[#22c55e] animate-pulse mb-2' : 'text-slate-500 mb-2'} />
-            <p className="text-sm font-semibold text-white">Mesh Network</p>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {peerCount > 0 ? `${peerCount} peer(s) found` : 'No peers nearby'}
-            </p>
+            <Sparkles size={20} className="text-[#00d4ff] mb-2" />
+            <p className="text-sm font-semibold text-white">AI Assistant</p>
+            <p className="text-xs text-slate-500 mt-0.5">Describe your emergency</p>
           </motion.div>
         </div>
 
@@ -349,7 +335,7 @@ export function HomeScreen() {
           <p className="text-[11px] text-[#f59e0b] font-semibold mb-1">⚡ Emergency Tip</p>
           <p className="text-[11px] text-slate-400 leading-relaxed">
             Stay calm. Move to higher ground if flooding. Keep phone charged.
-            This app works without internet via mesh networking.
+            The AI Assistant can guide you and prepare your SOS — even offline.
           </p>
         </div>
       </main>

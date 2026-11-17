@@ -75,7 +75,6 @@ CREATE TABLE IF NOT EXISTS responders (
   assigned_zone     TEXT,
   assigned_barangay TEXT,
   duty_status       TEXT NOT NULL DEFAULT 'standby' CHECK (duty_status IN ('on_duty','standby')),
-  active_mesh_relay BOOLEAN NOT NULL DEFAULT FALSE,
   lat               DOUBLE PRECISION,
   lng               DOUBLE PRECISION,
   last_seen_at      TIMESTAMPTZ,
@@ -146,8 +145,8 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   flagged               BOOLEAN NOT NULL DEFAULT FALSE,
   removed_from_view     BOOLEAN NOT NULL DEFAULT FALSE,
   service_type          TEXT[],
+  -- Client-generated SOS dedup UUID (legacy name) — also the guest lookup key
   mesh_packet_id        TEXT DEFAULT NULL,
-  relay_source          TEXT DEFAULT NULL,
   UNIQUE (mesh_packet_id)
 );
 
@@ -263,15 +262,6 @@ CREATE TABLE IF NOT EXISTS escalations (
   created_at        TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ── mesh_events ───────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS mesh_events (
-  id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  device_id  TEXT NOT NULL,
-  event_type TEXT NOT NULL,
-  data       JSONB,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
 -- ── activity_logs ─────────────────────────────────────────────
 -- Audit trail: who did what, when. actor_id is NULL when the auth user is deleted.
 CREATE TABLE IF NOT EXISTS activity_logs (
@@ -314,7 +304,6 @@ CREATE INDEX IF NOT EXISTS idx_sos_province         ON sos_reports(province);
 CREATE INDEX IF NOT EXISTS idx_sos_rescue_status    ON sos_reports(rescue_status);
 CREATE INDEX IF NOT EXISTS idx_sos_priority         ON sos_reports(ai_priority_score DESC);
 CREATE INDEX IF NOT EXISTS idx_evac_municipality    ON evacuation_centers(municipality);
-CREATE INDEX IF NOT EXISTS idx_mesh_device          ON mesh_events(device_id);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_actor   ON activity_logs(actor_id);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_table   ON activity_logs(target_table);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_created ON activity_logs(created_at DESC);
@@ -332,7 +321,6 @@ ALTER TABLE victims             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sos_reports         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE evacuation_centers  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE escalations         ENABLE ROW LEVEL SECURITY;
-ALTER TABLE mesh_events         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_logs       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications       ENABLE ROW LEVEL SECURITY;
 
@@ -505,16 +493,6 @@ CREATE POLICY "staff manage escalations"
   ON escalations FOR ALL
   USING (
     (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin')
-  );
-
--- ── mesh_events policies ──────────────────────────────────────
-CREATE POLICY "auth insert mesh"
-  ON mesh_events FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-
-CREATE POLICY "staff read mesh"
-  ON mesh_events FOR SELECT
-  USING (
-    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin','superadmin','responder','response_agency')
   );
 
 -- ── activity_logs policies ────────────────────────────────────
@@ -810,9 +788,8 @@ ALTER TABLE profiles     ADD COLUMN IF NOT EXISTS agency_type  TEXT;
 -- Multi-select service_type: drop old TEXT column, replace with TEXT[] array
 ALTER TABLE sos_reports  DROP COLUMN IF EXISTS service_type;
 ALTER TABLE sos_reports  ADD COLUMN IF NOT EXISTS service_type TEXT[];
--- Mesh relay tracking columns
+-- Client SOS dedup UUID (legacy column name mesh_packet_id)
 ALTER TABLE sos_reports  ADD COLUMN IF NOT EXISTS mesh_packet_id TEXT DEFAULT NULL;
-ALTER TABLE sos_reports  ADD COLUMN IF NOT EXISTS relay_source   TEXT DEFAULT NULL;
 ALTER TABLE sos_reports  DROP CONSTRAINT IF EXISTS sos_reports_mesh_packet_id_key;
 ALTER TABLE sos_reports  ADD CONSTRAINT sos_reports_mesh_packet_id_key UNIQUE (mesh_packet_id);
 
@@ -883,7 +860,7 @@ CREATE TABLE IF NOT EXISTS sos_status_events (
   message             TEXT,
   notes               TEXT,
   source              TEXT NOT NULL DEFAULT 'online'
-                        CHECK (source IN ('online','offline_sync','ble_mesh','wifi_direct','system')),
+                        CHECK (source IN ('online','offline_sync','system')),
   idempotency_key     UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

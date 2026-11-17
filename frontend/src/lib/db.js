@@ -1,7 +1,7 @@
 import { openDB } from 'idb'
 
 const DB_NAME    = 'survAIve-ph'
-const DB_VERSION = 2
+const DB_VERSION = 3
 
 function getDB() {
   return openDB(DB_NAME, DB_VERSION, {
@@ -40,6 +40,13 @@ function getDB() {
         if (!db.objectStoreNames.contains('sos_reports')) {
           db.createObjectStore('sos_reports', { keyPath: 'id' })
         }
+      }
+
+      // ── Version 3: mesh communication removed — drop its stores ────────────────
+      // (sos_queue keeps its meshPacketId index: it's the client SOS dedup UUID.)
+      if (oldVersion < 3) {
+        if (db.objectStoreNames.contains('mesh_event_log')) db.deleteObjectStore('mesh_event_log')
+        if (db.objectStoreNames.contains('mesh_state'))     db.deleteObjectStore('mesh_state')
       }
     },
   })
@@ -113,50 +120,6 @@ export const db = {
     await Promise.all(toDelete.map(r => tx.store.delete(r.localId)))
     await tx.done
     return toDelete.length
-  },
-
-  // ── Mesh event log ─────────────────────────────────────────────────────────
-
-  async logMeshEvent(type, data) {
-    try {
-      const database = await getDB()
-      await database.add('mesh_event_log', { type, data, createdAt: Date.now() })
-      // Cap at 200 rows — delete oldest when over limit
-      const count = await database.count('mesh_event_log')
-      if (count > 200) {
-        const cursor = await database.transaction('mesh_event_log', 'readwrite').store.openCursor()
-        if (cursor) { await cursor.delete() }
-      }
-    } catch {}
-  },
-
-  async getMeshEventLog(limit = 50) {
-    try {
-      const database = await getDB()
-      const all = await database.getAll('mesh_event_log')
-      // Return newest first
-      return all.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit)
-    } catch {
-      return []
-    }
-  },
-
-  // ── Mesh engine state ───────────────────────────────────────────────────────
-
-  async saveMeshState(key, value) {
-    try {
-      const database = await getDB()
-      await database.put('mesh_state', { key, value, savedAt: Date.now() })
-    } catch {}
-  },
-
-  async getMeshState(key) {
-    try {
-      const database = await getDB()
-      return (await database.get('mesh_state', key))?.value ?? null
-    } catch {
-      return null
-    }
   },
 
   // ── Profile and cached reports ─────────────────────────────────────────────

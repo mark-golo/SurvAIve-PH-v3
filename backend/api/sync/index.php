@@ -307,12 +307,12 @@ if ($action === 'responders') {
     $sql = "INSERT INTO responders
               (id, name, contact_number, province, municipality, barangay,
                team_id, unit_name, assigned_zone, assigned_barangay,
-               duty_status, active_mesh_relay, status,
+               duty_status, status,
                lat, lng, last_seen_at)
             VALUES
               (:id, :name, :contact_number, :province, :municipality, :barangay,
                :team_id, :unit_name, :assigned_zone, :assigned_barangay,
-               :duty_status, :active_mesh_relay, :status,
+               :duty_status, :status,
                :lat, :lng, :last_seen_at)
             ON DUPLICATE KEY UPDATE
               name              = VALUES(name),
@@ -321,7 +321,6 @@ if ($action === 'responders') {
               unit_name         = VALUES(unit_name),
               assigned_zone     = VALUES(assigned_zone),
               assigned_barangay = VALUES(assigned_barangay),
-              active_mesh_relay = VALUES(active_mesh_relay),
               lat               = VALUES(lat),
               lng               = VALUES(lng),
               last_seen_at      = VALUES(last_seen_at),
@@ -346,7 +345,6 @@ if ($action === 'responders') {
             ':assigned_zone'    => $r['assigned_zone']    ?? null,
             ':assigned_barangay'=> $r['assigned_barangay'] ?? null,
             ':duty_status'      => $r['duty_status']      ?? 'standby',
-            ':active_mesh_relay'=> $r['active_mesh_relay'] ? 1 : 0,
             ':status'           => $r['status']           ?? 'active',
             ':lat'              => isset($r['lat'])       ? (float)$r['lat'] : null,
             ':lng'              => isset($r['lng'])       ? (float)$r['lng'] : null,

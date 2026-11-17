@@ -62,7 +62,6 @@ CREATE TABLE IF NOT EXISTS responders (
   assigned_zone     VARCHAR(200) DEFAULT NULL,
   assigned_barangay VARCHAR(100) DEFAULT NULL,
   duty_status       ENUM('on_duty','standby') NOT NULL DEFAULT 'standby',
-  active_mesh_relay TINYINT(1) NOT NULL DEFAULT 0,
   created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_contact (contact_number),
   INDEX idx_municipality (municipality),
@@ -140,16 +139,6 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   INDEX idx_verified (is_verified),
   FOREIGN KEY (user_id) REFERENCES victims(id) ON DELETE SET NULL,
   FOREIGN KEY (assigned_responder_id) REFERENCES responders(id) ON DELETE SET NULL
-);
-
--- Mesh events (simulation log)
-CREATE TABLE IF NOT EXISTS mesh_events (
-  id         INT AUTO_INCREMENT PRIMARY KEY,
-  device_id  VARCHAR(50) NOT NULL,
-  event_type VARCHAR(50) NOT NULL,
-  data       JSON DEFAULT NULL,
-  timestamp  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_device (device_id)
 );
 
 -- ============================================================

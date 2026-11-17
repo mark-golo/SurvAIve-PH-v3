@@ -389,7 +389,7 @@ export function CommandCenter() {
         <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-xs text-amber-400">
           <WifiOff size={13} className="shrink-0" />
           <span>
-            Offline mode — receiving data via local mesh network.
+            Offline mode — showing locally cached data.
             {snapshotLabel && <> Snapshot from <strong>{snapshotLabel}</strong>.</>}
           </span>
           <button

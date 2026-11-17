@@ -1,7 +1,7 @@
 {
   "name": "SurvAIve PH",
   "short_name": "SurvAIve",
-  "description": "AI-Powered Mesh-Based Emergency Response System",
+  "description": "AI-Powered Emergency Response and Rescue Coordination System",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#050a18",

@@ -140,7 +140,7 @@ function parsePath(rawPath) {
 }
 
 // Unified heuristic priority score — matches PHP backend exactly
-function calcPriorityScore(body) {
+export function calcPriorityScore(body) {
   let score = 50
   const s = (body.status ?? '').toLowerCase()
   if      (s === 'trapped') score += 30
@@ -170,7 +170,7 @@ function calcPriorityScore(body) {
 }
 
 // Normalize SOS row: add priority label (time-escalated) and human-readable time_ago
-function normalizeSos(r) {
+export function normalizeSos(r) {
   if (!r) return r
   const rawScore   = r.ai_priority_score ?? 50
   const minutesAgo = r.minutes_ago != null
@@ -209,6 +209,7 @@ function normalizeSos(r) {
       ? 'acknowledged'
       : r.rescue_status,
     priority,
+    displayScore,
     time_ago,
     victims: undefined,
   }
@@ -805,7 +806,6 @@ async function post(path, body = {}) {
         service_type:        Array.isArray(body.service_type)
                                ? body.service_type
                                : (body.service_type ? [body.service_type] : null),
-        relay_source:        body.relay_source ?? null,
       })
       .select('id')
     if (error) {

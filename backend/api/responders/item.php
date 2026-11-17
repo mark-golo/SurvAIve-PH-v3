@@ -10,7 +10,7 @@ if ($method === 'GET') {
     requireAuth();
     $stmt = $db->prepare("SELECT id, name, contact_number, gmail, province, municipality, barangay,
                                  status, team_id, unit_name, assigned_zone, assigned_barangay,
-                                 duty_status, active_mesh_relay, created_at
+                                 duty_status, created_at
                           FROM responders WHERE id=?");
     $stmt->execute([$id]);
     $row = $stmt->fetch();
@@ -23,7 +23,7 @@ if ($method === 'PUT') {
     $body    = json_decode(file_get_contents('php://input'), true) ?? [];
     $allowed = ['name', 'contact_number', 'gmail', 'province', 'municipality', 'barangay',
                 'status', 'team_id', 'unit_name', 'assigned_zone', 'assigned_barangay',
-                'duty_status', 'active_mesh_relay'];
+                'duty_status'];
     $sets    = [];
     $params  = [];
     foreach ($allowed as $f) {

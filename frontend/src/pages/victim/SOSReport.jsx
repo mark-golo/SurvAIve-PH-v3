@@ -12,18 +12,16 @@ import { GlassSelect, GlassInput, GlassTextarea } from '../../components/ui/Glas
 import { NeonButton } from '../../components/ui/NeonButton'
 import { useAuthStore } from '../../store/auth'
 import { db } from '../../lib/db'
-import { mesh, onBroadcastStatus } from '../../lib/mesh'
 import api from '../../lib/api'
 import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
-import { setActiveSOS, updateACKState, clearActiveSOS, getActiveSOS, onActivityChange, logMeshEvent, setBroadcastSubState } from '../../lib/meshActivityStore'
-import { Home, Map, Radio, Settings, MessageSquare } from 'lucide-react'
+import { Home, Map, Sparkles, Settings, MessageSquare } from 'lucide-react'
 
 const NAV = [
   { icon: Home,          label: 'Home',     path: '/home' },
   { icon: MessageSquare, label: 'SOS',      path: '/sos' },
   { icon: Map,           label: 'Map',      path: '/map' },
-  { icon: Radio,         label: 'Mesh',     path: '/mesh' },
+  { icon: Sparkles,      label: 'AI',       path: '/assistant' },
   { icon: Settings,      label: 'Settings', path: '/settings' },
 ]
 
@@ -42,18 +40,22 @@ export function SOSReport() {
     return () => mq.removeEventListener('change', handler)
   }, [])
 
+  // ── AI Assistant prefill — user reviewed it there; everything stays editable here
+  const aiPrefill = location.state?.aiPrefill ?? null
+  const [showAiBanner, setShowAiBanner] = useState(!!aiPrefill)
+
   // ── Form state ───────────────────────────────────────────────────────────────
   const [form, setForm] = useState({
-    status:       location.state?.status ?? 'trapped',
-    people_count: 1,
-    notes:        '',
+    status:       aiPrefill?.form?.status ?? location.state?.status ?? 'trapped',
+    people_count: aiPrefill?.form?.people_count ?? 1,
+    notes:        aiPrefill?.form?.notes ?? '',
     barangay:     user?.barangay    ?? '',
     municipality: user?.municipality ?? '',
     province:     user?.province    ?? '',
-    service_type: [],
+    service_type: aiPrefill?.form?.service_type ?? [],
   })
-  const [ageGroup,    setAgeGroup]    = useState('adult')
-  const [conditions,  setConditions]  = useState([])
+  const [ageGroup,    setAgeGroup]    = useState(aiPrefill?.ageGroup ?? 'adult')
+  const [conditions,  setConditions]  = useState(aiPrefill?.conditions ?? [])
   const [lat,  setLat]  = useState(user?.lat ?? null)
   const [lng,  setLng]  = useState(user?.lng ?? null)
   const [loading,       setLoading]       = useState(false)
@@ -63,9 +65,6 @@ export function SOSReport() {
   const [offline,       setOffline]       = useState(!getNetworkOnline())
   const [onlineDelivered, setOnlineDelivered] = useState(false)
   const [newSosId,        setNewSosId]        = useState(null)
-
-  // ── Mesh ACK state (shared via meshActivityStore) ────────────────────────────
-  const [ackState, setAckState] = useState(getActiveSOS)
 
   // ── Voice state ──────────────────────────────────────────────────────────────
   const [listening,      setListening]      = useState(false)
@@ -87,31 +86,6 @@ export function SOSReport() {
       handlePromise.then(h => h.remove()).catch(() => {})
     }
   }, [])
-
-  // Sync ackState from store whenever store changes
-  useEffect(() => onActivityChange(() => setAckState(getActiveSOS())), [])
-
-  // Subscribe to native BLE advertising status — update sub-state display AND activity log
-  useEffect(() => {
-    return onBroadcastStatus(({ status, errorCode }) => {
-      if (status === 'advertising_started') {
-        setBroadcastSubState('advertising')
-        logMeshEvent('broadcast_started', { status: 'advertising' })
-      } else if (status === 'advertising_failed') {
-        setBroadcastSubState('retrying')
-        logMeshEvent('broadcast_failed', { errorCode: errorCode ?? 0 })
-      } else if (status === 'awaiting_peers') {
-        setBroadcastSubState('awaiting_peers')
-        logMeshEvent('broadcast_started', { status: 'awaiting_peers' })
-      } else if (status === 'connecting') {
-        setBroadcastSubState('connecting')
-      } else if (status === 'sos_transmitted') {
-        setBroadcastSubState('transmitted')
-      }
-    })
-  }, [])
-
-  // ACK updates are handled by meshSync.js → updateACKState → onActivityChange (line 93 above)
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
   const f = (k) => (v) => setForm(p => ({ ...p, [k]: typeof v === 'function' ? v(p[k]) : v }))
@@ -202,58 +176,32 @@ export function SOSReport() {
       victim_id:           user?.victim_id ?? null,
       name:                user?.name      ?? null,
     }
-    // realPacketId is set below after generation — attached to payload before online submission
-
-    // Always broadcast over mesh — fires regardless of internet state.
-    // Generate the display ID and record state immediately so the Activity tab
-    // shows it even if the user navigates away before the async broadcast resolves.
-    const sosDisplayId   = 'SOS-' + String(Math.floor(10000 + Math.random() * 90000))
-    const realPacketId   = (() => {
+    // Client-generated dedup UUID — kept under its legacy column name mesh_packet_id.
+    // The backend's UNIQUE constraint uses it to reject duplicate submissions, and
+    // guest victims use it to look up their own SOS after syncing.
+    const realPacketId = (() => {
       try { return crypto.randomUUID() } catch {}
       const b = new Uint8Array(16)
       crypto.getRandomValues(b)
       b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80
       return [...b].map((x, i) => ([3,5,7,9].includes(i)?'-':'') + x.toString(16).padStart(2,'0')).join('')
     })()
-    setActiveSOS(realPacketId, sosDisplayId)
-    logMeshEvent('sos_broadcast', {
-      sosDisplayId, packetId: realPacketId,
-      status: payload.status, barangay: payload.barangay, peopleCount: payload.people_count,
-    })
-    const _sosPayload = {
-      t:   'sos',
-      _id: realPacketId,
-      la:  payload.lat,
-      lo:  payload.lng,
-      s:   payload.status,
-      n:   payload.people_count,
-      b:   payload.barangay,
-      m:   payload.municipality,
-      sv:  payload.service_type,
-    }
-    const _payloadBytes = JSON.stringify(_sosPayload).length
+    payload.mesh_packet_id = realPacketId
 
     if (offline || !getNetworkOnline()) {
-      // OFFLINE — broadcast via mesh first, then queue to IndexedDB
-      mesh.broadcast(_sosPayload)
-        .then(r   => logMeshEvent('broadcast_dispatched', { packetId: realPacketId, payloadBytes: _payloadBytes, success: r?.success, transport: r?.transport }))
-        .catch(err => logMeshEvent('broadcast_error',     { packetId: realPacketId, payloadBytes: _payloadBytes, error: String(err) }))
-      await db.queueSOS({ ...payload, isGuest, timestamp: Date.now() })
+      // OFFLINE — save to the local queue; capacitor.js drains it automatically
+      // as soon as connectivity returns.
+      await db.queueSOS({ ...payload, meshPacketId: realPacketId, isGuest, timestamp: Date.now() })
       setSubmitted(true)
       setLoading(false)
       return
     }
 
-    // Attach packet ID to online payload for idempotency
-    payload.mesh_packet_id = realPacketId
-
-    // ONLINE — attempt internet delivery first; only fall back to mesh if it fails
+    // ONLINE — attempt internet delivery first; fall back to the offline queue if it fails
     try {
       const res = await api.post('/sos', payload)
       setPriorityScore(res.ai_priority_score)
       if (res.id) setNewSosId(res.id)
-      // Do NOT call updateACKState here — online delivery is transport confirmation only,
-      // not agency acknowledgment. ACK level is driven by meshSync.js for mesh paths.
       // Cache locally so SOSCenter can show it immediately without Supabase SELECT access.
       db.addConfirmedSOS({
         ...payload,
@@ -267,12 +215,9 @@ export function SOSReport() {
       setSubmitted(true)
     } catch (err) {
       console.error('[SOSReport] insert failed:', err?.message ?? String(err))
-      // Internet delivery failed — fall back to mesh + offline queue
-      mesh.broadcast(_sosPayload)
-        .then(r   => logMeshEvent('broadcast_dispatched', { packetId: realPacketId, payloadBytes: _payloadBytes, success: r?.success, transport: r?.transport }))
-        .catch(err2 => logMeshEvent('broadcast_error',    { packetId: realPacketId, payloadBytes: _payloadBytes, error: String(err2) }))
-      await db.queueSOS({ ...payload, isGuest, timestamp: Date.now() })
-      setSosError('Server unreachable — broadcasting via mesh. Will sync when reconnected.')
+      // Internet delivery failed — fall back to the offline queue
+      await db.queueSOS({ ...payload, meshPacketId: realPacketId, isGuest, timestamp: Date.now() })
+      setSosError('Server unreachable — saved on this device. It will send automatically when connection returns.')
       setSubmitted(true)
     }
     setLoading(false)
@@ -280,23 +225,6 @@ export function SOSReport() {
 
   // ── Success screen ────────────────────────────────────────────────────────────
   if (submitted) {
-    const MESH_STEPS = [
-      { n: 1, label: ackState.broadcastSubState === 'awaiting_peers'
-          ? 'AWAITING NEARBY DEVICE — BEACON ACTIVE'
-          : ackState.broadcastSubState === 'retrying'
-          ? 'RETRYING — ADVERTISING FAILED, QUEUED'
-          : ackState.broadcastSubState === 'connecting'
-          ? 'CONNECTING TO NEARBY DEVICE…'
-          : ackState.broadcastSubState === 'transmitted'
-          ? 'SOS TRANSMITTED — AWAITING RECEIVER ACK ✓'
-          : ackState.broadcastSubState === 'requesting'
-          ? 'REQUESTING BROADCAST…'
-          : 'SOS ADVERTISING',                                                                          color: '#f59e0b' },
-      { n: 2, label: 'SOS RECEIVED BY NEARBY DEVICE',                                                color: '#22c55e' },
-      { n: 3, label: `SOS RELAYED — ${ackState.ackMaxHops || '?'} HOP${(ackState.ackMaxHops ?? 1) !== 1 ? 'S' : ''}`, color: '#00d4ff' },
-      { n: 4, label: 'RESPONDER RECEIVED YOUR SOS',                                                  color: '#22c55e' },
-    ]
-
     return (
       <div className={`min-h-screen bg-mesh flex flex-col items-center justify-center p-5${isLight ? ' light-theme' : ''}`}>
         <motion.div
@@ -333,72 +261,28 @@ export function SOSReport() {
               )}
             </>
           ) : (
-            /* ── Mesh / offline path ────────────────────────────────────────── */
+            /* ── Offline / queued path ──────────────────────────────────────── */
             <>
-              {/* 4-level SOS propagation checklist */}
-              <div className="rounded-2xl px-5 py-4 glass border-2 mx-auto w-full border-[rgba(255,255,255,0.1)]">
-                <p className="text-[10px] text-slate-500 text-center mb-3 font-mono tracking-wider">
-                  {ackState.sosDisplayId ?? 'SOS-XXXXX'}
-                </p>
-                <div className="space-y-2.5">
-                  {MESH_STEPS.map(({ n, label, color }) => {
-                    const done    = ackState.ackLevel > n
-                    const active  = ackState.ackLevel === n
-                    const pending = ackState.ackLevel < n
-                    return (
-                      <div key={n} className="flex items-center gap-2.5">
-                        {done ? (
-                          <div className="w-4 h-4 rounded-full flex items-center justify-center shrink-0"
-                               style={{ background: color }}>
-                            <Check size={9} className="text-black" strokeWidth={3} />
-                          </div>
-                        ) : active ? (
-                          <div className="w-4 h-4 rounded-full shrink-0 animate-pulse"
-                               style={{ background: color }} />
-                        ) : (
-                          <div className="w-4 h-4 rounded-full shrink-0 border border-slate-700" />
-                        )}
-                        <p className={`text-[11px] font-bold tracking-wider${pending ? ' text-slate-600' : ''}`}
-                           style={pending ? {} : { color }}>
-                          {label}
-                        </p>
-                      </div>
-                    )
-                  })}
-                </div>
-                {ackState.ackDevices.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-[rgba(255,255,255,0.06)]">
-                    <p className="text-[10px] text-slate-500">
-                      Mesh nodes reached: {ackState.ackDevices.length}
-                      {ackState.ackMaxHops > 0 ? ` · Max hops: ${ackState.ackMaxHops}` : ''}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[rgba(239,68,68,0.3)] to-[rgba(220,38,38,0.3)]
-                              border-2 border-[rgba(239,68,68,0.5)] flex items-center justify-center mx-auto
-                              shadow-[0_0_32px_rgba(239,68,68,0.4)]">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[rgba(245,158,11,0.3)] to-[rgba(217,119,6,0.3)]
+                              border-2 border-[rgba(245,158,11,0.5)] flex items-center justify-center mx-auto
+                              shadow-[0_0_32px_rgba(245,158,11,0.4)]">
                 <Check size={28} className="text-white" />
               </div>
-              <h2 className="text-xl font-black text-white">SOS Sent!</h2>
-              {offline && <p className="text-sm text-[#f59e0b]">Saved offline — will sync when signal returns</p>}
+              <h2 className="text-xl font-black text-white">SOS Saved</h2>
+              <div className="glass rounded-xl p-3 border border-[rgba(245,158,11,0.3)]">
+                <p className="text-xs text-[#f59e0b] font-semibold mb-1 tracking-wider">
+                  SAVED LOCALLY — PENDING SYNC
+                </p>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Your SOS is stored on this device and will be sent automatically the moment
+                  a connection becomes available. It has NOT yet reached responders.
+                </p>
+              </div>
               {sosError && <p className="text-sm text-[#f59e0b]">{sosError}</p>}
-              {priorityScore && (
-                <div className="glass rounded-xl p-3">
-                  <p className="text-xs text-slate-500">AI Priority Score</p>
-                  <p className="text-3xl font-black text-[#ef4444]">{priorityScore}</p>
-                  <p className="text-xs text-slate-400">
-                    {priorityScore >= 80 ? 'CRITICAL – Rescue teams alerted' :
-                     priorityScore >= 60 ? 'HIGH – Added to priority queue' :
-                     priorityScore >= 40 ? 'MODERATE – In rescue queue' : 'LOW – Queued for response'}
-                  </p>
-                </div>
-              )}
               <div className="glass rounded-xl p-3 border border-[rgba(245,158,11,0.2)]">
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Your SOS is broadcast via mesh. Status updates above as nearby devices acknowledge it.
-                  Stay in place if possible. Keep your phone on.
+                  Stay in place if possible and keep your phone on. If you can reach an area
+                  with signal or Wi-Fi, the report will send on its own.
                 </p>
               </div>
             </>
@@ -436,7 +320,18 @@ export function SOSReport() {
         {offline && (
           <div className="glass rounded-xl p-3 border border-[rgba(245,158,11,0.3)]">
             <p className="text-xs text-[#f59e0b] font-medium">📡 Offline Mode</p>
-            <p className="text-xs text-slate-400 mt-0.5">SOS will be stored locally and broadcast via mesh</p>
+            <p className="text-xs text-slate-400 mt-0.5">SOS will be saved on this device and sent automatically when connection returns</p>
+          </div>
+        )}
+
+        {/* AI prefill banner */}
+        {showAiBanner && (
+          <div className="glass rounded-xl p-3 border border-[rgba(0,212,255,0.3)] flex items-start justify-between gap-2">
+            <div>
+              <p className="text-xs text-[#00d4ff] font-medium">✨ Pre-filled by AI Assistant</p>
+              <p className="text-xs text-slate-400 mt-0.5">Please review every field before sending.</p>
+            </div>
+            <button onClick={() => setShowAiBanner(false)} className="text-slate-500 hover:text-white text-xs shrink-0">✕</button>
           </div>
         )}
 

@@ -5,7 +5,7 @@ import { loadLocalCredentials, storeLocalCredentials, hashPIN, generateSalt } fr
 import api from '../../lib/api'
 import { QRCodeSVG } from 'qrcode.react'
 import {
-  User, Shield, Settings, Home, Map, MessageSquare, Radio,
+  User, Shield, Settings, Home, Map, MessageSquare, Sparkles,
   Server, Check, Sun, QrCode, ChevronDown, Lock, Loader,
   CheckCircle, AlertCircle, Bell, Info, HelpCircle, FileText,
 } from 'lucide-react'
@@ -20,7 +20,7 @@ const NAV = [
   { icon: Home,          label: 'Home',     path: '/home' },
   { icon: MessageSquare, label: 'SOS',      path: '/sos' },
   { icon: Map,           label: 'Map',      path: '/map' },
-  { icon: Radio,         label: 'Mesh',     path: '/mesh' },
+  { icon: Sparkles,      label: 'AI',       path: '/assistant' },
   { icon: Settings,      label: 'Settings', path: '/settings' },
 ]
 
@@ -430,10 +430,10 @@ export function VictimSettings() {
           <RowAccordion title="About SurvAIve PH" icon={Info} iconColor="text-slate-400">
             <div className="space-y-2 mt-2">
               <p className="text-xs text-slate-400 leading-relaxed">
-                <span className="text-white font-semibold">SurvAIve PH</span> is an AI-powered mesh-network emergency response system built for the Philippines.
+                <span className="text-white font-semibold">SurvAIve PH</span> is an AI-powered emergency response and rescue coordination system built for the Philippines.
               </p>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Features include real-time SOS reporting, offline mesh communication, smart evacuation center recommendations, and QR-based occupancy tracking.
+                Features include real-time SOS reporting, an offline AI emergency assistant, smart evacuation center recommendations, and QR-based occupancy tracking.
               </p>
               <p className="text-xs text-slate-500">Version 3.0 · 2024</p>
             </div>

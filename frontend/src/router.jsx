@@ -15,7 +15,7 @@ import { IncidentHistory }  from './pages/victim/IncidentHistory'
 import { ResponseTracking }     from './pages/victim/ResponseTracking'
 import { ResponseTrackingList } from './pages/victim/ResponseTrackingList'
 import { RescueFeedback }   from './pages/victim/RescueFeedback'
-import { MeshStatus }       from './pages/victim/MeshStatus'
+import { VictimAssistant }  from './pages/victim/VictimAssistant'
 import { LocalMap }        from './pages/victim/LocalMap'
 import { VictimSettings }  from './pages/victim/VictimSettings'
 
@@ -25,7 +25,7 @@ import { ResponderHome }     from './pages/responder/ResponderHome'
 import { VictimQueue }       from './pages/responder/VictimQueue'
 import { RescueDetail }      from './pages/responder/RescueDetail'
 import { FieldMap }          from './pages/responder/FieldMap'
-import { MeshCenter }        from './pages/responder/MeshCenter'
+import { ResponderAssistant } from './pages/responder/ResponderAssistant'
 import { ResponderSettings } from './pages/responder/ResponderSettings'
 import { ResponderHistory }  from './pages/responder/ResponderHistory'
 
@@ -84,7 +84,7 @@ export const router = createHashRouter([
       { path: '/sos/tracking',      element: <ResponseTrackingList /> },
       { path: '/sos/:id/feedback', element: <RescueFeedback /> },
       { path: '/sos/:id',          element: <ResponseTracking /> },
-      { path: '/mesh',            element: <MeshStatus /> },
+      { path: '/assistant',       element: <VictimAssistant /> },
       { path: '/map',      element: <LocalMap /> },
       { path: '/settings', element: <VictimSettings /> },
     ],
@@ -102,8 +102,7 @@ export const router = createHashRouter([
         { path: '/responder/queue/history', element: <ResponderHistory /> },
         { path: '/responder/rescue/:id',   element: <RescueDetail /> },
         { path: '/responder/map',          element: <FieldMap /> },
-        { path: '/responder/relay',        element: <MeshCenter /> },
-        { path: '/responder/mesh',         element: <MeshCenter /> },
+        { path: '/responder/assistant',    element: <ResponderAssistant /> },
         { path: '/responder/settings',     element: <ResponderSettings /> },
       ],
     }],

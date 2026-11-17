@@ -4,14 +4,11 @@ import { RouterProvider } from 'react-router-dom'
 import './index.css'
 import { responderRouter } from './router-responder'
 import { initCapacitor } from './lib/capacitor'
-import { startMeshSync } from './lib/meshSync'
-import { mesh } from './lib/mesh'
 
 // Boot Capacitor plugins before rendering — logs platform context and allows
-// native plugins (Geolocation, Network, MeshNetwork) to initialise.
+// native plugins (Geolocation, Network) to initialise. initCapacitor also
+// drains the offline SOS queue on startup and whenever connectivity returns.
 initCapacitor()
-startMeshSync()
-mesh.getStats().catch(() => {})   // eagerly registers native listener before first packet
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

@@ -9,7 +9,6 @@
  */
 import { Geolocation } from '@capacitor/geolocation'
 import { Network }     from '@capacitor/network'
-import { MeshNetwork } from '../plugins/MeshNetworkPlugin'
 
 // Sync flag — defaults to true (safe: assumes online until told otherwise).
 // Seeded accurately by initCapacitor() via Network.getStatus() on first call.
@@ -39,7 +38,7 @@ export async function getPosition() {
 /**
  * Returns true if the device currently has any network connectivity
  * (Wi-Fi, mobile data, or Ethernet). Does NOT guarantee internet access —
- * the device may be on the admin's local hotspot (offline mesh mode).
+ * the device may be on the admin's local XAMPP hotspot (offline mode).
  *
  * @returns {Promise<boolean>}
  */
@@ -107,8 +106,6 @@ export function invalidateProbeCache() {
 export function initCapacitor() {
   if (window.Capacitor?.isNativePlatform?.()) {
     console.log('[SurvAIve] Running in native Android context (Capacitor)')
-    // Prompt BT + WiFi enable so mesh can start immediately — fire and forget
-    MeshNetwork.enableRadios().catch(() => {})
   } else {
     console.log('[SurvAIve] Running in browser / PWA context')
   }
@@ -118,7 +115,7 @@ export function initCapacitor() {
   Network.getStatus().then(s => {
     _online = s.connected
     if (_online) {
-      import('./meshSync').then(({ drainOfflineQueue }) => drainOfflineQueue()).catch(() => {})
+      import('./offlineQueue').then(({ drainOfflineQueue }) => drainOfflineQueue()).catch(() => {})
     }
   }).catch(() => {})
   Network.addListener('networkStatusChange', async ({ connected }) => {
@@ -126,7 +123,7 @@ export function initCapacitor() {
     _online = connected
     if (connected && wasOffline) {
       console.log('[capacitor] network restored — draining offline queue')
-      import('./meshSync').then(({ drainOfflineQueue }) => drainOfflineQueue()).catch(() => {})
+      import('./offlineQueue').then(({ drainOfflineQueue }) => drainOfflineQueue()).catch(() => {})
     }
   })
 }

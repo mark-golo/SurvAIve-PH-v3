@@ -25,7 +25,7 @@ import { IncidentHistory }     from './pages/victim/IncidentHistory'
 import { ResponseTracking }     from './pages/victim/ResponseTracking'
 import { ResponseTrackingList } from './pages/victim/ResponseTrackingList'
 import { RescueFeedback }      from './pages/victim/RescueFeedback'
-import { MeshStatus }          from './pages/victim/MeshStatus'
+import { VictimAssistant }     from './pages/victim/VictimAssistant'
 import { LocalMap }            from './pages/victim/LocalMap'
 import { VictimSettings }      from './pages/victim/VictimSettings'
 
@@ -55,7 +55,7 @@ export const victimRouter = createHashRouter([
       { path: '/sos/tracking',    element: <ResponseTrackingList /> },
       { path: '/sos/:id/feedback', element: <RescueFeedback /> },
       { path: '/sos/:id',         element: <ResponseTracking /> },
-      { path: '/mesh',            element: <MeshStatus /> },
+      { path: '/assistant',       element: <VictimAssistant /> },
       { path: '/map',      element: <LocalMap /> },
       { path: '/settings', element: <VictimSettings /> },
     ],

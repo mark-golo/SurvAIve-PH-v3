@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Clock, ChevronRight, Map, Radio, Settings, Home, MessageSquare, RefreshCw } from 'lucide-react'
+import { Clock, ChevronRight, Map, Sparkles, Settings, Home, MessageSquare, RefreshCw } from 'lucide-react'
 import { MobileNavBar, TopBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
@@ -14,7 +14,7 @@ const NAV = [
   { icon: Home,          label: 'Home',    path: '/home'     },
   { icon: MessageSquare, label: 'SOS',     path: '/sos'      },
   { icon: Map,           label: 'Map',     path: '/map'      },
-  { icon: Radio,         label: 'Mesh',    path: '/mesh'     },
+  { icon: Sparkles,      label: 'AI',      path: '/assistant' },
   { icon: Settings,      label: 'Settings',path: '/settings' },
 ]
 

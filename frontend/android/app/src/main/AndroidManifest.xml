@@ -4,58 +4,14 @@
     <!-- ── Internet ──────────────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- ── Bluetooth Low Energy (Android 12+ / API 31+) ─────────────────────── -->
-    <!-- BLUETOOTH_ADVERTISE: start BLE advertising so nearby devices can discover us -->
-    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE"
-        android:usesPermissionFlags="neverForLocation" />
-    <!-- BLUETOOTH_CONNECT: connect to GATT servers on discovered peers -->
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <!-- BLUETOOTH_SCAN: discover nearby SurvAIve devices advertising our SERVICE_UUID -->
-    <!-- neverForLocation removed: it can suppress manufacturer-data beacon results on
-         some OEM BLE stacks (Samsung/Qualcomm). ACCESS_FINE_LOCATION declared below
-         covers the location-dependent path for all API levels. -->
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
-
-    <!-- ── Bluetooth (Android 11 / API 30 and below) ─────────────────────────── -->
-    <uses-permission android:name="android.permission.BLUETOOTH"
-        android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
-        android:maxSdkVersion="30" />
-
-    <!-- ── Location — required for BLE scan on ALL Android versions ──────────── -->
-    <!-- (On Android 12+ BLUETOOTH_SCAN + neverForLocation reduces this requirement
-         but including both ensures compatibility with devices running ≤API 31) -->
+    <!-- ── Location — SOS GPS coordinates and responder tracking ─────────────── -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-
-    <!-- ── Wi-Fi Direct ───────────────────────────────────────────────────────── -->
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
-    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
-    <!-- Android 13+ replaces location for Wi-Fi Direct discovery -->
-    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES"
-        android:usesPermissionFlags="neverForLocation" />
-
-    <!-- ── Boot receiver — restarts mesh service after device reboot ────────── -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-
-    <!-- ── Foreground Service (required for background BLE + WiFi Direct) ───── -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <!-- API 34+: connectedDevice foreground service type requires this permission -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
     <!-- ── Notifications ─────────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Vibrate for incoming SOS alerts -->
     <uses-permission android:name="android.permission.VIBRATE" />
-    <!-- Wake lock to keep mesh relay alive while screen is off -->
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-
-    <!-- ── Hardware feature declarations ─────────────────────────────────────── -->
-    <!-- required=true: app is meaningless without BLE -->
-    <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
-    <!-- required=false: Wi-Fi Direct enhances but is not strictly required -->
-    <uses-feature android:name="android.hardware.wifi.direct" android:required="false" />
 
     <application
         android:allowBackup="false"
@@ -80,20 +36,6 @@
             </intent-filter>
 
         </activity>
-
-        <service
-            android:name=".MeshNetworkService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="connectedDevice" />
-
-        <receiver
-            android:name=".BootReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-            </intent-filter>
-        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

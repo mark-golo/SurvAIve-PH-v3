@@ -3,7 +3,7 @@ import { getResponderTheme } from '../../lib/victimTheme'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  AlertTriangle, Home, Map as MapIcon, Radio, Settings, List, RefreshCw, Power,
+  AlertTriangle, Home, Map as MapIcon, Sparkles, Settings, List, RefreshCw, Power,
   Star, WifiOff, QrCode, ChevronRight, CheckCircle, XCircle,
   Users, Shield, Zap, Clock, AlertCircle,
 } from 'lucide-react'
@@ -11,19 +11,16 @@ import { MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { NeonButton } from '../../components/ui/NeonButton'
-import { mesh } from '../../lib/mesh'
 import api, { logActivity } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 import { getNetworkOnline } from '../../lib/capacitor'
-import { onMeshSOSAlert } from '../../lib/meshAlerts'
-import { getReceivedSOS, onActivityChange } from '../../lib/meshActivityStore'
 
 const NAV = [
   { icon: Home,     label: 'Home',     path: '/responder'          },
   { icon: List,     label: 'Queue',    path: '/responder/queue'    },
   { icon: MapIcon,  label: 'Map',      path: '/responder/map'      },
-  { icon: Radio,    label: 'Mesh',     path: '/responder/relay'    },
+  { icon: Sparkles, label: 'AI',       path: '/responder/assistant' },
   { icon: Settings, label: 'Settings', path: '/responder/settings' },
 ]
 
@@ -102,11 +99,8 @@ export function ResponderHome() {
   const lastGpsUpdateRef = useRef(null)
   const dutyChangingRef  = useRef(false)
 
-  // Mesh / network state
-  const [stats,        setStats]        = useState({ peersNearby: 0, transport: 'starting', relayEnabled: false })
+  // Network state
   const [networkOnline, setNetworkOnline] = useState(() => getNetworkOnline())
-  const [meshAlert,    setMeshAlert]    = useState(null)
-  const [receivedMeshSOS, setReceivedMeshSOS] = useState(() => getReceivedSOS())
   const [now, setNow] = useState(Date.now)
 
   // UI state
@@ -132,14 +126,6 @@ export function ResponderHome() {
   const THIRTY_MIN          = 30 * 60 * 1000
   const recentCount         = sosList.filter(r => r.created_at && (now - new Date(r.created_at).getTime() < THIRTY_MIN)).length
 
-  // ── Mesh stats polling ────────────────────────────────────────────────────
-  useEffect(() => {
-    const load = async () => setStats(await mesh.getStats())
-    load()
-    const t = setInterval(load, 10000)
-    return () => clearInterval(t)
-  }, [])
-
   // ── Recent SOS tick — recomputes recentCount every 60 s ──────────────────
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 60_000)
@@ -150,16 +136,6 @@ export function ResponderHome() {
   useEffect(() => {
     const t = setInterval(() => setNetworkOnline(getNetworkOnline()), 5000)
     return () => clearInterval(t)
-  }, [])
-
-  // Mesh SOS alert banner
-  useEffect(() => {
-    return onMeshSOSAlert((data, rawPacket) => setMeshAlert({ data, rawPacket, time: Date.now() }))
-  }, [])
-
-  // Persistent mesh SOS list
-  useEffect(() => {
-    return onActivityChange(() => setReceivedMeshSOS(getReceivedSOS()))
   }, [])
 
   // ── Load responder profile ────────────────────────────────────────────────
@@ -415,15 +391,6 @@ export function ResponderHome() {
   const name = profile?.name || 'Responder'
   const today = new Date().toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })
 
-  // Connectivity display helpers
-  const transportLabel = (() => {
-    const t = stats.transport ?? ''
-    if (!t || t === 'starting') return 'Starting…'
-    if (t === 'not started' || t === 'start_failed' || t === 'error') return 'Unavailable'
-    return t.toUpperCase()
-  })()
-  const meshColor = stats.peersNearby > 0 ? '#22c55e' : '#6b7280'
-
   return (
     <div className={`h-screen bg-mesh flex flex-col overflow-hidden${isLight ? ' light-theme' : ''}`}>
 
@@ -451,73 +418,6 @@ export function ResponderHome() {
       </header>
 
       <main className="flex-1 overflow-y-auto p-4 space-y-3 pb-nav">
-
-        {/* ── Mesh SOS alert banner ───────────────────────────────────── */}
-        <AnimatePresence>
-          {meshAlert && (
-            <motion.div
-              initial={{ opacity: 0, y: -12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
-              className="glass rounded-2xl p-4 border-2 border-[rgba(239,68,68,0.6)] shadow-[0_0_24px_rgba(239,68,68,0.3)]"
-            >
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle size={16} className="text-[#ef4444] animate-pulse shrink-0" />
-                  <p className="text-sm font-black text-[#ef4444]">CRITICAL SOS — MESH</p>
-                </div>
-                <button onClick={() => setMeshAlert(null)} className="text-slate-500 hover:text-white text-xs">✕</button>
-              </div>
-              <p className="text-xs font-bold text-white mb-0.5">
-                VIC-{(meshAlert.rawPacket?.originDeviceId ?? '00000').slice(-5).toUpperCase()}
-              </p>
-              <p className="text-xs text-slate-300 mb-2">
-                {meshAlert.data.barangay ?? 'Unknown Location'}
-                {meshAlert.data.municipality ? ` · ${meshAlert.data.municipality}` : ''}
-                {meshAlert.data.status ? ` — ${meshAlert.data.status.toUpperCase()}` : ''}
-                {meshAlert.data.people_count ? ` · ${meshAlert.data.people_count} person(s)` : ''}
-              </p>
-              <NeonButton size="sm" variant="red" onClick={() => navigate('/responder/queue')} className="w-full">
-                VIEW INCIDENT QUEUE
-              </NeonButton>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* ── Persistent offline mesh SOS list ───────────────────────── */}
-        {receivedMeshSOS.length > 0 && (
-          <div className="glass rounded-2xl border border-[rgba(239,68,68,0.35)] overflow-hidden">
-            <div className="px-4 py-2 flex items-center gap-2 border-b border-[rgba(239,68,68,0.2)]">
-              <AlertTriangle size={13} className="text-[#ef4444] shrink-0" />
-              <p className="text-[11px] font-black text-[#ef4444] uppercase tracking-wider">
-                Offline Mesh SOS ({receivedMeshSOS.length})
-              </p>
-            </div>
-            <div className="divide-y divide-[rgba(255,255,255,0.05)]">
-              {receivedMeshSOS.map((entry, i) => (
-                <div key={entry.rawPacket?.id ?? i} className="px-4 py-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-bold text-white truncate">
-                      VIC-{(entry.rawPacket?.originDeviceId ?? '00000').slice(-5).toUpperCase()}
-                      {entry.data.status ? ` — ${entry.data.status.toUpperCase()}` : ''}
-                    </p>
-                    <span className="text-[10px] text-slate-500 shrink-0">
-                      📡 {5 - (entry.rawPacket?.hopCount ?? 5)} hop{5 - (entry.rawPacket?.hopCount ?? 5) !== 1 ? 's' : ''}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-400">
-                    {entry.data.barangay ?? 'Unknown'}{entry.data.municipality ? ` · ${entry.data.municipality}` : ''}
-                    {entry.data.people_count ? ` · ${entry.data.people_count} person(s)` : ''}
-                  </p>
-                </div>
-              ))}
-            </div>
-            <button onClick={() => navigate('/responder/relay')}
-              className="w-full px-4 py-2 border-t border-[rgba(239,68,68,0.2)] text-[11px] text-[#00d4ff] hover:underline text-left">
-              View full relay log →
-            </button>
-          </div>
-        )}
 
         {/* ── 1. Duty Status card ─────────────────────────────────────── */}
         <GlassCard>
@@ -664,40 +564,23 @@ export function ResponderHome() {
           </p>
         )}
 
-        {/* ── 5. Active Mesh Node / Connectivity ──────────────────────── */}
+        {/* ── 5. AI Field Response Assistant ─────────────────────────── */}
         <div
-          onClick={() => navigate('/responder/relay')}
-          className="glass rounded-2xl p-4 border border-[rgba(34,197,94,0.2)] cursor-pointer hover:border-[rgba(34,197,94,0.4)] transition-all"
+          onClick={() => navigate('/responder/assistant')}
+          className="glass rounded-2xl p-4 border border-[rgba(0,212,255,0.2)] cursor-pointer hover:border-[rgba(0,212,255,0.4)] transition-all"
         >
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <Radio size={15} className={stats.peersNearby > 0 ? 'text-[#22c55e] animate-pulse' : 'text-slate-500'} />
-              <p className="text-sm font-semibold text-white">Active Mesh Node</p>
+              <Sparkles size={15} className="text-[#00d4ff]" />
+              <p className="text-sm font-semibold text-white">AI Field Response Assistant</p>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
-                stats.relayEnabled
-                  ? 'bg-[rgba(34,197,94,0.15)] border-[rgba(34,197,94,0.3)] text-[#22c55e]'
-                  : 'bg-[rgba(107,114,128,0.1)] border-[rgba(107,114,128,0.2)] text-slate-500'
-              }`}>
-                RELAY {stats.relayEnabled ? 'ON' : 'OFF'}
-              </span>
-              <ChevronRight size={13} className="text-slate-600" />
-            </div>
+            <ChevronRight size={13} className="text-slate-600" />
           </div>
-
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-            <ConnRow label="Connected Peers" value={String(stats.peersNearby)} accent={meshColor} />
-            <ConnRow label="Active Transport" value={transportLabel} accent="#00d4ff" />
-            <ConnRow label="Internet"
-              value={networkOnline ? 'Available' : 'Offline'}
-              accent={networkOnline ? '#22c55e' : '#ef4444'} />
-            <ConnRow label="Relay Status"
-              value={stats.relayEnabled ? 'ON' : 'OFF'}
-              accent={stats.relayEnabled ? '#22c55e' : '#6b7280'} />
-          </div>
-
-          <p className="text-[10px] text-slate-600 mt-2 text-right">Tap for mesh diagnostics →</p>
+          <p className="text-xs text-slate-400">
+            Incident briefings, explainable priority ranking, situation assessment, and
+            field-note structuring for your active queue.
+          </p>
+          <p className="text-[10px] text-slate-600 mt-2 text-right">Open assistant →</p>
         </div>
 
         {/* ── 6. My Response Ratings ──────────────────────────────────── */}
@@ -882,16 +765,6 @@ export function ResponderHome() {
       </AnimatePresence>
 
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleGalleryFile} />
-    </div>
-  )
-}
-
-// ── Helper sub-components ─────────────────────────────────────────────────────
-function ConnRow({ label, value, accent }) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-[10px] text-slate-500">{label}</span>
-      <span className="text-[11px] font-bold" style={{ color: accent }}>{value}</span>
     </div>
   )
 }

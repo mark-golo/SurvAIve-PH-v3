@@ -107,12 +107,6 @@ html, body {
 }
 .sos-pulse { animation: sos-pulse 1.5s ease-in-out infinite; }
 
-@keyframes mesh-pulse {
-  0%, 100% { opacity: 0.4; transform: scale(1); }
-  50%       { opacity: 1; transform: scale(1.05); }
-}
-.mesh-pulse { animation: mesh-pulse 2s ease-in-out infinite; }
-
 @keyframes float {
   0%, 100% { transform: translateY(0px); }
   50%       { transform: translateY(-6px); }

@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { Home, Map, Radio, Settings, MessageSquare, Navigation, AlertTriangle, Tent, LocateFixed, Route, Play, Square } from 'lucide-react'
+import { Home, Map, Sparkles, Settings, MessageSquare, Navigation, AlertTriangle, Tent, LocateFixed, Route, Play, Square } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
@@ -39,7 +39,7 @@ const NAV = [
   { icon: Home,          label: 'Home',     path: '/home'     },
   { icon: MessageSquare, label: 'SOS',      path: '/sos'      },
   { icon: Map,           label: 'Map',      path: '/map'      },
-  { icon: Radio,         label: 'Mesh',     path: '/mesh'     },
+  { icon: Sparkles,      label: 'AI',       path: '/assistant' },
   { icon: Settings,      label: 'Settings', path: '/settings' },
 ]
 

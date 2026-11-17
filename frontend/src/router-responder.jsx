@@ -20,7 +20,7 @@ import { ResponderHome }     from './pages/responder/ResponderHome'
 import { VictimQueue }       from './pages/responder/VictimQueue'
 import { RescueDetail }      from './pages/responder/RescueDetail'
 import { FieldMap }          from './pages/responder/FieldMap'
-import { MeshRelay }         from './pages/responder/MeshRelay'
+import { ResponderAssistant } from './pages/responder/ResponderAssistant'
 import { ResponderHistory }  from './pages/responder/ResponderHistory'
 import { ResponderSettings } from './pages/responder/ResponderSettings'
 
@@ -48,7 +48,7 @@ export const responderRouter = createHashRouter([
         { path: '/responder/queue/history', element: <ResponderHistory /> },
         { path: '/responder/rescue/:id',   element: <RescueDetail /> },
         { path: '/responder/map',          element: <FieldMap /> },
-        { path: '/responder/relay',        element: <MeshRelay /> },
+        { path: '/responder/assistant',    element: <ResponderAssistant /> },
         { path: '/responder/settings',     element: <ResponderSettings /> },
       ],
     }],
