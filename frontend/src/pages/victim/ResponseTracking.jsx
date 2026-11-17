@@ -10,7 +10,7 @@ import api from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { db } from '../../lib/db'
 import { fmtSosId } from '../../lib/format'
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import {
@@ -77,6 +77,14 @@ const sosPinIcon = () => L.divIcon({
   html: `<div style="width:18px;height:18px;background:#ef4444;border:3px solid white;border-radius:50%;box-shadow:0 0 10px #ef4444"></div>`,
   iconSize: [18, 18], iconAnchor: [9, 9],
 })
+
+function PanToResponder({ lat, lng }) {
+  const map = useMap()
+  useEffect(() => {
+    if (lat != null && lng != null) map.flyTo([lat, lng], map.getZoom(), { duration: 1.0 })
+  }, [lat, lng])
+  return null
+}
 
 // v2 — IncidentHistory card style
 export function ResponseTracking() {
@@ -410,6 +418,7 @@ export function ResponseTracking() {
                     scrollWheelZoom={false}
                     doubleClickZoom={false}
                   >
+                    <PanToResponder lat={responder?.lat} lng={responder?.lng} />
                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OSM" />
                     <Marker position={[responder.lat, responder.lng]} icon={responderPinIcon()}>
                       <Popup><div className="text-xs">{responder.unit_name ?? 'Responder'}</div></Popup>
@@ -464,17 +473,21 @@ export function ResponseTracking() {
                       </button>
                       {voiceOn && (
                         <div className="flex gap-1">
-                          {['en', 'fil'].map(l => (
+                          {[
+                            { key: 'en',  label: 'EN'     },
+                            { key: 'fil', label: 'FIL'    },
+                            { key: 'bis', label: 'Bisaya' },
+                          ].map(({ key, label }) => (
                             <button
-                              key={l}
-                              onClick={() => setVoiceLang(l)}
+                              key={key}
+                              onClick={() => setVoiceLang(key)}
                               className={`text-[10px] px-2 py-0.5 rounded-full border transition-all ${
-                                voiceLang === l
+                                voiceLang === key
                                   ? 'border-[#00d4ff]/40 text-[#00d4ff] bg-[rgba(0,212,255,0.08)]'
                                   : 'border-slate-700 text-slate-500'
                               }`}
                             >
-                              {l === 'en' ? 'EN' : 'FIL'}
+                              {label}
                             </button>
                           ))}
                         </div>

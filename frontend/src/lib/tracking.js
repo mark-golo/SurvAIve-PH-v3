@@ -44,6 +44,14 @@ const TEXTS = {
     100:  'Ang iyong responder ay 100 metro na lang. Maghanda na para sa tulong.',
     0:    'Nakarating na ang iyong responder sa iyong lokasyon.',
   },
+  bis: {
+    2000: 'Ang imong responder duha ka kilometro na lang.',
+    1000: 'Ang imong responder usa ka kilometro na lang.',
+    500:  'Ang imong responder 500 metro na lang.',
+    300:  'Ang imong responder 300 metro na lang.',
+    100:  'Ang imong responder 100 metro na lang. Andam na alang sa tabang.',
+    0:    'Naabot na ang imong responder sa imong lugar.',
+  },
 }
 
 export function getMilestoneAnnouncement(milestoneMeters, lang = 'en') {
@@ -75,7 +83,7 @@ export function speak(text, lang = 'en') {
   if (typeof window === 'undefined' || !window.speechSynthesis) return
   window.speechSynthesis.cancel()
   const u = new SpeechSynthesisUtterance(text)
-  u.lang   = lang === 'fil' ? 'fil-PH' : 'en-PH'
+  u.lang   = lang === 'fil' || lang === 'bis' ? 'fil-PH' : 'en-PH'
   u.rate   = 0.95
   u.volume = 1
   window.speechSynthesis.speak(u)
