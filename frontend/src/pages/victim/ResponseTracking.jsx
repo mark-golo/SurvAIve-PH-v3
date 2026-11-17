@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { CheckCircle, Clock, RefreshCw, AlertOctagon, Home, MessageSquare, Map, Sparkles, Settings } from 'lucide-react'
+import { CheckCircle, Clock, RefreshCw, AlertOctagon, Home, MessageSquare, Map, Sparkles, Settings, Volume2, VolumeX, Maximize2, Minimize2 } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
@@ -13,6 +13,11 @@ import { fmtSosId } from '../../lib/format'
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import {
+  haversineDistance, formatDistance, checkMilestones,
+  getMilestoneAnnouncement, speak, fetchETA,
+  trackingFreshness, formatLastSeen,
+} from '../../lib/tracking'
 
 const RESCUE_STATUS_LABELS = {
   pending:      { label: 'Awaiting Acknowledgment', color: 'text-slate-400',  bg: 'bg-slate-700'     },
@@ -90,6 +95,20 @@ export function ResponseTracking() {
   const [reloadKey, setReloadKey] = useState(0)
   const [responder, setResponder] = useState(null)
   const prevStatusRef = useRef(undefined)
+
+  // ── Live tracking state ───────────────────────────────────────────────────
+  const [dist,          setDist]          = useState(null)   // metres
+  const [eta,           setEta]           = useState(null)   // { minutes, roadKm } | null
+  const [mapExpanded,   setMapExpanded]   = useState(false)
+  const [voiceOn,       setVoiceOn]       = useState(() => {
+    try { return JSON.parse(localStorage.getItem('survAIve-voice-prefs'))?.on ?? true } catch { return true }
+  })
+  const [voiceLang,     setVoiceLang]     = useState(() => {
+    try { return JSON.parse(localStorage.getItem('survAIve-voice-prefs'))?.lang ?? 'en' } catch { return 'en' }
+  })
+  const [lastAnnouncement, setLastAnnouncement] = useState(null)
+  const announcedRef = useRef(new Set())
+  const prevDistRef  = useRef(null)
 
   async function load() {
     setLoading(true)
@@ -202,6 +221,50 @@ export function ResponseTracking() {
     return () => { supabase.removeChannel(ch) }
   }, [report?.assigned_responder_id, isOnline])
 
+  // Seed announced milestones from localStorage (persist across page navigations)
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(`survAIve-ann-${id}`) || '[]')
+      announcedRef.current = new Set(stored)
+    } catch {}
+  }, [id])
+
+  // Persist voice preferences
+  useEffect(() => {
+    try { localStorage.setItem('survAIve-voice-prefs', JSON.stringify({ on: voiceOn, lang: voiceLang })) } catch {}
+  }, [voiceOn, voiceLang])
+
+  // Distance + milestone announcements + ETA — fires when responder coords change
+  useEffect(() => {
+    if (!responder?.lat || !responder?.lng || !report?.lat || !report?.lng) return
+    const d = haversineDistance(responder.lat, responder.lng, report.lat, report.lng)
+
+    const hits = checkMilestones(prevDistRef.current, d, announcedRef.current)
+    if (hits.length > 0) {
+      hits.forEach(m => announcedRef.current.add(m))
+      try { localStorage.setItem(`survAIve-ann-${id}`, JSON.stringify([...announcedRef.current])) } catch {}
+      const closest = Math.min(...hits)
+      const text = getMilestoneAnnouncement(closest, voiceLang)
+      setLastAnnouncement(text)
+      if (voiceOn) speak(text, voiceLang)
+    }
+    prevDistRef.current = d
+    setDist(d)
+
+    fetchETA(responder.lat, responder.lng, report.lat, report.lng).then(setEta)
+  }, [responder?.lat, responder?.lng, report?.lat, report?.lng])
+
+  // Arrival announcement — triggered by rescue_status reaching on_scene
+  useEffect(() => {
+    if (report?.rescue_status !== 'on_scene') return
+    if (announcedRef.current.has(0)) return
+    announcedRef.current.add(0)
+    try { localStorage.setItem(`survAIve-ann-${id}`, JSON.stringify([...announcedRef.current])) } catch {}
+    const text = getMilestoneAnnouncement(0, voiceLang)
+    setLastAnnouncement(text)
+    if (voiceOn) speak(text, voiceLang)
+  }, [report?.rescue_status])
+
   // Build timeline steps — merge system events with derived steps
   function buildTimeline(r, evts) {
     const statusAt = (targetStatus) => {
@@ -272,23 +335,52 @@ export function ResponseTracking() {
               </div>
             </div>
 
-            {/* Responder Location — only shown when a responder is assigned and has GPS */}
+            {/* Responder Location — enhanced with distance, freshness, ETA, voice */}
             {responder?.lat != null && responder?.lng != null && report?.rescue_status !== 'rescued' && (
               <div className="glass rounded-2xl overflow-hidden border border-[rgba(255,255,255,0.06)]">
+
+                {/* Header row */}
                 <div className="flex items-center justify-between px-4 pt-3 pb-2">
-                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Responder Location</p>
-                  {responder.last_seen_at && (
-                    <span className="text-[10px] text-slate-600">Updated {fmtTime(responder.last_seen_at)}</span>
-                  )}
+                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Track My Responder</p>
+                  <div className="flex items-center gap-2">
+                    {/* Freshness indicator */}
+                    {(() => {
+                      const f = trackingFreshness(responder.last_seen_at)
+                      return (
+                        <span className={`flex items-center gap-1 text-[10px] font-medium ${
+                          f === 'live'         ? 'text-green-400'  :
+                          f === 'reconnecting' ? 'text-amber-400'  : 'text-slate-500'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            f === 'live'         ? 'bg-green-400 animate-pulse' :
+                            f === 'reconnecting' ? 'bg-amber-400'               : 'bg-slate-500'
+                          }`} />
+                          {f === 'live'         ? 'Live'          :
+                           f === 'reconnecting' ? 'Reconnecting'  :
+                           `Last Known · ${formatLastSeen(responder.last_seen_at)}`}
+                        </span>
+                      )
+                    })()}
+                    {/* Expand / collapse toggle */}
+                    <button
+                      onClick={() => setMapExpanded(e => !e)}
+                      className="text-slate-500 hover:text-[#00d4ff] transition-colors"
+                      aria-label={mapExpanded ? 'Collapse map' : 'Expand map'}
+                    >
+                      {mapExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                    </button>
+                  </div>
                 </div>
-                <div style={{ height: '160px' }}>
+
+                {/* Map */}
+                <div style={{ height: mapExpanded ? '280px' : '160px', transition: 'height 0.3s ease' }}>
                   <MapContainer
-                    key={`${responder.lat}-${responder.lng}`}
+                    key={`tracking-map-${id}`}
                     center={[responder.lat, responder.lng]}
                     zoom={14}
                     style={{ height: '100%', background: '#0a1628' }}
-                    zoomControl={false}
-                    dragging={false}
+                    zoomControl={mapExpanded}
+                    dragging={mapExpanded}
                     scrollWheelZoom={false}
                     doubleClickZoom={false}
                   >
@@ -303,8 +395,74 @@ export function ResponseTracking() {
                     )}
                   </MapContainer>
                 </div>
-                <div className="px-4 py-2">
+
+                {/* Distance + ETA + voice controls */}
+                <div className="px-4 pt-3 pb-3 space-y-2">
+
+                  {/* Arrival banner */}
+                  {report?.rescue_status === 'on_scene' ? (
+                    <div className="flex items-center gap-2 text-green-400">
+                      <CheckCircle size={14} />
+                      <span className="text-sm font-bold">Responder has arrived</span>
+                    </div>
+                  ) : dist != null ? (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-xl font-bold text-white">{formatDistance(dist)}</span>
+                        <span className="text-[10px] text-slate-500">straight-line</span>
+                      </div>
+                      {eta ? (
+                        <span className="text-xs text-slate-400">~{eta.minutes} min · {eta.roadKm} km by road</span>
+                      ) : (
+                        <span className="text-[10px] text-slate-600 italic">Calculating ETA…</span>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {/* Unit name */}
                   <p className="text-xs text-slate-400">{responder.unit_name ?? 'Assigned Responder'}</p>
+
+                  {/* Voice controls */}
+                  <div className="flex items-center justify-between pt-2 border-t border-[rgba(255,255,255,0.06)]">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setVoiceOn(v => !v)}
+                        className={`flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full border transition-all ${
+                          voiceOn
+                            ? 'border-[#00d4ff]/40 text-[#00d4ff] bg-[rgba(0,212,255,0.08)]'
+                            : 'border-slate-700 text-slate-500'
+                        }`}
+                      >
+                        {voiceOn ? <Volume2 size={11} /> : <VolumeX size={11} />}
+                        {voiceOn ? 'Voice On' : 'Voice Off'}
+                      </button>
+                      {voiceOn && (
+                        <div className="flex gap-1">
+                          {['en', 'fil'].map(l => (
+                            <button
+                              key={l}
+                              onClick={() => setVoiceLang(l)}
+                              className={`text-[10px] px-2 py-0.5 rounded-full border transition-all ${
+                                voiceLang === l
+                                  ? 'border-[#00d4ff]/40 text-[#00d4ff] bg-[rgba(0,212,255,0.08)]'
+                                  : 'border-slate-700 text-slate-500'
+                              }`}
+                            >
+                              {l === 'en' ? 'EN' : 'FIL'}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {lastAnnouncement && voiceOn && (
+                      <button
+                        onClick={() => speak(lastAnnouncement, voiceLang)}
+                        className="text-[10px] text-slate-500 hover:text-[#00d4ff] transition-colors"
+                      >
+                        ↺ Replay
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

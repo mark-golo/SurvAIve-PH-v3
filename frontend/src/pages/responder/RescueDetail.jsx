@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { getResponderTheme } from '../../lib/victimTheme'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MapPin, Users, Phone, Navigation, CheckCircle, XCircle, AlertTriangle, UserCheck, Home, List, Map, Sparkles, Settings } from 'lucide-react'
+import { MapPin, Users, Phone, Navigation, CheckCircle, XCircle, AlertTriangle, UserCheck, Home, List, Map, Sparkles, Settings, Radio } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -11,6 +11,7 @@ import { GlassTextarea } from '../../components/ui/GlassInput'
 import api from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { getNetworkOnline } from '../../lib/capacitor'
+import { Geolocation } from '@capacitor/geolocation'
 import { fmtSosId } from '../../lib/format'
 
 
@@ -50,6 +51,9 @@ export function RescueDetail() {
   const [notFound, setNotFound] = useState(false)
   const [timer, setTimer] = useState(null)
   const [responderProfile, setResponderProfile] = useState(null)
+  const [gpsStatus, setGpsStatus] = useState('inactive') // 'inactive'|'active'|'error'
+  const watchIdRef  = useRef(null)
+  const lastPushRef = useRef(0)
 
   useEffect(() => {
     api.get(`/sos/${id}`)
@@ -87,6 +91,52 @@ export function RescueDetail() {
         .then(({ data }) => { if (data) setResponderProfile(data) })
     })
   }, [])
+
+  // GPS location sharing — active only when en_route or on_scene
+  useEffect(() => {
+    const isActive = rescueStatus === 'en_route' || rescueStatus === 'on_scene'
+
+    if (!isActive) {
+      if (watchIdRef.current != null) {
+        Geolocation.clearWatch({ id: watchIdRef.current }).catch(() => {})
+        watchIdRef.current = null
+        setGpsStatus('inactive')
+      }
+      return
+    }
+
+    let cancelled = false
+    supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+      if (cancelled) return
+      const contact = authUser?.user_metadata?.contact_number
+      if (!contact) { setGpsStatus('error'); return }
+
+      Geolocation.watchPosition({ enableHighAccuracy: true }, (pos, err) => {
+        if (err || !pos) { setGpsStatus('error'); return }
+        setGpsStatus('active')
+        const now = Date.now()
+        if (now - lastPushRef.current < 10_000) return // throttle: max once per 10 s
+        lastPushRef.current = now
+        supabase.from('responders')
+          .update({
+            lat:          pos.coords.latitude,
+            lng:          pos.coords.longitude,
+            last_seen_at: new Date().toISOString(),
+          })
+          .eq('contact_number', contact)
+          .then(({ error }) => { if (error) console.warn('[RescueDetail] GPS push:', error.message) })
+      }).then(wid => { if (!cancelled) watchIdRef.current = wid })
+        .catch(() => setGpsStatus('error'))
+    })
+
+    return () => {
+      cancelled = true
+      if (watchIdRef.current != null) {
+        Geolocation.clearWatch({ id: watchIdRef.current }).catch(() => {})
+        watchIdRef.current = null
+      }
+    }
+  }, [rescueStatus])
 
   const updateStatus = async (newStatus) => {
     const prevStatus = rescueStatus
@@ -228,6 +278,25 @@ export function RescueDetail() {
         {/* Rescue status */}
         <GlassCard>
           <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-3">Rescue Actions</p>
+
+          {/* GPS location-sharing status badge */}
+          {(rescueStatus === 'en_route' || rescueStatus === 'on_scene') && (
+            <div className={`mb-3 flex items-center gap-2 text-xs px-3 py-2 rounded-xl border ${
+              gpsStatus === 'active'
+                ? 'border-green-500/30 bg-green-900/10 text-green-400'
+                : gpsStatus === 'error'
+                  ? 'border-amber-500/30 bg-amber-900/10 text-amber-400'
+                  : 'border-slate-700/40 bg-slate-800/20 text-slate-500'
+            }`}>
+              <Radio size={12} className={gpsStatus === 'active' ? 'animate-pulse' : ''} />
+              {gpsStatus === 'active'
+                ? 'Location Sharing Active'
+                : gpsStatus === 'error'
+                  ? 'GPS Unavailable'
+                  : 'Starting location sharing…'}
+            </div>
+          )}
+
           {/* Accept Assignment — links this responder to the report */}
           <button
             onClick={acceptAssignment}

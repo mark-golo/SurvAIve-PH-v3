@@ -33,6 +33,17 @@ export async function getPosition() {
   return result.coords
 }
 
+/**
+ * Start continuous GPS position watching.
+ * Caller must call Geolocation.clearWatch({ id }) with the returned id to stop.
+ *
+ * @param {function} callback — called on each position update (position, error)
+ * @returns {Promise<string>} watchId
+ */
+export async function watchLocation(callback) {
+  return Geolocation.watchPosition({ enableHighAccuracy: true }, callback)
+}
+
 // ── Network ───────────────────────────────────────────────────────────────────
 
 /**
