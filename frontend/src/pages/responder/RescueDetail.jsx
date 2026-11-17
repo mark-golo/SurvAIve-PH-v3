@@ -16,6 +16,7 @@ import { fmtSosId } from '../../lib/format'
 import { fetchWeather } from '../../lib/weatherService'
 import { assessDelay } from '../../lib/ai/erdiEngine'
 import { ERDIPanel } from '../../components/ui/ERDIPanel'
+import { AIReviewPanel } from '../../components/ui/AIReviewPanel'
 
 
 const ACTIONS = [
@@ -78,6 +79,14 @@ export function RescueDetail() {
           is_verified: !!row.is_verified,
           rescue_status: row.rescue_status,
           assigned_responder_id: row.assigned_responder_id ?? null,
+          ai_priority_score:  row.ai_priority_score  ?? null,
+          ai_classification:  row.ai_classification  ?? null,
+          ai_confidence:      row.ai_confidence      ?? null,
+          ai_rules_version:   row.ai_rules_version   ?? null,
+          ai_review_status:   row.ai_review_status   ?? 'unreviewed',
+          ai_review_note:     row.ai_review_note     ?? null,
+          ai_reviewed_by:     row.ai_reviewed_by     ?? null,
+          ai_reviewed_at:     row.ai_reviewed_at     ?? null,
         })
         setRescueStatus(row.rescue_status ?? 'pending')
         setNotes(row.notes || '')
@@ -396,6 +405,15 @@ export function RescueDetail() {
         {/* ERDI — delay intelligence (hidden after rescue/cannot_reach) */}
         {erdiAssessment && !['rescued','cannot_reach'].includes(rescueStatus) && (
           <ERDIPanel assessment={erdiAssessment} role="responder" />
+        )}
+
+        {/* AI Review — human validation of AI assessment (hidden after rescue/cannot_reach) */}
+        {victim && !['rescued','cannot_reach'].includes(rescueStatus) && (
+          <AIReviewPanel
+            report={victim}
+            reviewerName={responderProfile?.name ?? 'Responder'}
+            onReviewed={fields => setVictim(v => ({ ...v, ...fields }))}
+          />
         )}
 
         {/* Submit report — hidden for already-completed rescues */}

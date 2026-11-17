@@ -2,6 +2,9 @@
 import { supabase, signupClient } from './supabase'
 import { hashPIN, createOfflineToken, storeStaffOfflineCredentials, verifyStaffOffline } from './deviceAuth'
 import { getNetworkOnline } from './capacitor'
+import { classifyIncident } from './ai/emergencyIntelligence'
+
+const AI_RULES_VERSION = '1.0'
 
 // ── Local PHP backend (XAMPP) ── used in offline / Wi-Fi hotspot mode ─────────
 //
@@ -767,6 +770,9 @@ async function post(path, body = {}) {
 
     const score = calcPriorityScore(body)
 
+    // AI classification — runs fully offline, stored for traceability (blueprint §6.1)
+    const aiClassification = classifyIncident(body.notes || '')
+
     // Resolve device-auth victim_id → verified status + best-effort Supabase user_id
     // victim_id is only included in the payload for authenticated users (PIN-verified),
     // so its presence is sufficient proof of identity — don't gatekeep on Supabase row.
@@ -802,6 +808,9 @@ async function post(path, body = {}) {
         special_conditions:  body.special_conditions  ?? '',
         notes:               body.notes               ?? null,
         ai_priority_score:   score,
+        ai_classification:   aiClassification.primary      ?? null,
+        ai_confidence:       aiClassification.confidence   ?? null,
+        ai_rules_version:    AI_RULES_VERSION,
         rescue_status:       'pending',
         is_verified:         isVerified,
         trust_score:         trustScore,
@@ -1276,4 +1285,35 @@ export async function syncLocalStaffToCloud() {
   }
   logActivity('SYNC', 'profiles', 'profiles', null, { synced_count: synced, skipped_count: skipped })
   return { synced, skipped, error: null }
+}
+
+// ── AI Human Review — blueprint §3.6, §3.8, §6.1 ─────────────────────────────
+// Updates the AI review status for an SOS report.
+// Online: writes directly to Supabase.
+// Offline: queues in localStorage; drainPendingReviews() in offlineQueue.js syncs on reconnect.
+export async function reviewAIPriority(reportId, status, note, reviewerName) {
+  const payload = {
+    ai_review_status: status,
+    ai_review_note:   note   ?? null,
+    ai_reviewed_by:   reviewerName ?? null,
+    ai_reviewed_at:   new Date().toISOString(),
+  }
+  if (getNetworkOnline()) {
+    const { error } = await supabase
+      .from('sos_reports')
+      .update(payload)
+      .eq('id', reportId)
+    if (error) throw new Error(error.message)
+    logActivity('PUT', 'sos', 'sos_reports', reportId, { ai_review_status: status })
+    return { offline: false }
+  }
+  // Offline path — queue for sync when connectivity returns
+  try {
+    const queue = JSON.parse(localStorage.getItem('survAIve-pending-reviews') ?? '[]')
+    // Replace any prior pending review for the same report
+    const filtered = queue.filter(q => q.reportId !== reportId)
+    filtered.push({ reportId, payload })
+    localStorage.setItem('survAIve-pending-reviews', JSON.stringify(filtered))
+  } catch { /* storage unavailable */ }
+  return { offline: true }
 }

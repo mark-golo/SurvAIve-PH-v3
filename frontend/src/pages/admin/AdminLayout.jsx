@@ -1,5 +1,5 @@
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
-import { LayoutDashboard, Users, BookUser, BarChart2, Radio, UserCog, MapPin, LogOut, Menu, ClipboardList, FileBarChart, Settings2, Bell, Layers, ScrollText, Scale, ChevronDown, ChevronUp, Star } from 'lucide-react'
+import { LayoutDashboard, Users, BookUser, BarChart2, Radio, UserCog, MapPin, LogOut, Menu, ClipboardList, FileBarChart, Settings2, Bell, Layers, ScrollText, Scale, ChevronDown, ChevronUp, Star, Activity, FileSearch } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '../../store/auth'
@@ -34,15 +34,17 @@ const NAV_GROUPS = [
   {
     label: 'ASSESSMENT',
     items: [
-      { icon: Layers,          label: 'Barangays Comparison',     path: '/admin/barangays-comparison' },
-      { icon: ClipboardList,   label: 'SITREP',                   path: '/admin/sitrep'               },
+      { icon: Layers,          label: 'Barangays Comparison',     path: '/admin/barangays-comparison'  },
+      { icon: ClipboardList,   label: 'SITREP',                   path: '/admin/sitrep'                },
+      { icon: FileSearch,      label: 'Emergency Ops Reports',    path: '/admin/emergency-ops-reports' },
     ],
   },
   {
     label: 'INTELLIGENCE',
     items: [
-      { icon: BarChart2,       label: 'AI Situational Analytics', path: '/admin/analytics'            },
-      { icon: Scale,           label: 'AI Policy Intelligence',   path: '/admin/policy-intelligence'  },
+      { icon: BarChart2,       label: 'AI Situational Analytics', path: '/admin/analytics'                },
+      { icon: Activity,        label: 'Situational Awareness',    path: '/admin/situational-awareness'   },
+      { icon: Scale,           label: 'AI Policy Intelligence',   path: '/admin/policy-intelligence'     },
     ],
   },
   {
@@ -70,6 +72,8 @@ const PAGE_TITLES = {
   '/admin/settings':           'Settings',
   '/admin/audit-logs':             'Audit Logs',
   '/admin/response-feedback':      'Response Feedback',
+  '/admin/situational-awareness':  'Situational Awareness',
+  '/admin/emergency-ops-reports':  'Emergency Ops Reports',
 }
 
 // ─── Web Audio alarm tone (synthesised — no audio file needed) ────────────────

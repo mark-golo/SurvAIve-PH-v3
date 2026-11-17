@@ -2,6 +2,7 @@
 // Called by capacitor.js on startup and whenever connectivity is restored.
 import { db } from './db'
 import api from './api'
+import { supabase } from './supabase'
 
 const MAX_RETRY_COUNT = 5
 
@@ -39,4 +40,36 @@ export async function drainOfflineQueue() {
   } catch (e) {
     console.warn('[offlineQueue] drainOfflineQueue error:', e?.message)
   }
+}
+
+// Drain pending AI review updates that were queued in localStorage while offline.
+export async function drainPendingReviews() {
+  let queue = []
+  try {
+    queue = JSON.parse(localStorage.getItem('survAIve-pending-reviews') ?? '[]')
+  } catch { return }
+  if (!queue.length) return
+
+  console.log('[offlineQueue] draining', queue.length, 'pending AI review(s)')
+  const failed = []
+  for (const item of queue) {
+    try {
+      const { error } = await supabase
+        .from('sos_reports')
+        .update(item.payload)
+        .eq('id', item.reportId)
+      if (error) throw new Error(error.message)
+      console.log('[offlineQueue] synced AI review for reportId', item.reportId)
+    } catch (e) {
+      console.warn('[offlineQueue] AI review sync failed for reportId', item.reportId, e?.message)
+      failed.push(item)
+    }
+  }
+  try {
+    if (failed.length) {
+      localStorage.setItem('survAIve-pending-reviews', JSON.stringify(failed))
+    } else {
+      localStorage.removeItem('survAIve-pending-reviews')
+    }
+  } catch { /* ignore */ }
 }

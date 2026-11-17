@@ -47,6 +47,8 @@ import { AdminSettings }          from './pages/admin/AdminSettings'
 import AuditLogs                  from './pages/admin/AuditLogs'
 import { ResponseFeedback }       from './pages/admin/ResponseFeedback'
 import { BarangaysComparison }    from './pages/admin/BarangaysComparison'
+import { SituationalAwareness }   from './pages/admin/SituationalAwareness'
+import { EmergencyOpsReports }    from './pages/admin/EmergencyOpsReports'
 
 // Agency pages
 import { AgencyLayout }           from './pages/agency/AgencyLayout'
@@ -130,7 +132,9 @@ export const router = createHashRouter([
           { path: '/admin/credentials',          element: <LoginCredentials /> },
           { path: '/admin/settings',             element: <AdminSettings /> },
           { path: '/admin/audit-logs',           element: <AuditLogs /> },
-          { path: '/admin/response-feedback',   element: <ResponseFeedback /> },
+          { path: '/admin/response-feedback',      element: <ResponseFeedback /> },
+          { path: '/admin/situational-awareness', element: <SituationalAwareness /> },
+          { path: '/admin/emergency-ops-reports', element: <EmergencyOpsReports /> },
         ],
       },
     ],

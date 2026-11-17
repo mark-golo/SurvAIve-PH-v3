@@ -126,7 +126,10 @@ export function initCapacitor() {
   Network.getStatus().then(s => {
     _online = s.connected
     if (_online) {
-      import('./offlineQueue').then(({ drainOfflineQueue }) => drainOfflineQueue()).catch(() => {})
+      import('./offlineQueue').then(({ drainOfflineQueue, drainPendingReviews }) => {
+        drainOfflineQueue().catch(() => {})
+        drainPendingReviews().catch(() => {})
+      }).catch(() => {})
     }
   }).catch(() => {})
   Network.addListener('networkStatusChange', async ({ connected }) => {
@@ -134,7 +137,10 @@ export function initCapacitor() {
     _online = connected
     if (connected && wasOffline) {
       console.log('[capacitor] network restored — draining offline queue')
-      import('./offlineQueue').then(({ drainOfflineQueue }) => drainOfflineQueue()).catch(() => {})
+      import('./offlineQueue').then(({ drainOfflineQueue, drainPendingReviews }) => {
+        drainOfflineQueue().catch(() => {})
+        drainPendingReviews().catch(() => {})
+      }).catch(() => {})
     }
   })
 }

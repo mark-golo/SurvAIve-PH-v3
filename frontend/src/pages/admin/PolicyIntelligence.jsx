@@ -374,6 +374,12 @@ export function PolicyIntelligence() {
       )
       setRecommendations(recs)
       setDataRange(new Date().toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }))
+      logActivity('POST', 'ai_policy', 'policy_intelligence', null, {
+        action: 'ai_policy_analysis',
+        recommendationCount: recs.length,
+        highPriorityCount: recs.filter(r => r.priority === 'high').length,
+        municipality: muni ?? null,
+      })
     } catch {
       setOfflineMode(true)
     } finally {
