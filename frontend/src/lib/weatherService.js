@@ -11,7 +11,14 @@ export async function fetchWeather(lat, lng) {
     `https://api.open-meteo.com/v1/forecast` +
     `?latitude=${lat}&longitude=${lng}` +
     `&current=rain,wind_speed_10m,precipitation,weather_code&forecast_days=1`
-  const res = await fetch(url)
+  const controller = new AbortController()
+  const timeoutId  = setTimeout(() => controller.abort(), 8000)
+  let res
+  try {
+    res = await fetch(url, { signal: controller.signal })
+  } finally {
+    clearTimeout(timeoutId)
+  }
   if (!res.ok) throw new Error('Weather unavailable')
   const json = await res.json()
   const c    = json.current ?? {}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { getPosition, onNetworkChange } from '../../lib/capacitor'
+import { MUNICIPALITY_PSGC } from '../../lib/philippineLocations'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const CACHE_KEY        = 'survAIve-weather-v1'
@@ -22,6 +23,13 @@ function withTimeout(promise, ms) {
     promise,
     new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms)),
   ])
+}
+
+// ── Municipality coordinates fallback (used when GPS is unavailable) ──────────
+function getMunicipalityCoords(municipality) {
+  const entry = municipality ? MUNICIPALITY_PSGC[municipality] : null
+  if (entry?.lat && entry?.lng) return { latitude: entry.lat, longitude: entry.lng }
+  return { latitude: 9.852, longitude: 126.073 } // Siargao Island default
 }
 
 // ── Sky condition helpers ──────────────────────────────────────────────────────
@@ -151,15 +159,19 @@ async function fetchWeather(lat, lon) {
   const url =
     `https://api.open-meteo.com/v1/forecast` +
     `?latitude=${lat}&longitude=${lon}` +
-    `&current=temperature_2m,relative_humidity_2m,precipitation_probability,wind_speed_10m,cloud_cover,weather_code` +
-    `&wind_speed_unit=kmh&timezone=auto`
+    `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,cloud_cover,weather_code` +
+    `&hourly=precipitation_probability` +
+    `&wind_speed_unit=kmh&timezone=auto&forecast_days=1`
   const res  = await fetch(url)
+  if (!res.ok) throw new Error(`Weather API error ${res.status}`)
   const json = await res.json()
   const c    = json.current
+  if (!c) throw new Error('Weather API returned no current data')
+  const precip = json.hourly?.precipitation_probability?.[0] ?? 0
   return {
     temperature:   Math.round(c.temperature_2m),
     humidity:      Math.round(c.relative_humidity_2m),
-    precipitation: Math.round(c.precipitation_probability),
+    precipitation: Math.round(precip),
     windSpeed:     Math.round(c.wind_speed_10m),
     cloudCover:    Math.round(c.cloud_cover),
     weatherCode:   c.weather_code,
@@ -227,9 +239,16 @@ export function WeatherCard({ user, isGuest }) {
         lat = cache.lat
         lon = cache.lon
       } else {
-        const coords = await withTimeout(getPosition(), FETCH_TIMEOUT_MS)
-        lat = coords.latitude
-        lon = coords.longitude
+        try {
+          const coords = await withTimeout(getPosition(), FETCH_TIMEOUT_MS)
+          lat = coords.latitude
+          lon = coords.longitude
+        } catch {
+          // GPS unavailable — use registered municipality as fallback
+          const fallback = getMunicipalityCoords(user?.municipality)
+          lat = fallback.latitude
+          lon = fallback.longitude
+        }
       }
 
       // ── Skip reverseGeocode if registered user or coords barely moved ──────
