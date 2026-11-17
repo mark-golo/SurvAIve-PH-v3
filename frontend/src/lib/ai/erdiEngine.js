@@ -76,6 +76,7 @@ export function computeDelayStages(events = [], report = {}) {
   }
 
   const ackedAt    = enteredAt('acknowledged')
+    ?? (report.confirmed_at ? new Date(report.confirmed_at).getTime() : null)
   const enRouteAt  = enteredAt('en_route')
   const onSceneAt  = enteredAt('on_scene')
   const rescuedAt  = enteredAt('rescued')
@@ -107,7 +108,7 @@ export function computeDelayStages(events = [], report = {}) {
 // events:      sos_status_events array sorted by created_at ascending
 // responder:   { lat, lng, last_seen_at } or null
 // weatherRisk: { riskLevel: 'LOW'|'MODERATE'|'HIGH'|'EXTREME', rainfall, windSpeed } or null
-export function assessDelay(report = {}, events = [], responder = null, weatherRisk = null) {
+export function assessDelay(report = {}, events = [], responder = null, weatherRisk = null, agencyContext = null) {
   const now = Date.now()
   const priorityLabel = getPriorityLabel(report.ai_priority_score)
   const baseline      = getBaselineFor(report.ai_priority_score)
@@ -190,6 +191,15 @@ export function assessDelay(report = {}, events = [], responder = null, weatherR
     const freshness = trackingFreshness(responder.last_seen_at)
     if (freshness === 'stale')        factors.push('Responder GPS last updated more than 5 minutes ago — position may be outdated')
     else if (freshness === 'reconnecting') factors.push('Responder GPS signal is intermittent')
+  }
+
+  if (agencyContext?.onDutyCount > 0) {
+    const loadRatio = (agencyContext.activeLoad ?? 0) / (agencyContext.onDutyCount * 2)
+    if (loadRatio > 0.8) {
+      factors.push(
+        `High agency workload — ${agencyContext.activeLoad} active incident${agencyContext.activeLoad !== 1 ? 's' : ''} across ${agencyContext.onDutyCount} on-duty responder${agencyContext.onDutyCount !== 1 ? 's' : ''}`
+      )
+    }
   }
 
   if (factors.length === 0 && tier === 'ON_TRACK') {

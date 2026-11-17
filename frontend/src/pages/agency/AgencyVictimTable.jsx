@@ -6,6 +6,7 @@ import { getNetworkOnline } from '../../lib/capacitor'
 import { useAuthStore } from '../../store/auth'
 import { fmtSosId } from '../../lib/format'
 import api from '../../lib/api'
+import { assessDelay, tierColor, tierLabel } from '../../lib/ai/erdiEngine'
 
 // ── Acknowledgment Panel ──────────────────────────────────────────────────────
 // Shows agency-level acknowledgment actions for each pending SOS.
@@ -107,9 +108,19 @@ function AcknowledgmentPanel({ agencyType, agencyId }) {
           {pendingSOS.map(sos => (
             <div key={sos.id} className="px-4 py-3 flex items-center justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">
-                  {fmtSosId(sos.id)} · {sos.name ?? 'Guest'}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-medium text-white truncate">
+                    {fmtSosId(sos.id)} · {sos.name ?? 'Guest'}
+                  </p>
+                  {(() => {
+                    const erdi = assessDelay(sos, [], null, null)
+                    return erdi.tier !== 'ON_TRACK' ? (
+                      <span className="text-[9px] font-bold shrink-0" style={{ color: tierColor(erdi.tier) }}>
+                        {tierLabel(erdi.tier)}
+                      </span>
+                    ) : null
+                  })()}
+                </div>
                 <p className="text-xs text-slate-500">
                   {sos.barangay ?? '—'} · {new Date(sos.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}
                 </p>

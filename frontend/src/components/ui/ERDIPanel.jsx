@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Shield, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, Clock, Info } from 'lucide-react'
 import { GlassCard } from './GlassCard'
-import { tierColor, tierLabel, formatMsShort } from '../../lib/ai/erdiEngine'
+import { tierColor, tierLabel, formatMsShort, explainDelay } from '../../lib/ai/erdiEngine'
 
 const TIER_ICONS = {
   CRITICAL_DELAY: AlertTriangle,
@@ -103,6 +103,15 @@ export function ERDIPanel({ assessment, role = 'victim', className = '' }) {
       {/* Expanded detail */}
       {expanded && (
         <div className="mt-3 space-y-3">
+          {/* Narrative explanation (§5.1, §8) — only for non-ON_TRACK tiers */}
+          {tier !== 'ON_TRACK' && (() => {
+            const narrative = explainDelay(assessment, role)
+            return narrative ? (
+              <p className="text-xs text-[rgba(255,255,255,0.65)] italic leading-relaxed pb-3 border-b border-[rgba(255,255,255,0.06)]">
+                {narrative}
+              </p>
+            ) : null
+          })()}
           {/* Stage timeline */}
           <div>
             <p className="text-[10px] text-[rgba(255,255,255,0.4)] uppercase tracking-wider mb-2">Response Stages</p>

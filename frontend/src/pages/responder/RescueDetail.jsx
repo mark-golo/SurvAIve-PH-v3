@@ -57,6 +57,7 @@ export function RescueDetail() {
   const [timer, setTimer] = useState(null)
   const [responderProfile, setResponderProfile] = useState(null)
   const [gpsStatus, setGpsStatus] = useState('inactive') // 'inactive'|'active'|'error'
+  const [responderGps, setResponderGps] = useState(null)
   const watchIdRef  = useRef(null)
   const lastPushRef = useRef(0)
   const [sosEvents,     setSosEvents]     = useState([])
@@ -133,8 +134,8 @@ export function RescueDetail() {
   useEffect(() => {
     if (!victim) return
     const report = { ...victim, ai_priority_score: victim.ai_priority_score ?? 60 }
-    setErdiAssessment(assessDelay(report, sosEvents, responderProfile, weatherRisk))
-  }, [victim?.rescue_status, sosEvents.length, weatherRisk])
+    setErdiAssessment(assessDelay(report, sosEvents, responderGps, weatherRisk))
+  }, [victim?.rescue_status, sosEvents.length, weatherRisk, responderGps])
 
   // GPS location sharing — active only when en_route or on_scene
   useEffect(() => {
@@ -158,6 +159,7 @@ export function RescueDetail() {
       Geolocation.watchPosition({ enableHighAccuracy: true }, (pos, err) => {
         if (err || !pos) { setGpsStatus('error'); return }
         setGpsStatus('active')
+        setResponderGps({ lat: pos.coords.latitude, lng: pos.coords.longitude, last_seen_at: new Date().toISOString() })
         const now = Date.now()
         if (now - lastPushRef.current < 10_000) return // throttle: max once per 10 s
         lastPushRef.current = now

@@ -6,6 +6,7 @@ import {
   MapPin, Target, Clock,
 } from 'lucide-react'
 import { assessDelay, tierColor, tierLabel, formatMsShort } from '../../lib/ai/erdiEngine'
+import { fetchWeather } from '../../lib/weatherService'
 import { AdminLayout } from './AdminLayout'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassCard } from '../../components/ui/GlassCard'
@@ -174,6 +175,7 @@ export function SituationalAwareness() {
   const [snapshotAge, setSnapshotAge] = useState(null)
   const [expandedZone, setExpandedZone] = useState(null)
   const [activeTab, setActiveTab]   = useState('zones') // 'zones' | 'insights' | 'delay'
+  const [delayWeather, setDelayWeather] = useState(null)
 
   const muni = scope?.municipality
 
@@ -263,12 +265,22 @@ export function SituationalAwareness() {
   const zones    = useMemo(() => analyzeZones(reports), [reports])
   const insights = useMemo(() => generateInsights(zones), [zones])
 
+  // Fetch weather for Delay Intel tab using first available report with coords
+  useEffect(() => {
+    if (!reports.length) return
+    const ref = reports.find(r => r.lat && r.lng)
+    if (!ref) return
+    fetchWeather(ref.lat, ref.lng)
+      .then(w => setDelayWeather(w))
+      .catch(() => {})
+  }, [reports])
+
   // ERDI: assess each active report (no per-report events available in admin view)
   const delayAssessments = useMemo(() => {
     return reports
       .filter(r => !['rescued', 'cannot_reach'].includes(r.rescue_status))
-      .map(r => ({ report: r, assessment: assessDelay(r, [], null, null) }))
-  }, [reports])
+      .map(r => ({ report: r, assessment: assessDelay(r, [], null, delayWeather) }))
+  }, [reports, delayWeather])
 
   const delayTierCounts = useMemo(() => {
     const counts = { CRITICAL_DELAY: 0, DELAYED: 0, MINOR_DELAY: 0, ON_TRACK: 0 }
