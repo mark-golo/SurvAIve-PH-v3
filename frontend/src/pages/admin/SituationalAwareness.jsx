@@ -15,7 +15,7 @@ import { getNetworkOnline, probeBackend, invalidateProbeCache, onNetworkChange }
 import { db } from '../../lib/db'
 import { useAuthStore } from '../../store/auth'
 import { supabase } from '../../lib/supabase'
-import { analyzeZones, generateInsights } from '../../lib/ai/situationalAnalytics'
+import { analyzeZones, generateInsights, detectAnomalies, computeSafetyAggregation } from '../../lib/ai/situationalAnalytics'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-components
@@ -169,12 +169,13 @@ function ZoneBar({ zone, rank, isExpanded, onToggle }) {
 export function SituationalAwareness() {
   const { scope } = useAuthStore()
   const [reports, setReports]       = useState([])
+  const [constituents, setConstituents] = useState([])
   const [loading, setLoading]       = useState(true)
   const [syncing, setSyncing]       = useState(false)
   const [offlineMode, setOfflineMode] = useState(false)
   const [snapshotAge, setSnapshotAge] = useState(null)
   const [expandedZone, setExpandedZone] = useState(null)
-  const [activeTab, setActiveTab]   = useState('zones') // 'zones' | 'insights' | 'delay'
+  const [activeTab, setActiveTab]   = useState('zones') // 'zones' | 'insights' | 'delay' | 'safety'
   const [delayWeather, setDelayWeather] = useState(null)
 
   const muni = scope?.municipality
@@ -186,6 +187,10 @@ export function SituationalAwareness() {
       setReports(res)
       setOfflineMode(false)
       setSnapshotAge(null)
+      // Fetch constituents for Community Safety aggregation (non-blocking)
+      api.get(muni ? `/constituents?municipality=${encodeURIComponent(muni)}` : '/constituents')
+        .then(rows => setConstituents(Array.isArray(rows) ? rows : []))
+        .catch(() => {})
     } catch {
       // Fall back to IndexedDB snapshot
       try {
@@ -264,6 +269,8 @@ export function SituationalAwareness() {
 
   const zones    = useMemo(() => analyzeZones(reports), [reports])
   const insights = useMemo(() => generateInsights(zones), [zones])
+  const anomalies  = useMemo(() => detectAnomalies(reports), [reports])
+  const safetyAgg  = useMemo(() => computeSafetyAggregation(constituents), [constituents])
 
   // Fetch weather for Delay Intel tab using first available report with coords
   useEffect(() => {
@@ -378,9 +385,10 @@ export function SituationalAwareness() {
             {/* Tab toggle */}
             <div className="glass rounded-xl p-1 flex gap-1">
               {[
-                { key: 'zones',    label: 'Zone Analysis',    icon: Target },
-                { key: 'insights', label: 'AI Insights',      icon: Brain  },
-                { key: 'delay',    label: 'Delay Intel',      icon: Clock  },
+                { key: 'zones',    label: 'Zone Analysis',    icon: Target  },
+                { key: 'insights', label: 'AI Insights',      icon: Brain   },
+                { key: 'delay',    label: 'Delay Intel',      icon: Clock   },
+                { key: 'safety',   label: 'Community Safety', icon: Shield  },
               ].map(tab => (
                 <button
                   key={tab.key}
@@ -468,6 +476,20 @@ export function SituationalAwareness() {
                   </div>
                 </div>
 
+                {/* Statistical anomaly alerts — §4.6 */}
+                {anomalies.map((anomaly, i) => (
+                  <div key={`anomaly-${i}`} className="glass rounded-xl p-3.5 border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.05)]">
+                    <div className="flex items-start gap-2.5">
+                      <AlertTriangle size={14} className="text-red-400 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-bold mb-1 text-red-400">Anomaly Detected</p>
+                        <p className="text-xs text-slate-300 leading-relaxed">{anomaly.text}</p>
+                        <p className="text-[10px] text-slate-500 mt-1">Evidence: {anomaly.evidence}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
                 {insights.map((insight, i) => (
                   <InsightCard key={insight.type} insight={insight} delay={i * 0.07} />
                 ))}
@@ -529,6 +551,70 @@ export function SituationalAwareness() {
                 </GlassCard>
               </motion.div>
             )}
+            {/* Community Safety tab — §4.4 SAFE/UNSAFE/UNKNOWN aggregation */}
+            {activeTab === 'safety' && (
+              <motion.div key="safety-tab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+                <div className="glass rounded-xl px-4 py-3 border border-[rgba(34,197,94,0.2)] flex items-center gap-3">
+                  <Shield size={15} className="text-[#22c55e] shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-[#22c55e]">Community Safety Status</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Based on registered constituent records. SAFE = rescued · UNSAFE = SOS sent · UNKNOWN = no status reported.
+                    </p>
+                  </div>
+                </div>
+
+                <GlassCard>
+                  <p className="text-xs font-semibold text-[#22c55e] uppercase tracking-wider mb-4">
+                    Safety by Barangay
+                  </p>
+                  {safetyAgg.length === 0 ? (
+                    <p className="text-xs text-slate-500 text-center py-6">No constituent records found.</p>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {safetyAgg.map(row => (
+                        <div key={row.barangay} className="flex items-center gap-3">
+                          <span className="text-xs font-semibold text-white w-32 xl:w-40 shrink-0 truncate">
+                            {row.barangay}
+                          </span>
+                          <div className="flex-1 h-2 bg-[rgba(255,255,255,0.05)] rounded-full overflow-hidden flex">
+                            <div className="h-full bg-[#22c55e] transition-all duration-700"
+                              style={{ width: `${(row.safe / row.total) * 100}%` }} />
+                            <div className="h-full bg-[#ef4444] transition-all duration-700"
+                              style={{ width: `${(row.unsafe / row.total) * 100}%` }} />
+                            <div className="h-full bg-[rgba(255,255,255,0.1)] transition-all duration-700"
+                              style={{ width: `${(row.unknown / row.total) * 100}%` }} />
+                          </div>
+                          <div className="flex gap-2 text-[10px] shrink-0">
+                            <span className="text-[#22c55e] font-semibold">{row.safe} safe</span>
+                            <span className="text-[#ef4444] font-semibold">{row.unsafe} unsafe</span>
+                            <span className="text-slate-500">{row.unknown} unknown</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </GlassCard>
+
+                {safetyAgg.length > 0 && (
+                  <GlassCard>
+                    <div className="grid grid-cols-3 gap-3 text-center">
+                      {[
+                        { label: 'Total Constituents', value: safetyAgg.reduce((s, r) => s + r.total, 0), color: '#00d4ff' },
+                        { label: 'UNSAFE (SOS sent)',  value: safetyAgg.reduce((s, r) => s + r.unsafe, 0), color: '#ef4444' },
+                        { label: 'SAFE (Rescued)',     value: safetyAgg.reduce((s, r) => s + r.safe, 0), color: '#22c55e' },
+                      ].map(s => (
+                        <div key={s.label}>
+                          <p className="text-lg font-black" style={{ color: s.color }}>{s.value}</p>
+                          <p className="text-[10px] text-slate-500 leading-tight">{s.label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </GlassCard>
+                )}
+              </motion.div>
+            )}
+
             {/* Delay Intelligence tab */}
             {activeTab === 'delay' && (
               <motion.div key="delay-tab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">

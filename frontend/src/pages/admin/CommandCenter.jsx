@@ -4,6 +4,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { Users, AlertTriangle, CheckCircle, Radio, RefreshCw, Shield, X, WifiOff, CalendarDays, ChevronDown, Clock } from 'lucide-react'
 import { assessDelay, tierColor, tierLabel } from '../../lib/ai/erdiEngine'
+import { clusterSOS } from '../../lib/kmeans'
 
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { StatCard } from '../../components/ui/StatCard'
@@ -153,6 +154,11 @@ export function CommandCenter() {
       }
     })
   }, [reports, weatherBonus])
+
+  const sosClusters = useMemo(
+    () => clusterSOS(adjustedReports.filter(r => r.lat && r.lng && r.rescue_status !== 'rescued')),
+    [adjustedReports],
+  )
 
   const criticalCount = adjustedReports.filter(r => r.priority === 'CRITICAL' && r.rescue_status !== 'rescued').length
   const rescuedCount  = reports.filter(r => r.rescue_status === 'rescued').length
@@ -433,6 +439,32 @@ export function CommandCenter() {
             {adjustedReports.filter(r => r.lat && r.lng && ['CRITICAL', 'HIGH'].includes(r.priority) && r.rescue_status !== 'rescued').map(r => (
               <Circle key={`circle-${r.id}`} center={[r.lat, r.lng]} radius={150}
                 pathOptions={{ color: `${COLORS[r.priority]}40`, fillColor: `${COLORS[r.priority]}15`, fillOpacity: 1, weight: 1 }} />
+            ))}
+            {/* Geographic clusters — K-means centroids (§4.5) */}
+            {sosClusters.filter(cl => cl.count >= 2).map((cl, i) => (
+              <Circle key={`cluster-${i}`}
+                center={[cl.centroid[0], cl.centroid[1]]}
+                radius={Math.min(2000, 300 * cl.count)}
+                pathOptions={{
+                  color: COLORS[cl.priority] ?? '#00d4ff',
+                  fillColor: COLORS[cl.priority] ?? '#00d4ff',
+                  fillOpacity: 0.07,
+                  weight: 1.5,
+                  dashArray: '6 4',
+                }}
+              >
+                <Popup>
+                  <div className="bg-[#0f172a] text-white text-xs p-3 rounded-xl min-w-[160px]">
+                    <p className="font-bold mb-1" style={{ color: COLORS[cl.priority] ?? '#00d4ff' }}>
+                      Geographic Cluster
+                    </p>
+                    <p>{cl.count} SOS · Priority: {cl.priority}</p>
+                    {cl.barangays.length > 0 && (
+                      <p className="text-slate-400 mt-1 text-[10px]">{cl.barangays.join(', ')}</p>
+                    )}
+                  </div>
+                </Popup>
+              </Circle>
             ))}
             {/* Evacuation centers */}
             {centers.map(c => (

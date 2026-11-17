@@ -90,6 +90,60 @@ export function analyzeZones(reports) {
   )
 }
 
+// §4.6 — Statistical anomaly detection (surge and old-unresolved)
+export function detectAnomalies(reports = []) {
+  const now = Date.now()
+  const active = reports.filter(r => !['rescued', 'cannot_reach'].includes(r.rescue_status ?? ''))
+  const lastHour = active.filter(r => r.created_at &&
+    now - new Date(r.created_at).getTime() < 60 * 60e3).length
+  const trailing = active.filter(r => {
+    if (!r.created_at) return false
+    const age = now - new Date(r.created_at).getTime()
+    return age > 60 * 60e3 && age <= 360 * 60e3
+  }).length
+  const trailingAvg = trailing / 5
+
+  const anomalies = []
+  if (lastHour >= 3 && lastHour > trailingAvg * 2) {
+    anomalies.push({
+      text: `Unusual surge: ${lastHour} SOS report${lastHour !== 1 ? 's' : ''} in the last hour vs. ~${trailingAvg.toFixed(1)}/hr baseline.`,
+      evidence: `last 60 min = ${lastHour}, prior 5h avg = ${trailingAvg.toFixed(1)}/hr`,
+      severity: 'high',
+    })
+  }
+  const unresolvedOld = active.filter(r => r.created_at &&
+    now - new Date(r.created_at).getTime() > 120 * 60e3).length
+  if (unresolvedOld > 0) {
+    anomalies.push({
+      text: `${unresolvedOld} active SOS report${unresolvedOld !== 1 ? 's' : ''} older than 2 hours — review for escalation.`,
+      evidence: `${unresolvedOld} of ${active.length} active reports exceed 120 min without resolution`,
+      severity: unresolvedOld >= 3 ? 'high' : 'medium',
+    })
+  }
+  return anomalies
+}
+
+// §4.4 — SAFE/UNSAFE/UNKNOWN aggregation by barangay using victims table
+export function computeSafetyAggregation(victims = []) {
+  const groups = {}
+  victims.forEach(v => {
+    const key = v.barangay?.trim() || 'Unknown'
+    if (!groups[key]) groups[key] = { safe: 0, unsafe: 0, unknown: 0 }
+    const s = v.status ?? 'unknown'
+    if (s === 'rescued') groups[key].safe++
+    else if (s === 'sos_sent') groups[key].unsafe++
+    else groups[key].unknown++
+  })
+  return Object.entries(groups).map(([barangay, counts]) => ({
+    barangay,
+    ...counts,
+    total: counts.safe + counts.unsafe + counts.unknown,
+    coveragePct: Math.round(
+      ((counts.safe + counts.unsafe) / (counts.safe + counts.unsafe + counts.unknown)) * 100,
+    ),
+  })).sort((a, b) => b.unsafe - a.unsafe || b.total - a.total)
+}
+
 export function generateInsights(zones) {
   const insights = []
   if (!zones.length) return insights

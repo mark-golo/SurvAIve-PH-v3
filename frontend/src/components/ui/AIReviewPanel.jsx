@@ -117,6 +117,42 @@ export function AIReviewPanel({ report, reviewerName, onReviewed }) {
         </div>
       </div>
 
+      {/* AI-Extracted Information — §3.8: "short explanation citing report details used" */}
+      {(report.status || report.people_count > 1 || report.special_conditions ||
+        (Array.isArray(report.vulnerabilities) ? report.vulnerabilities.length > 0
+          : String(report.vulnerabilities ?? '').split(',').filter(Boolean).length > 0)) && (
+        <div className="pt-2 border-t border-[rgba(255,255,255,0.06)]">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 font-semibold">
+            AI-Extracted Information
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {report.status && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(239,68,68,0.15)] border border-[rgba(239,68,68,0.3)] text-red-400 font-medium capitalize">
+                {report.status}
+              </span>
+            )}
+            {report.people_count > 1 && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.3)] text-[#00d4ff] font-medium">
+                {report.people_count} people
+              </span>
+            )}
+            {String(report.special_conditions ?? '').split(',').filter(Boolean).map(c => (
+              <span key={c} className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.3)] text-amber-400 font-medium capitalize">
+                {c.trim().replace(/_/g, ' ')}
+              </span>
+            ))}
+            {(Array.isArray(report.vulnerabilities)
+              ? report.vulnerabilities
+              : String(report.vulnerabilities ?? '').split(',').filter(Boolean)
+            ).map(v => (
+              <span key={v} className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(139,92,246,0.1)] border border-[rgba(139,92,246,0.3)] text-violet-400 font-medium capitalize">
+                {v.trim().replace(/_/g, ' ')}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Reviewed-by info */}
       {isReviewed && report.ai_reviewed_by && (
         <p className="text-[10px] text-slate-400">
