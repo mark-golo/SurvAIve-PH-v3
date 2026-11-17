@@ -184,6 +184,21 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   FOREIGN KEY (assigned_responder_id) REFERENCES responders(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
+-- ── SOS Status Events (stage-transition log — mirrors the Supabase table) ────
+CREATE TABLE IF NOT EXISTS `sos_status_events` (
+  `id`                  INT           AUTO_INCREMENT PRIMARY KEY,
+  `sos_id`              INT           NOT NULL,
+  `event_type`          VARCHAR(50)   NOT NULL,
+  `old_status`          VARCHAR(30)   DEFAULT NULL,
+  `new_status`          VARCHAR(30)   NOT NULL,
+  `message`             TEXT          DEFAULT NULL,
+  `actor_role`          VARCHAR(30)   DEFAULT NULL,
+  `actor_name_snapshot` VARCHAR(100)  DEFAULT NULL,
+  `source`              ENUM('online','offline_sync','system') NOT NULL DEFAULT 'online',
+  `created_at`          TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (`sos_id`) REFERENCES `sos_reports`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ── Welfare Checks (daily victim check-ins) ───────────────────────────────────
 CREATE TABLE IF NOT EXISTS welfare_checks (
   id           INT  AUTO_INCREMENT PRIMARY KEY,

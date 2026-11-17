@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Brain, TrendingUp, AlertTriangle, Users, Shield,
   RefreshCw, WifiOff, Zap, Eye, ChevronRight, ChevronDown,
-  MapPin, Target,
+  MapPin, Target, Clock,
 } from 'lucide-react'
+import { assessDelay, tierColor, tierLabel, formatMsShort } from '../../lib/ai/erdiEngine'
 import { AdminLayout } from './AdminLayout'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassCard } from '../../components/ui/GlassCard'
@@ -296,7 +297,7 @@ export function SituationalAwareness() {
   const [offlineMode, setOfflineMode] = useState(false)
   const [snapshotAge, setSnapshotAge] = useState(null)
   const [expandedZone, setExpandedZone] = useState(null)
-  const [activeTab, setActiveTab]   = useState('zones') // 'zones' | 'insights'
+  const [activeTab, setActiveTab]   = useState('zones') // 'zones' | 'insights' | 'delay'
 
   const muni = scope?.municipality
 
@@ -385,6 +386,19 @@ export function SituationalAwareness() {
 
   const zones    = useMemo(() => analyzeZones(reports), [reports])
   const insights = useMemo(() => generateInsights(zones), [zones])
+
+  // ERDI: assess each active report (no per-report events available in admin view)
+  const delayAssessments = useMemo(() => {
+    return reports
+      .filter(r => !['rescued', 'cannot_reach'].includes(r.rescue_status))
+      .map(r => ({ report: r, assessment: assessDelay(r, [], null, null) }))
+  }, [reports])
+
+  const delayTierCounts = useMemo(() => {
+    const counts = { CRITICAL_DELAY: 0, DELAYED: 0, MINOR_DELAY: 0, ON_TRACK: 0 }
+    delayAssessments.forEach(({ assessment }) => { counts[assessment.tier] = (counts[assessment.tier] ?? 0) + 1 })
+    return counts
+  }, [delayAssessments])
 
   const snapshotLabel = snapshotAge
     ? (() => {
@@ -476,8 +490,9 @@ export function SituationalAwareness() {
             {/* Tab toggle */}
             <div className="glass rounded-xl p-1 flex gap-1">
               {[
-                { key: 'zones',    label: 'Zone Analysis', icon: Target },
-                { key: 'insights', label: 'AI Insights',   icon: Brain  },
+                { key: 'zones',    label: 'Zone Analysis',    icon: Target },
+                { key: 'insights', label: 'AI Insights',      icon: Brain  },
+                { key: 'delay',    label: 'Delay Intel',      icon: Clock  },
               ].map(tab => (
                 <button
                   key={tab.key}
@@ -624,6 +639,96 @@ export function SituationalAwareness() {
                       ))}
                   </div>
                 </GlassCard>
+              </motion.div>
+            )}
+            {/* Delay Intelligence tab */}
+            {activeTab === 'delay' && (
+              <motion.div key="delay-tab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+                {/* Notice */}
+                <div className="glass rounded-xl px-4 py-3 border border-[rgba(0,212,255,0.2)] flex items-center gap-3">
+                  <Clock size={15} className="text-[#00d4ff] shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-[#00d4ff]">Emergency Response Delay Intelligence (ERDI)</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Rule-based delay assessment for active incidents. Computed from priority baselines and elapsed stage times. Verify with field personnel.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Tier summary counts */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { tier: 'CRITICAL_DELAY', count: delayTierCounts.CRITICAL_DELAY },
+                    { tier: 'DELAYED',        count: delayTierCounts.DELAYED },
+                    { tier: 'MINOR_DELAY',    count: delayTierCounts.MINOR_DELAY },
+                    { tier: 'ON_TRACK',       count: delayTierCounts.ON_TRACK },
+                  ].map(({ tier, count }) => (
+                    <div key={tier}
+                      className="glass rounded-xl p-3 border text-center"
+                      style={{ borderColor: tierColor(tier) + '30', backgroundColor: tierColor(tier) + '08' }}
+                    >
+                      <p className="text-lg font-black" style={{ color: tierColor(tier) }}>{count}</p>
+                      <p className="text-[9px] font-semibold mt-0.5" style={{ color: tierColor(tier) }}>
+                        {tierLabel(tier).toUpperCase()}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Critical / Delayed cases list */}
+                {delayAssessments
+                  .filter(({ assessment }) => assessment.tier === 'CRITICAL_DELAY' || assessment.tier === 'DELAYED')
+                  .sort((a, b) => {
+                    const tierOrder = { CRITICAL_DELAY: 0, DELAYED: 1 }
+                    return (tierOrder[a.assessment.tier] ?? 2) - (tierOrder[b.assessment.tier] ?? 2)
+                  })
+                  .length === 0 ? (
+                    <div className="glass rounded-xl p-6 text-center border border-[rgba(34,197,94,0.2)]">
+                      <p className="text-sm font-semibold text-[#22c55e]">All active incidents are within baseline</p>
+                      <p className="text-[10px] text-slate-500 mt-1">No significant delays detected at this time</p>
+                    </div>
+                  ) : (
+                    <GlassCard>
+                      <p className="text-xs font-semibold text-[#f97316] uppercase tracking-wider mb-3">Delayed Incidents</p>
+                      <div className="space-y-3">
+                        {delayAssessments
+                          .filter(({ assessment }) => assessment.tier === 'CRITICAL_DELAY' || assessment.tier === 'DELAYED')
+                          .sort((a, b) => {
+                            const tierOrder = { CRITICAL_DELAY: 0, DELAYED: 1 }
+                            return (tierOrder[a.assessment.tier] ?? 2) - (tierOrder[b.assessment.tier] ?? 2)
+                          })
+                          .slice(0, 10)
+                          .map(({ report: r, assessment: a }) => (
+                            <div key={r.id}
+                              className="flex items-start gap-3 pb-3 border-b border-[rgba(255,255,255,0.05)] last:border-0"
+                            >
+                              <div
+                                className="mt-0.5 w-2 h-2 rounded-full shrink-0"
+                                style={{ backgroundColor: tierColor(a.tier) }}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs font-semibold text-white truncate">{r.name ?? 'Unknown'}</span>
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
+                                    style={{ color: tierColor(a.tier), backgroundColor: tierColor(a.tier) + '18' }}>
+                                    {tierLabel(a.tier)}
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-0.5">{r.barangay} · {r.rescue_status?.replace('_', ' ')}</p>
+                                {a.factors[0] && (
+                                  <p className="text-[10px] text-slate-500 mt-0.5 italic">{a.factors[0]}</p>
+                                )}
+                                <p className="text-[10px] text-slate-400 mt-1 leading-snug">{a.recommendations?.admin}</p>
+                              </div>
+                              <span className="text-[10px] shrink-0" style={{ color: tierColor(a.tier) }}>
+                                {r.minutes_ago != null ? `${r.minutes_ago}m` : '—'}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    </GlassCard>
+                  )
+                }
               </motion.div>
             )}
           </>

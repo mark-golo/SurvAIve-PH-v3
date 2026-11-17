@@ -13,6 +13,9 @@ import { supabase } from '../../lib/supabase'
 import { getNetworkOnline } from '../../lib/capacitor'
 import { Geolocation } from '@capacitor/geolocation'
 import { fmtSosId } from '../../lib/format'
+import { fetchWeather } from '../../lib/weatherService'
+import { assessDelay } from '../../lib/ai/erdiEngine'
+import { ERDIPanel } from '../../components/ui/ERDIPanel'
 
 
 const ACTIONS = [
@@ -54,6 +57,9 @@ export function RescueDetail() {
   const [gpsStatus, setGpsStatus] = useState('inactive') // 'inactive'|'active'|'error'
   const watchIdRef  = useRef(null)
   const lastPushRef = useRef(0)
+  const [sosEvents,     setSosEvents]     = useState([])
+  const [weatherRisk,   setWeatherRisk]   = useState(null)
+  const [erdiAssessment,setErdiAssessment]= useState(null)
 
   useEffect(() => {
     api.get(`/sos/${id}`)
@@ -91,6 +97,33 @@ export function RescueDetail() {
         .then(({ data }) => { if (data) setResponderProfile(data) })
     })
   }, [])
+
+  // Fetch sos_status_events for ERDI stage timing
+  useEffect(() => {
+    if (!id) return
+    supabase
+      .from('sos_status_events')
+      .select('id,event_type,old_status,new_status,created_at,actor_role')
+      .eq('sos_id', id)
+      .order('created_at', { ascending: true })
+      .then(({ data }) => { if (data) setSosEvents(data) })
+      .catch(() => {})
+  }, [id, rescueStatus])
+
+  // Fetch weather risk for ERDI (non-blocking)
+  useEffect(() => {
+    if (!victim?.lat || !victim?.lng) return
+    fetchWeather(victim.lat, victim.lng)
+      .then(w => setWeatherRisk(w))
+      .catch(() => {})
+  }, [victim?.lat, victim?.lng])
+
+  // Recompute ERDI assessment
+  useEffect(() => {
+    if (!victim) return
+    const report = { ...victim, ai_priority_score: victim.ai_priority_score ?? 60 }
+    setErdiAssessment(assessDelay(report, sosEvents, responderProfile, weatherRisk))
+  }, [victim?.rescue_status, sosEvents.length, weatherRisk])
 
   // GPS location sharing — active only when en_route or on_scene
   useEffect(() => {
@@ -359,6 +392,11 @@ export function RescueDetail() {
             rows={3}
           />
         </GlassCard>
+
+        {/* ERDI — delay intelligence (hidden after rescue/cannot_reach) */}
+        {erdiAssessment && !['rescued','cannot_reach'].includes(rescueStatus) && (
+          <ERDIPanel assessment={erdiAssessment} role="responder" />
+        )}
 
         {/* Submit report — hidden for already-completed rescues */}
         {victim?.rescue_status !== 'rescued' && (

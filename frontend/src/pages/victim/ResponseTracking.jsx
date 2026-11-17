@@ -18,6 +18,9 @@ import {
   getMilestoneAnnouncement, speak, fetchETA,
   trackingFreshness, formatLastSeen,
 } from '../../lib/tracking'
+import { fetchWeather } from '../../lib/weatherService'
+import { assessDelay } from '../../lib/ai/erdiEngine'
+import { ERDIPanel } from '../../components/ui/ERDIPanel'
 
 const RESCUE_STATUS_LABELS = {
   pending:      { label: 'Awaiting Acknowledgment', color: 'text-slate-400',  bg: 'bg-slate-700'     },
@@ -109,6 +112,10 @@ export function ResponseTracking() {
   const [lastAnnouncement, setLastAnnouncement] = useState(null)
   const announcedRef = useRef(new Set())
   const prevDistRef  = useRef(null)
+
+  // ── ERDI state ───────────────────────────────────────────────────────────
+  const [weatherRisk,     setWeatherRisk]     = useState(null)
+  const [erdiAssessment,  setErdiAssessment]  = useState(null)
 
   async function load() {
     setLoading(true)
@@ -254,6 +261,20 @@ export function ResponseTracking() {
     fetchETA(responder.lat, responder.lng, report.lat, report.lng).then(setEta)
   }, [responder?.lat, responder?.lng, report?.lat, report?.lng])
 
+  // Fetch weather risk for ERDI (non-blocking; graceful fail when offline)
+  useEffect(() => {
+    if (!report?.lat || !report?.lng) return
+    fetchWeather(report.lat, report.lng)
+      .then(w => setWeatherRisk(w))
+      .catch(() => {})
+  }, [report?.lat, report?.lng])
+
+  // Recompute ERDI assessment whenever key inputs change
+  useEffect(() => {
+    if (!report) return
+    setErdiAssessment(assessDelay(report, events, responder, weatherRisk))
+  }, [report?.rescue_status, report?.ai_priority_score, events.length, responder?.lat, responder?.lng, responder?.last_seen_at, weatherRisk])
+
   // Arrival announcement — triggered by rescue_status reaching on_scene
   useEffect(() => {
     if (report?.rescue_status !== 'on_scene') return
@@ -334,6 +355,11 @@ export function ResponseTracking() {
                 </div>
               </div>
             </div>
+
+            {/* ERDI — delay intelligence (hidden after rescue) */}
+            {erdiAssessment && report?.rescue_status !== 'rescued' && (
+              <ERDIPanel assessment={erdiAssessment} role="victim" />
+            )}
 
             {/* Responder Location — enhanced with distance, freshness, ETA, voice */}
             {responder?.lat != null && responder?.lng != null && report?.rescue_status !== 'rescued' && (

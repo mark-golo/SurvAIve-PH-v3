@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { Users, AlertTriangle, CheckCircle, Radio, RefreshCw, Shield, X, WifiOff, CalendarDays, ChevronDown } from 'lucide-react'
+import { Users, AlertTriangle, CheckCircle, Radio, RefreshCw, Shield, X, WifiOff, CalendarDays, ChevronDown, Clock } from 'lucide-react'
+import { assessDelay, tierColor, tierLabel } from '../../lib/ai/erdiEngine'
 
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { StatCard } from '../../components/ui/StatCard'
@@ -649,6 +650,39 @@ export function CommandCenter() {
             })()}
           </div>
 
+          {/* 3b — Delay Alerts (ERDI) — collapsed accordion */}
+          {(() => {
+            const criticalDelays = adjustedReports
+              .filter(r => !['rescued','cannot_reach'].includes(r.rescue_status))
+              .map(r => ({ r, a: assessDelay(r, [], null, null) }))
+              .filter(({ a }) => a.tier === 'CRITICAL_DELAY' || a.tier === 'DELAYED')
+              .slice(0, 5)
+            if (!criticalDelays.length) return null
+            return (
+              <div className="px-3 pb-2.5 border-b border-[rgba(255,255,255,0.08)]">
+                <div className="rounded-xl p-2.5 border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.06)]">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Clock size={11} className="text-[#f97316]" />
+                    <p className="text-[10px] font-bold text-[#f97316] uppercase tracking-wider">Delay Alerts — {criticalDelays.length} incident{criticalDelays.length > 1 ? 's' : ''}</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    {criticalDelays.map(({ r, a }) => (
+                      <div key={r.id} className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: tierColor(a.tier) }} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] text-white truncate">{r.name ?? 'Unknown'} · {r.barangay}</p>
+                        </div>
+                        <span className="text-[9px] font-bold shrink-0" style={{ color: tierColor(a.tier) }}>
+                          {tierLabel(a.tier)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+
           {/* 4 — Recent Reports */}
           <div className="flex-1 overflow-y-auto p-3 min-h-0">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Recent Reports</p>
@@ -657,6 +691,7 @@ export function CommandCenter() {
                 const isSelected = selectedSOS && r.lat === selectedSOS[0] && r.lng === selectedSOS[1]
                 const isRescued  = r.rescue_status === 'rescued'
                 const dotColor   = isRescued ? '#22c55e' : COLORS[r.priority]
+                const erdi       = isRescued ? null : assessDelay(r, [], null, null)
                 return (
                   <div
                     key={r.id}
@@ -686,7 +721,14 @@ export function CommandCenter() {
                           </button>
                         </div>
                       )
-                      : <StatusBadge status={r.priority} className="shrink-0 text-[9px] !py-0.5 !px-1.5" />
+                      : (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {erdi && (erdi.tier === 'CRITICAL_DELAY' || erdi.tier === 'DELAYED') && (
+                            <Clock size={9} style={{ color: tierColor(erdi.tier) }} title={tierLabel(erdi.tier)} />
+                          )}
+                          <StatusBadge status={r.priority} className="text-[9px] !py-0.5 !px-1.5" />
+                        </div>
+                      )
                     }
                   </div>
                 )
