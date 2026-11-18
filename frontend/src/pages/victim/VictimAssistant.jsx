@@ -259,6 +259,7 @@ export function VictimAssistant() {
                     <option value="trapped">Trapped</option>
                     <option value="injured">Injured</option>
                     <option value="missing">Missing</option>
+                    <option value="stranded">Stranded</option>
                     <option value="safe">Safe / Need Supplies</option>
                   </GlassSelect>
                   <GlassInput type="number" label="People" min={1} max={99}

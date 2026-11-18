@@ -177,6 +177,7 @@ export function explainScoreFactors(body) {
   if (conds.includes('fire'))                factors.push({ label: 'Fire reported', points: 15 })
   if (conds.includes('structural_collapse')) factors.push({ label: 'Structural collapse', points: 10 })
   if (conds.includes('flooding'))            factors.push({ label: 'Flooding reported', points: 10 })
+  if (conds.includes('needs_evacuation'))    factors.push({ label: 'Evacuation required', points: 15 })
 
   if (!body.is_verified) factors.push({ label: 'Unverified report', points: -10 })
   return factors
@@ -202,7 +203,8 @@ export function suggestPriority(entities, { isVerified = false } = {}) {
       (f.label === 'Medical emergency'    && t.key === 'medical_emergency') ||
       (f.label === 'Fire reported'        && t.key === 'fire') ||
       (f.label === 'Structural collapse'  && t.key === 'structural_collapse') ||
-      (f.label === 'Flooding reported'    && t.key === 'flooding')
+      (f.label === 'Flooding reported'    && t.key === 'flooding') ||
+      (f.label === 'Evacuation required'  && t.key === 'needs_evacuation')
     )
     return ev ? { ...f, evidence: ev.term } : f
   })

@@ -50,6 +50,11 @@ const EMERGENCY_LABELS = {
   injured: 'Injured', trapped: 'Trapped', safe: 'Safe', missing: 'Missing', unknown: 'Unknown',
 }
 
+const AI_CATEGORY_LABELS = {
+  mdrrmo: 'Disaster (MDRRMO)', hospital: 'Medical', bfp: 'Fire (BFP)',
+  pnp: 'Crime / Security (PNP)', pcg: 'Maritime (PCG)',
+}
+
 export function IncidentHistory() {
   const navigate  = useNavigate()
   const location  = useLocation()
@@ -224,6 +229,24 @@ export function IncidentHistory() {
                   </span>
                   {r.barangay && <span className="text-xs text-slate-500">· {r.barangay}</span>}
                 </div>
+                {(r.ai_classification || r.ai_review_status) && (
+                  <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                    {r.ai_classification && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(0,212,255,0.08)] border border-[rgba(0,212,255,0.2)] text-[#00d4ff]">
+                        {AI_CATEGORY_LABELS[r.ai_classification] ?? r.ai_classification}
+                      </span>
+                    )}
+                    {r.ai_review_status && (
+                      <span className={`text-[9px] ${
+                        r.ai_review_status === 'confirmed' ? 'text-green-400' :
+                        r.ai_review_status === 'corrected' ? 'text-blue-400' :
+                        r.ai_review_status === 'rejected'  ? 'text-red-400'  : 'text-slate-400'
+                      }`}>
+                        {r.ai_review_status === 'unreviewed' ? 'Pending Review' : r.ai_review_status}
+                      </span>
+                    )}
+                  </div>
+                )}
                 <div className="flex items-center justify-between mt-2">
                   <div className="flex items-center gap-2">
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${st.bg} ${st.color}`}>

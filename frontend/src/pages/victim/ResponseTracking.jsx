@@ -22,6 +22,11 @@ import { fetchWeather } from '../../lib/weatherService'
 import { assessDelay } from '../../lib/ai/erdiEngine'
 import { ERDIPanel } from '../../components/ui/ERDIPanel'
 
+const AI_CATEGORY_LABELS = {
+  mdrrmo: 'Disaster (MDRRMO)', hospital: 'Medical', bfp: 'Fire (BFP)',
+  pnp: 'Crime / Security (PNP)', pcg: 'Maritime (PCG)',
+}
+
 const RESCUE_STATUS_LABELS = {
   pending:      { label: 'Awaiting Acknowledgment', color: 'text-slate-400',  bg: 'bg-slate-700'     },
   acknowledged: { label: 'Acknowledged',            color: 'text-amber-400',  bg: 'bg-amber-900/40'  },
@@ -379,6 +384,24 @@ export function ResponseTracking() {
                 </span>
                 {report.barangay && <span className="text-xs text-slate-500">· {report.barangay}</span>}
               </div>
+              {(report.ai_classification || report.ai_review_status) && (
+                <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                  {report.ai_classification && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(0,212,255,0.08)] border border-[rgba(0,212,255,0.2)] text-[#00d4ff]">
+                      {AI_CATEGORY_LABELS[report.ai_classification] ?? report.ai_classification}
+                    </span>
+                  )}
+                  {report.ai_review_status && (
+                    <span className={`text-[9px] ${
+                      report.ai_review_status === 'confirmed' ? 'text-green-400' :
+                      report.ai_review_status === 'corrected' ? 'text-blue-400' :
+                      report.ai_review_status === 'rejected'  ? 'text-red-400'  : 'text-slate-400'
+                    }`}>
+                      {report.ai_review_status === 'unreviewed' ? 'Pending Review' : report.ai_review_status}
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="flex items-center justify-between mt-2">
                 <div className="flex items-center gap-2">
                   {(() => {

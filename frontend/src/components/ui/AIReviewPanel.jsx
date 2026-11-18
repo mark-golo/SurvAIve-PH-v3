@@ -24,7 +24,7 @@ const REVIEW_STYLES = {
   confirmed: { color: '#22c55e', label: 'AI Confirmed',        icon: CheckCircle },
   corrected: { color: '#3b82f6', label: 'Assessment Corrected', icon: Edit3       },
   rejected:  { color: '#ef4444', label: 'Assessment Rejected',  icon: XCircle    },
-  unreviewed:{ color: '#f59e0b', label: 'Unreviewed',           icon: Clock      },
+  unreviewed:{ color: '#f59e0b', label: 'Pending Review',        icon: Clock      },
 }
 
 const SERVICE_TYPES = [
