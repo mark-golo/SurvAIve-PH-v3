@@ -241,7 +241,7 @@ function RecommendationCard({ rec, status, onStatusChange }) {
                       )}
                     </div>
                     <p className="text-[10px] text-slate-400 mt-1 leading-relaxed line-clamp-3">{p.body}</p>
-                    <p className="text-[9px] text-slate-600 mt-0.5">{p.source} · {p.section}</p>
+                    <p className="text-[9px] text-slate-600 mt-0.5">{p.source} · {p.section} ({p.year})</p>
                   </div>
                 ))}
               </div>
@@ -543,6 +543,7 @@ export function PolicyIntelligence() {
   const [dataRange,       setDataRange]        = useState(null)
   const [policyQuery,     setPolicyQuery]      = useState('')
   const [policyResults,   setPolicyResults]    = useState(null)
+  const [situationSummary, setSituationSummary] = useState(null)
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true)
@@ -556,13 +557,15 @@ export function PolicyIntelligence() {
         api.get(url('/evacuation_centers')).catch(() => []),
         api.get(url('/responders')).catch(() => []),
       ])
-      const recs = analyzeData(
-        Array.isArray(reports) ? reports : [],
-        Array.isArray(centers) ? centers : [],
-        Array.isArray(responders) ? responders : [],
-        muni,
-      )
+      const safeReports    = Array.isArray(reports)    ? reports    : []
+      const safeResponders = Array.isArray(responders) ? responders : []
+      const recs = analyzeData(safeReports, Array.isArray(centers) ? centers : [], safeResponders, muni)
       setRecommendations(recs)
+      setSituationSummary({
+        totalSOS:   safeReports.length,
+        unresolved: safeReports.filter(r => r.rescue_status !== 'rescued' && !r.dismissed).length,
+        onDuty:     safeResponders.filter(r => r.duty_status === 'on_duty').length,
+      })
       setDataRange(new Date().toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }))
       logActivity('POST', 'ai_policy', 'policy_intelligence', null, {
         action: 'ai_policy_analysis',
@@ -594,6 +597,7 @@ export function PolicyIntelligence() {
   // ── Derived stats ─────────────────────────────────────────────────────────
   const highPriority  = recommendations.filter(r => r.priority === 'high').length
   const underReview   = recommendations.filter(r => (statuses[r.id] ?? 'draft') === 'under_review').length
+  const policyAreas   = [...new Set(recommendations.map(r => r.category).filter(Boolean))].length
 
   // ── Render ────────────────────────────────────────────────────────────────
   if (loading) {
@@ -652,10 +656,31 @@ export function PolicyIntelligence() {
           </div>
         </div>
 
+        {/* Situation snapshot — §5.6 current event summary */}
+        {situationSummary && situationSummary.totalSOS > 0 && (
+          <div className="grid grid-cols-3 gap-2">
+            <div className="glass rounded-xl p-3">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">SOS Reports (30d)</p>
+              <p className="text-xl font-bold text-white">{situationSummary.totalSOS}</p>
+              <p className="text-[9px] text-slate-500">Total submitted this period</p>
+            </div>
+            <div className="glass rounded-xl p-3">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Unresolved</p>
+              <p className="text-xl font-bold text-amber-400">{situationSummary.unresolved}</p>
+              <p className="text-[9px] text-slate-500">Awaiting rescue or resolution</p>
+            </div>
+            <div className="glass rounded-xl p-3">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">On Duty</p>
+              <p className="text-xl font-bold text-green-400">{situationSummary.onDuty}</p>
+              <p className="text-[9px] text-slate-500">Responders currently active</p>
+            </div>
+          </div>
+        )}
+
         {/* Stat cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard label="Identified Issues"       value={recommendations.length} sub="Patterns detected"       color="text-[#00d4ff]" />
-          <StatCard label="AI Recommendations"      value={recommendations.length} sub="Generated for LGU review" color="text-[#a78bfa]" />
+          <StatCard label="Policy Areas"            value={policyAreas}            sub="Distinct areas addressed" color="text-[#a78bfa]" />
           <StatCard label="Priority Interventions"  value={highPriority}           sub="Classified high priority" color="text-[#ef4444]" />
           <StatCard label="Under Review"            value={underReview}            sub="Awaiting LGU evaluation"  color="text-amber-400" />
         </div>

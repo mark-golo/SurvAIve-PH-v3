@@ -157,9 +157,10 @@ export function extractEntities(text) {
 export function explainScoreFactors(body) {
   const factors = [{ label: 'Base score', points: 50 }]
   const s = (body.status ?? '').toLowerCase()
-  if      (s === 'trapped') factors.push({ label: 'Status: trapped', points: 30 })
-  else if (s === 'injured') factors.push({ label: 'Status: injured', points: 20 })
-  else if (s === 'missing') factors.push({ label: 'Status: missing', points: 15 })
+  if      (s === 'trapped')  factors.push({ label: 'Status: trapped', points: 30 })
+  else if (s === 'injured')  factors.push({ label: 'Status: injured', points: 20 })
+  else if (s === 'missing')  factors.push({ label: 'Status: missing', points: 15 })
+  else if (s === 'stranded') factors.push({ label: 'Status: stranded / isolated', points: 10 })
 
   const n = Number(body.people_count) || 1
   if      (n >= 10) factors.push({ label: `${n} people affected`, points: 25 })

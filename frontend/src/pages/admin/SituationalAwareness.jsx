@@ -567,6 +567,7 @@ export function SituationalAwareness() {
                 <p className="text-[10px] text-slate-500 mt-1 italic px-1">
                   Zone classifications are derived from AI-scored SOS reports and may not reflect verified ground conditions. Confirm with field personnel before acting.
                 </p>
+                </div>
               </motion.div>
             )}
 

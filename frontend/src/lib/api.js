@@ -149,6 +149,7 @@ export function calcPriorityScore(body) {
   if      (s === 'trapped') score += 30
   else if (s === 'injured') score += 20
   else if (s === 'missing') score += 15
+  else if (s === 'stranded') score += 10
 
   const n = Number(body.people_count) || 1
   if      (n >= 10) score += 25
@@ -830,7 +831,7 @@ async function post(path, body = {}) {
     }
     const newId = inserted?.[0]?.id ?? null
     // Dual-write to PHP/MySQL so admin's MySQL-based queries also see this SOS immediately.
-    localFetch('sos', { method: 'POST', body: JSON.stringify({ ...body, ai_priority_score: score }) })
+    localFetch('sos', { method: 'POST', body: JSON.stringify({ ...body, ai_priority_score: score, ai_rules_version: AI_RULES_VERSION }) })
       .catch(() => {})
     return { ai_priority_score: score, id: newId }
   }
