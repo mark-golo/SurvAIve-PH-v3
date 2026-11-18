@@ -147,7 +147,16 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   service_type          TEXT[],
   -- Client-generated SOS dedup UUID (legacy name) — also the guest lookup key
   mesh_packet_id        TEXT DEFAULT NULL,
-  UNIQUE (mesh_packet_id)
+  UNIQUE (mesh_packet_id),
+  -- AI Emergency Intelligence traceability fields (Blueprint §6.1)
+  ai_classification     TEXT,
+  ai_confidence         SMALLINT,
+  ai_rules_version      TEXT,
+  ai_review_status      TEXT NOT NULL DEFAULT 'unreviewed'
+                          CHECK (ai_review_status IN ('unreviewed','confirmed','corrected','rejected')),
+  ai_review_note        TEXT,
+  ai_reviewed_by        TEXT,
+  ai_reviewed_at        TIMESTAMPTZ
 );
 
 -- ── welfare_checks ────────────────────────────────────────────

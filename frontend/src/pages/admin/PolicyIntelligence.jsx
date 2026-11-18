@@ -430,7 +430,15 @@ function PolicySearchPanel({ query, onQueryChange, results, onSearch, onClear })
             </p>
           )}
           {results !== null && results.length === 0 && (
-            <p className="text-xs text-slate-400 text-center py-4">No matching policy provisions found. Try different keywords.</p>
+            <div className="flex flex-col items-center gap-2 py-5 text-center">
+              <Info size={16} className="text-slate-500" />
+              <p className="text-xs text-slate-400">No relevant policy passages found in the knowledge base.</p>
+              <p className="text-[10px] text-slate-600 leading-relaxed max-w-sm">
+                The knowledge base does not contain sufficient evidence to address this query.
+                Try rephrasing with keywords such as "LDRRMF", "evacuation", "BDRRMC", or "state of calamity",
+                or consult the full source documents directly.
+              </p>
+            </div>
           )}
           {results !== null && results.length > 0 && (
             <div className="space-y-3 pt-1">
@@ -643,7 +651,9 @@ export function PolicyIntelligence() {
           results={policyResults}
           onSearch={(q) => {
             const effectiveQuery = typeof q === 'string' ? q : policyQuery
-            setPolicyResults(searchPolicyKB(effectiveQuery))
+            const hits = searchPolicyKB(effectiveQuery)
+            setPolicyResults(hits)
+            logActivity('GET', 'ai_policy', 'policy_kb_search', null, { query: effectiveQuery, resultCount: hits.length })
           }}
           onClear={() => { setPolicyQuery(''); setPolicyResults(null) }}
         />
