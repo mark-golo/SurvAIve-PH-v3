@@ -56,12 +56,18 @@ function ConfidenceDot({ level }) {
  *   role       — 'victim' | 'responder' | 'admin'
  *   className  — optional extra classes for the outer GlassCard
  */
+const FACTOR_TYPE_STYLES = {
+  observed: { symbol: '●', color: 'rgba(34,197,94,0.7)',   title: 'Observed — live system data' },
+  reported: { symbol: '!', color: 'rgba(251,191,36,0.8)',  title: 'Reported — from user or external source' },
+  inferred: { symbol: '~', color: 'rgba(148,163,184,0.6)', title: 'Inferred — derived from available context' },
+}
+
 export function ERDIPanel({ assessment, role = 'victim', className = '' }) {
   const [expanded, setExpanded] = useState(false)
 
   if (!assessment) return null
 
-  const { tier, factors, stages, recommendations, confidence, staleDataWarning, assessedAt } = assessment
+  const { tier, factors, stages, recommendations, potentialImpact, confidence, staleDataWarning, assessedAt } = assessment
   const color   = tierColor(tier)
   const label   = tierLabel(tier)
   const TierIcon = TIER_ICONS[tier] ?? Clock
@@ -96,7 +102,7 @@ export function ERDIPanel({ assessment, role = 'victim', className = '' }) {
       {/* Collapsed summary line */}
       {!expanded && factors.length > 0 && (
         <p className="text-[11px] text-[rgba(255,255,255,0.45)] mt-1.5 leading-snug line-clamp-1">
-          {factors[0]}
+          {factors[0]?.label ?? factors[0]}
         </p>
       )}
 
@@ -125,17 +131,39 @@ export function ERDIPanel({ assessment, role = 'victim', className = '' }) {
             )}
           </div>
 
+          {/* Potential impact (§7) */}
+          {potentialImpact && (
+            <p className="text-[11px] text-[rgba(245,158,11,0.75)] italic leading-snug">
+              {potentialImpact}
+            </p>
+          )}
+
           {/* Contributing factors */}
           {factors.length > 0 && (
             <div>
               <p className="text-[10px] text-[rgba(255,255,255,0.4)] uppercase tracking-wider mb-1.5">Contributing Factors</p>
               <ul className="space-y-1">
-                {factors.map((f, i) => (
-                  <li key={i} className="flex items-start gap-1.5 text-[11px] text-[rgba(255,255,255,0.65)]">
-                    <span className="mt-0.5 shrink-0 w-1 h-1 rounded-full bg-[rgba(255,255,255,0.3)]" />
-                    {f}
-                  </li>
-                ))}
+                {factors.map((f, i) => {
+                  const label = typeof f === 'string' ? f : f.label
+                  const ftype = typeof f === 'string' ? null : f.type
+                  const style = ftype ? FACTOR_TYPE_STYLES[ftype] : null
+                  return (
+                    <li key={i} className="flex items-start gap-1.5 text-[11px] text-[rgba(255,255,255,0.65)]">
+                      {style ? (
+                        <span
+                          className="mt-0.5 shrink-0 text-[9px] font-bold leading-none"
+                          style={{ color: style.color }}
+                          title={style.title}
+                        >
+                          {style.symbol}
+                        </span>
+                      ) : (
+                        <span className="mt-0.5 shrink-0 w-1 h-1 rounded-full bg-[rgba(255,255,255,0.3)]" />
+                      )}
+                      {label}
+                    </li>
+                  )
+                })}
               </ul>
             </div>
           )}

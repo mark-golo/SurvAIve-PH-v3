@@ -764,7 +764,7 @@ export function SituationalAwareness() {
                                 </div>
                                 <p className="text-[10px] text-slate-400 mt-0.5">{r.barangay} · {r.rescue_status?.replace('_', ' ')}</p>
                                 {a.factors[0] && (
-                                  <p className="text-[10px] text-slate-500 mt-0.5 italic">{a.factors[0]}</p>
+                                  <p className="text-[10px] text-slate-500 mt-0.5 italic">{a.factors[0]?.label ?? a.factors[0]}</p>
                                 )}
                                 <p className="text-[10px] text-slate-400 mt-1 leading-snug">{a.recommendations?.admin}</p>
                               </div>

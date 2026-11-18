@@ -309,6 +309,8 @@ export function ResponseTracking() {
       tier: erdiAssessment.tier,
       confidence: erdiAssessment.confidence,
       factorCount: erdiAssessment.factors?.length ?? 0,
+      topFactor: erdiAssessment.factors?.[0]?.label ?? null,
+      recommendation: erdiAssessment.recommendations?.victim ?? null,
       role: 'victim',
     })
   }, [erdiAssessment?.tier])

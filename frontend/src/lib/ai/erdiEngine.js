@@ -152,18 +152,36 @@ export function assessDelay(report = {}, events = [], responder = null, weatherR
   else if (maxRatio > 1.0)                tier = 'MINOR_DELAY'
   else                                    tier = 'ON_TRACK'
 
-  // Contributing factors
+  // Contributing factors — each is { label: string, type: 'observed'|'reported'|'inferred' }
+  // type meanings: observed = live system data, reported = user/API-sourced input, inferred = derived heuristic
   const factors = []
 
   if (weatherRisk && weatherRisk.riskLevel !== 'LOW') {
     const pct = Math.round((weatherFactor - 1) * 100)
     const label = weatherRisk.riskLevel === 'EXTREME' ? 'Extreme weather' : weatherRisk.riskLevel === 'HIGH' ? 'Heavy rain / strong winds' : 'Moderate rainfall'
-    factors.push(`${label} (+${pct}% travel time estimate)`)
+    factors.push({ label: `${label} (+${pct}% travel time estimate)`, type: 'reported' })
   }
 
-  if (geoTier === 'remote')  factors.push('Remote location — limited road access')
-  if (geoTier === 'coastal') factors.push('Coastal barangay — may require water access')
-  if (geoTier === 'rural')   factors.push('Rural barangay — longer travel distances typical')
+  if (geoTier === 'remote')  factors.push({ label: 'Remote location — limited road access', type: 'inferred' })
+  if (geoTier === 'coastal') factors.push({ label: 'Coastal barangay — may require water access', type: 'inferred' })
+  if (geoTier === 'rural')   factors.push({ label: 'Rural barangay — longer travel distances typical', type: 'inferred' })
+
+  // Disaster-type-specific context factors (§4.1)
+  const svcType = report.service_type
+  if (svcType === 'bfp') {
+    factors.push({ label: 'Active fire incident — smoke or fire spread may affect route safety', type: 'reported' })
+  } else if (svcType === 'pcg') {
+    factors.push({ label: 'Maritime incident — may require water transport or coast guard coordination', type: 'reported' })
+  } else if (svcType === 'pnp') {
+    factors.push({ label: 'Security incident — responders may require additional precautions on approach', type: 'reported' })
+  } else if (svcType === 'mdrrmo' && report.ai_primary_category) {
+    const cat = String(report.ai_primary_category).toLowerCase()
+    if (cat.includes('earthquake') || cat.includes('collapse')) {
+      factors.push({ label: 'Earthquake/structural collapse — unstable terrain or debris may obstruct access', type: 'reported' })
+    } else if (cat.includes('landslide')) {
+      factors.push({ label: 'Landslide conditions — road sections may be blocked or unstable', type: 'reported' })
+    }
+  }
 
   const vulnList = Array.isArray(report.vulnerabilities)
     ? report.vulnerabilities
@@ -171,39 +189,37 @@ export function assessDelay(report = {}, events = [], responder = null, weatherR
       ? report.vulnerabilities.split(',').filter(Boolean)
       : []
   if (vulnList.length > 0) {
-    factors.push(`Vulnerable individuals reported (${vulnList.slice(0,2).map(v => v.replace(/_/g,' ')).join(', ')}${vulnList.length > 2 ? ` +${vulnList.length-2} more` : ''})`)
+    factors.push({ label: `Vulnerable individuals reported (${vulnList.slice(0,2).map(v => v.replace(/_/g,' ')).join(', ')}${vulnList.length > 2 ? ` +${vulnList.length-2} more` : ''})`, type: 'reported' })
   }
   if (Number(report.people_count) >= 10) {
-    factors.push(`Large-scale incident (${report.people_count} people) — may require additional resources`)
+    factors.push({ label: `Large-scale incident (${report.people_count} people) — may require additional resources`, type: 'reported' })
   }
 
   Object.values(stageResults).forEach(s => {
     if (s.overMs !== null && s.overMs > 0) {
       const over = formatMsShort(s.overMs)
-      factors.push(`${s.label} stage is ${over} beyond the adjusted baseline`)
+      factors.push({ label: `${s.label} stage is ${over} beyond the adjusted baseline`, type: 'observed' })
     }
   })
 
   if (!responder?.lat || !responder?.lng) {
-    factors.push('Responder location not yet available — ETA cannot be confirmed')
+    factors.push({ label: 'Responder location not yet available — ETA cannot be confirmed', type: 'observed' })
   } else {
     const { trackingFreshness } = _freshnessFns
     const freshness = trackingFreshness(responder.last_seen_at)
-    if (freshness === 'stale')        factors.push('Responder GPS last updated more than 5 minutes ago — position may be outdated')
-    else if (freshness === 'reconnecting') factors.push('Responder GPS signal is intermittent')
+    if (freshness === 'stale')             factors.push({ label: 'Responder GPS last updated more than 5 minutes ago — position may be outdated', type: 'observed' })
+    else if (freshness === 'reconnecting') factors.push({ label: 'Responder GPS signal is intermittent', type: 'observed' })
   }
 
   if (agencyContext?.onDutyCount > 0) {
     const loadRatio = (agencyContext.activeLoad ?? 0) / (agencyContext.onDutyCount * 2)
     if (loadRatio > 0.8) {
-      factors.push(
-        `High agency workload — ${agencyContext.activeLoad} active incident${agencyContext.activeLoad !== 1 ? 's' : ''} across ${agencyContext.onDutyCount} on-duty responder${agencyContext.onDutyCount !== 1 ? 's' : ''}`
-      )
+      factors.push({ label: `High agency workload — ${agencyContext.activeLoad} active incident${agencyContext.activeLoad !== 1 ? 's' : ''} across ${agencyContext.onDutyCount} on-duty responder${agencyContext.onDutyCount !== 1 ? 's' : ''}`, type: 'observed' })
     }
   }
 
   if (factors.length === 0 && tier === 'ON_TRACK') {
-    factors.push(`Response is proceeding within the ${priorityLabel.toLowerCase()}-priority baseline`)
+    factors.push({ label: `Response is proceeding within the ${priorityLabel.toLowerCase()}-priority baseline`, type: 'inferred' })
   }
 
   // Confidence
@@ -216,6 +232,14 @@ export function assessDelay(report = {}, events = [], responder = null, weatherR
   // Role-appropriate recommendations
   const recs = buildRecommendations(tier, stageResults, report, geoTier, weatherRisk)
 
+  // Potential impact summary (§7 output structure)
+  const potentialImpact = (() => {
+    if (tier === 'ON_TRACK') return null
+    if (tier === 'MINOR_DELAY') return 'Minor delays may prolong victim wait time beyond priority targets.'
+    if (tier === 'DELAYED')     return 'Continued delay increases risk of deteriorating conditions; responder reassignment may be needed.'
+    return 'Significant delay — victim may require immediate alternative response resources or inter-agency escalation.'
+  })()
+
   return {
     tier,
     priorityLabel,
@@ -224,6 +248,7 @@ export function assessDelay(report = {}, events = [], responder = null, weatherR
     stages: stageResults,
     factors,
     recommendations: recs,
+    potentialImpact,
     confidence,
     staleDataWarning: staleGPS || events.length === 0,
     assessedAt: new Date(now),
@@ -253,7 +278,14 @@ function buildRecommendations(tier, stages, report, geoTier, weatherRisk) {
     return 'Review response progress. Verify the assigned responder can reach the location. Consider contacting the responder for a status update.'
   })()
 
-  return { victim, responder, admin }
+  // Agency role — dispatch and coordination focus (§5.3)
+  const agency = (() => {
+    if (!isDelayed) return 'No action required. Monitor for status updates.'
+    if (tier === 'CRITICAL_DELAY') return 'Reassess the assigned responder immediately. Evaluate whether a closer unit, alternative route, or inter-agency coordination is available. Escalate to LGU administrator if the incident cannot be resolved with available resources.'
+    return 'Review the assigned responder\'s availability and route. Consider contacting the responder for status confirmation. Coordinate with the nearest available unit if travel is obstructed.'
+  })()
+
+  return { victim, responder, admin, agency }
 }
 
 // ── Plain-language explanation ────────────────────────────────────────────────
@@ -269,7 +301,7 @@ export function explainDelay(assessment, role = 'victim') {
     CRITICAL_DELAY: 'A significant response delay has been detected.',
   }[tier] ?? ''
 
-  const topFactor = factors[0] ?? null
+  const topFactor = factors[0]?.label ?? null
   const causeStr  = topFactor ? ` Possible cause: ${topFactor.charAt(0).toLowerCase() + topFactor.slice(1)}.` : ''
 
   return `${intro}${causeStr}${rec ? ` ${rec}` : ''}`

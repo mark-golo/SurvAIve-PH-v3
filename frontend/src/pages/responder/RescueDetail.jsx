@@ -160,6 +160,8 @@ export function RescueDetail() {
       tier: erdiAssessment.tier,
       confidence: erdiAssessment.confidence,
       factorCount: erdiAssessment.factors?.length ?? 0,
+      topFactor: erdiAssessment.factors?.[0]?.label ?? null,
+      recommendation: erdiAssessment.recommendations?.responder ?? null,
       role: 'responder',
     })
   }, [erdiAssessment?.tier])
