@@ -99,14 +99,16 @@ export async function fetchETA(rLat, rLng, iLat, iLng) {
   const timer = setTimeout(() => ctrl.abort(), 8000)
   try {
     const res = await fetch(
-      `https://router.project-osrm.org/route/v1/driving/${rLng},${rLat};${iLng},${iLat}?overview=false`,
+      `https://router.project-osrm.org/route/v1/driving/${rLng},${rLat};${iLng},${iLat}?overview=full&geometries=geojson`,
       { signal: ctrl.signal },
     )
     if (!res.ok) return null
     const json  = await res.json()
     const route = json.routes?.[0]
     if (!route) return null
-    return { minutes: Math.ceil(route.duration / 60), roadKm: (route.distance / 1000).toFixed(1) }
+    const coords     = route.geometry?.coordinates ?? []
+    const routeCoords = coords.map(([lng, lat]) => [lat, lng])
+    return { minutes: Math.ceil(route.duration / 60), roadKm: (route.distance / 1000).toFixed(1), routeCoords }
   } catch {
     return null
   } finally {

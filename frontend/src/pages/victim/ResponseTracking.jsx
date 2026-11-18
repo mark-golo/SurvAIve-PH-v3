@@ -10,7 +10,7 @@ import api from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { db } from '../../lib/db'
 import { fmtSosId } from '../../lib/format'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import {
@@ -109,7 +109,8 @@ export function ResponseTracking() {
 
   // ── Live tracking state ───────────────────────────────────────────────────
   const [dist,          setDist]          = useState(null)   // metres
-  const [eta,           setEta]           = useState(null)   // { minutes, roadKm } | null
+  const [eta,           setEta]           = useState(null)   // { minutes, roadKm, routeCoords } | null
+  const [routeCoords,   setRouteCoords]   = useState([])     // [[lat,lng], ...] from OSRM
   const [mapExpanded,   setMapExpanded]   = useState(false)
   const [voiceOn,       setVoiceOn]       = useState(() => {
     try { return JSON.parse(localStorage.getItem('survAIve-voice-prefs'))?.on ?? true } catch { return true }
@@ -266,7 +267,10 @@ export function ResponseTracking() {
     prevDistRef.current = d
     setDist(d)
 
-    fetchETA(responder.lat, responder.lng, report.lat, report.lng).then(setEta)
+    fetchETA(responder.lat, responder.lng, report.lat, report.lng).then(result => {
+      setEta(result)
+      setRouteCoords(result?.routeCoords ?? [])
+    })
   }, [responder?.lat, responder?.lng, report?.lat, report?.lng])
 
   // Fetch weather risk for ERDI (non-blocking; graceful fail when offline)
@@ -427,6 +431,12 @@ export function ResponseTracking() {
                       <Marker position={[report.lat, report.lng]} icon={sosPinIcon()}>
                         <Popup><div className="text-xs">Your SOS Location</div></Popup>
                       </Marker>
+                    )}
+                    {routeCoords.length > 1 && (
+                      <Polyline
+                        positions={routeCoords}
+                        pathOptions={{ color: '#00d4ff', weight: 3, dashArray: '6 4', opacity: 0.7 }}
+                      />
                     )}
                   </MapContainer>
                 </div>

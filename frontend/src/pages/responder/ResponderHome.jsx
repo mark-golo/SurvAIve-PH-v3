@@ -15,6 +15,7 @@ import api, { logActivity } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 import { getNetworkOnline } from '../../lib/capacitor'
+import { Geolocation } from '@capacitor/geolocation'
 
 const NAV = [
   { icon: Home,     label: 'Home',     path: '/responder'          },
@@ -163,30 +164,27 @@ export function ResponderHome() {
 
   // ── GPS location tracking ─────────────────────────────────────────────────
   useEffect(() => {
-    if (!navigator.geolocation) return
-    const watchId = navigator.geolocation.watchPosition(
-      pos => {
-        const id = responderIdRef.current
-        if (!id) return
-        const now = Date.now()
-        const { latitude: lat, longitude: lng } = pos.coords
-        const last = lastGpsUpdateRef.current
-        if (last) {
-          const elapsed = now - last.ts
-          const dlat = (lat - last.lat) * Math.PI / 180
-          const dlng = (lng - last.lng) * Math.PI / 180
-          const a = dlat * dlat + Math.cos(last.lat * Math.PI / 180) * Math.cos(lat * Math.PI / 180) * dlng * dlng
-          const distM = 6371000 * Math.sqrt(a)
-          if (elapsed < 30000 && distM < 10) return
-        }
-        lastGpsUpdateRef.current = { ts: now, lat, lng }
-        supabase.from('responders').update({ lat, lng, last_seen_at: new Date().toISOString() })
-          .eq('id', id).then(() => {})
-      },
-      () => {},
-      { enableHighAccuracy: true, timeout: 10000 }
-    )
-    return () => navigator.geolocation.clearWatch(watchId)
+    let watchId = null
+    Geolocation.watchPosition({ enableHighAccuracy: true }, (pos, err) => {
+      if (err) return
+      const id = responderIdRef.current
+      if (!id) return
+      const now = Date.now()
+      const { latitude: lat, longitude: lng } = pos.coords
+      const last = lastGpsUpdateRef.current
+      if (last) {
+        const elapsed = now - last.ts
+        const dlat = (lat - last.lat) * Math.PI / 180
+        const dlng = (lng - last.lng) * Math.PI / 180
+        const a = dlat * dlat + Math.cos(last.lat * Math.PI / 180) * Math.cos(lat * Math.PI / 180) * dlng * dlng
+        const distM = 6371000 * Math.sqrt(a)
+        if (elapsed < 30000 && distM < 10) return
+      }
+      lastGpsUpdateRef.current = { ts: now, lat, lng }
+      supabase.from('responders').update({ lat, lng, last_seen_at: new Date().toISOString() })
+        .eq('id', id).then(() => {})
+    }).then(id => { watchId = id })
+    return () => { if (watchId !== null) Geolocation.clearWatch({ id: watchId }) }
   }, [])
 
   // ── Load SOS list ─────────────────────────────────────────────────────────

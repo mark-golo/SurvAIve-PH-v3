@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { getResponderTheme } from '../../lib/victimTheme'
 import { useNavigate } from 'react-router-dom'
+import { Geolocation } from '@capacitor/geolocation'
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -47,6 +48,14 @@ const shelterIcon = (status) => {
   })
 }
 
+function haversineSimple(lat1, lng1, lat2, lng2) {
+  const R = 6_371_000
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
 function FlyTo({ pos }) {
   const map = useMap()
   useEffect(() => { if (pos) map.flyTo(pos, 15, { duration: 1.2 }) }, [pos])
@@ -66,6 +75,8 @@ export function FieldMap() {
 
   const activeAssigned = assigned.filter(v => v.rescue_status !== 'rescued' && v.lat != null && v.lng != null)
   const clusters = useMemo(() => clusterSOS(activeAssigned), [activeAssigned])
+  const lastPushRef  = useRef(0)
+  const lastCoordRef = useRef(null)
 
   const muni = scope?.municipality
 
@@ -144,7 +155,6 @@ export function FieldMap() {
   }, [])
 
   useEffect(() => {
-    if (!navigator.geolocation) { setGpsError(true); return }
     let watchId = null
     let active = true
     supabase.auth.getUser().then(({ data: { user: authUser } }) => {
@@ -158,23 +168,28 @@ export function FieldMap() {
         .then(({ data }) => {
           if (!active || !data) return
           setProfile(data)
-          watchId = navigator.geolocation.watchPosition(
-            pos => {
-              setMyPos([pos.coords.latitude, pos.coords.longitude])
-              supabase.rpc('update_responder_location', {
-                p_contact_number: contact,
-                p_lat: pos.coords.latitude,
-                p_lng: pos.coords.longitude,
-              }).then(() => {})
-            },
-            () => setGpsError(true),
-            { enableHighAccuracy: true, timeout: 10000 }
-          )
+          Geolocation.watchPosition({ enableHighAccuracy: true }, (pos, err) => {
+            if (err) { setGpsError(true); return }
+            const lat = pos.coords.latitude
+            const lng = pos.coords.longitude
+            setMyPos([lat, lng])
+            const now = Date.now()
+            const prev = lastCoordRef.current
+            const dist = prev ? haversineSimple(prev[0], prev[1], lat, lng) : Infinity
+            if (now - lastPushRef.current < 10_000 && dist < 10) return
+            lastPushRef.current = now
+            lastCoordRef.current = [lat, lng]
+            supabase.rpc('update_responder_location', {
+              p_contact_number: contact,
+              p_lat: lat,
+              p_lng: lng,
+            }).then(() => {})
+          }).then(id => { watchId = id })
         })
     })
     return () => {
       active = false
-      if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+      if (watchId !== null) Geolocation.clearWatch({ id: watchId })
     }
   }, [])
 
