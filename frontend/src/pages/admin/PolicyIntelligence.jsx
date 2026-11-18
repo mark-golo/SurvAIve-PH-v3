@@ -21,9 +21,15 @@ function analyzeData(reports, centers, responders, muni) {
   const now  = new Date()
   const period = `as of ${now.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}`
 
+  // Apply 30-day lookback window per blueprint §5.6 supporting indicators
+  const LOOKBACK_DAYS = 30
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - LOOKBACK_DAYS)
+  const recentReports = reports.filter(r => !r.created_at || new Date(r.created_at) >= cutoff)
+
   // 1. SOS hotspot barangays
   const bCounts = {}
-  reports.forEach(r => { if (r.barangay) bCounts[r.barangay] = (bCounts[r.barangay] ?? 0) + 1 })
+  recentReports.forEach(r => { if (r.barangay) bCounts[r.barangay] = (bCounts[r.barangay] ?? 0) + 1 })
   const hotspots = Object.entries(bCounts).sort((a, b) => b[1] - a[1]).filter(([, c]) => c >= 2).slice(0, 3)
   if (hotspots.length > 0) {
     recs.push({
@@ -31,8 +37,8 @@ function analyzeData(reports, centers, responders, muni) {
       category: 'Emergency Response',
       title: 'Concentrated Emergency Hotspots Detected',
       priority: 'high',
-      issue: `${hotspots.length} barangay(s) account for a disproportionate share of SOS incidents (${period}).`,
-      evidence: hotspots.map(([b, c]) => `${b}: ${c} incident${c > 1 ? 's' : ''}`).join(' · '),
+      issue: `${hotspots.length} barangay(s) account for a disproportionate share of SOS incidents in the last 30 days (${period}).`,
+      evidence: hotspots.map(([b, c]) => `${b}: ${c} incident${c > 1 ? 's' : ''} (last 30 days)`).join(' · '),
       dataSource: 'SOS incident records',
       finding: `System records show repeated emergency incidents concentrated in a limited number of barangays. This may indicate elevated vulnerability, insufficient local preparedness, or uneven resource distribution.`,
       recommendation: 'Strengthen barangay-level disaster preparedness programs, training, and equipment in high-frequency incident areas. Consider deploying additional early warning systems and community response teams.',
@@ -43,8 +49,8 @@ function analyzeData(reports, centers, responders, muni) {
   }
 
   // 2. Unresolved SOS cases
-  const total    = reports.length
-  const unresolved = reports.filter(r => r.rescue_status !== 'rescued' && !r.dismissed).length
+  const total    = recentReports.length
+  const unresolved = recentReports.filter(r => r.rescue_status !== 'rescued' && !r.dismissed).length
   if (total > 3 && unresolved / total > 0.2) {
     const pct = Math.round(unresolved / total * 100)
     recs.push({
@@ -52,8 +58,8 @@ function analyzeData(reports, centers, responders, muni) {
       category: 'Rescue & Response',
       title: 'Unresolved SOS Rescue Cases',
       priority: 'high',
-      issue: `${unresolved} of ${total} SOS reports (${pct}%) remain unresolved or unrescued (${period}).`,
-      evidence: `Rescue completion rate: ${100 - pct}% · Unresolved: ${unresolved} reports`,
+      issue: `${unresolved} of ${total} SOS reports (${pct}%) remain unresolved or unrescued in the last 30 days (${period}).`,
+      evidence: `Rescue completion rate: ${100 - pct}% · Unresolved: ${unresolved} reports (last 30 days)`,
       dataSource: 'SOS and rescue status records',
       finding: `A significant portion of logged SOS cases have not reached a confirmed "Rescued" status. This may reflect insufficient rescue resources, coordination gaps, or prioritization challenges.`,
       recommendation: 'Review and improve evacuation and rescue resource allocation. Establish clear inter-agency response protocols and accountability mechanisms for case resolution.',
@@ -342,6 +348,16 @@ function PolicyBriefPanel({ recommendations, statuses, muni, generatedAt }) {
                   <p className="text-[11px] text-slate-400"><span className="font-semibold text-slate-300">Responsible Office:</span> {rec.office}</p>
                   <p className="text-[11px] text-slate-400"><span className="font-semibold text-slate-300">Instrument:</span> {rec.instrument}</p>
                   <p className="text-[11px] text-slate-400"><span className="font-semibold text-slate-300">Expected Outcome:</span> {rec.outcome}</p>
+                  {rec.policyRefs?.length > 0 && (
+                    <div className="mt-1 pt-1 border-t border-[rgba(255,255,255,0.06)]">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Policy Basis</p>
+                      {rec.policyRefs.map((ref, ri) => (
+                        <p key={ri} className="text-[10px] text-slate-300 mb-0.5">
+                          {ri + 1}. {ref.title} ({ref.year}) — {ref.section} · <span className="text-slate-500">{ref.source}</span>
+                        </p>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -594,7 +610,11 @@ export function PolicyIntelligence() {
       {offlineMode && (
         <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-xs text-amber-400">
           <WifiOff size={13} className="shrink-0" />
-          <span>Policy analysis requires network access. Showing last generated results.</span>
+          <span>
+            {recommendations.length > 0
+              ? 'Network unavailable. Showing last generated results.'
+              : 'You are offline. Connect to generate a policy analysis. KB search remains available.'}
+          </span>
           <button onClick={() => load(true)} disabled={refreshing}
             className="ml-auto flex items-center gap-1 hover:text-white transition-colors disabled:opacity-40">
             <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} /> Retry
