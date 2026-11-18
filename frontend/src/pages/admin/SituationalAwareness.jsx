@@ -20,6 +20,11 @@ import { clusterSOS } from '../../lib/kmeans'
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 
+const AI_CATEGORY_LABELS = {
+  mdrrmo: 'Disaster (MDRRMO)', hospital: 'Medical', bfp: 'Fire (BFP)',
+  pnp: 'Crime / Security (PNP)', pcg: 'Maritime (PCG)',
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-components
 // ─────────────────────────────────────────────────────────────────────────────
@@ -191,12 +196,22 @@ export function SituationalAwareness() {
   const [activeTab, setActiveTab]   = useState('zones') // 'zones' | 'insights' | 'delay' | 'safety'
   const [delayWeather, setDelayWeather] = useState(null)
   const [onDutyCount,  setOnDutyCount]  = useState(0)
-  const [acknowledgedAnomalies, setAcknowledgedAnomalies] = useState(new Set())
+  const [acknowledgedAnomalies, setAcknowledgedAnomalies] = useState(() => {
+    try {
+      const stored = localStorage.getItem('survAIve-acknowledged-anomalies')
+      return new Set(stored ? JSON.parse(stored) : [])
+    } catch { return new Set() }
+  })
+  const [lastFetchedAt, setLastFetchedAt] = useState(null)
 
   const muni = scope?.municipality
 
   function handleAcknowledgeAnomaly(anomaly) {
-    setAcknowledgedAnomalies(prev => new Set([...prev, anomaly.id]))
+    setAcknowledgedAnomalies(prev => {
+      const next = new Set([...prev, anomaly.id])
+      try { localStorage.setItem('survAIve-acknowledged-anomalies', JSON.stringify([...next])) } catch {}
+      return next
+    })
     logActivity('POST', 'anomaly_ack', 'ai_anomaly', null, {
       anomalyId: anomaly.id,
       text: anomaly.text,
@@ -211,6 +226,7 @@ export function SituationalAwareness() {
       setReports(res)
       setOfflineMode(false)
       setSnapshotAge(null)
+      setLastFetchedAt(new Date())
       // Fetch constituents for Community Safety aggregation (non-blocking)
       api.get(muni ? `/constituents?municipality=${encodeURIComponent(muni)}` : '/constituents')
         .then(rows => setConstituents(Array.isArray(rows) ? rows : []))
@@ -384,10 +400,17 @@ export function SituationalAwareness() {
               Aggregating {reports.length} SOS report{reports.length !== 1 ? 's' : ''} across {zones.length} barangay{zones.length !== 1 ? 's' : ''} · {muni ?? 'All municipalities'}
             </p>
           </div>
-          <NeonButton size="sm" variant="ghost" onClick={load} loading={syncing}>
-            <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
-            <span className="ml-1.5">Refresh</span>
-          </NeonButton>
+          <div className="flex flex-col items-end gap-1">
+            {!offlineMode && lastFetchedAt && (
+              <span className="text-[10px] text-slate-500">
+                Last refreshed {lastFetchedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            <NeonButton size="sm" variant="ghost" onClick={load} loading={syncing}>
+              <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
+              <span className="ml-1.5">Refresh</span>
+            </NeonButton>
+          </div>
         </div>
 
         {/* Summary stat cards */}
@@ -512,6 +535,11 @@ export function SituationalAwareness() {
                                   {c.count} report{c.count !== 1 ? 's' : ''} · avg score {c.avgScore}
                                   {c.criticalCount > 0 && <><br />{c.criticalCount} CRITICAL</>}
                                   {c.barangays.length > 0 && <><br /><span style={{ color: '#64748b' }}>{c.barangays.join(', ')}</span></>}
+                                  {c.categories && Object.keys(c.categories).length > 0 && (
+                                    <><br /><span style={{ color: '#94a3b8', fontSize: 10 }}>
+                                      {Object.entries(c.categories).sort((a, b) => b[1] - a[1]).map(([cat, n]) => `${n} ${AI_CATEGORY_LABELS[cat] ?? cat}`).join(' · ')}
+                                    </span></>
+                                  )}
                                 </div>
                               </Popup>
                             </CircleMarker>
@@ -536,7 +564,9 @@ export function SituationalAwareness() {
                       <span className="text-[10px] text-slate-500">— {l.desc}</span>
                     </div>
                   ))}
-                </div>
+                <p className="text-[10px] text-slate-500 mt-1 italic px-1">
+                  Zone classifications are derived from AI-scored SOS reports and may not reflect verified ground conditions. Confirm with field personnel before acting.
+                </p>
               </motion.div>
             )}
 
@@ -662,9 +692,16 @@ export function SituationalAwareness() {
                 </div>
 
                 <GlassCard>
-                  <p className="text-xs font-semibold text-[#22c55e] uppercase tracking-wider mb-4">
-                    Safety by Barangay
-                  </p>
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-xs font-semibold text-[#22c55e] uppercase tracking-wider">
+                      Safety by Barangay
+                    </p>
+                    {lastFetchedAt && (
+                      <span className="text-[10px] text-slate-500">
+                        as of {lastFetchedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </div>
                   {safetyAgg.length === 0 ? (
                     <p className="text-xs text-slate-500 text-center py-6">No constituent records found.</p>
                   ) : (

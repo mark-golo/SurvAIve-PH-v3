@@ -103,22 +103,31 @@ export function detectAnomalies(reports = []) {
   }).length
   const trailingAvg = trailing / 5
 
+  const withTs = active.filter(r => r.created_at)
+  const coverageNote = `based on ${withTs.length} of ${active.length} records with timestamps`
+
   const anomalies = []
   if (lastHour >= 3 && lastHour > trailingAvg * 2) {
+    const magnitude = trailingAvg > 0 ? (lastHour / trailingAvg).toFixed(1) : null
+    const surgeEvidence = magnitude
+      ? `last 60 min = ${lastHour}, prior 5h avg = ${trailingAvg.toFixed(1)}/hr (${magnitude}× baseline); ${coverageNote}`
+      : `last 60 min = ${lastHour}, prior 5h avg = ${trailingAvg.toFixed(1)}/hr; ${coverageNote}`
     anomalies.push({
       id: `surge-${lastHour}-${trailingAvg.toFixed(1)}`,
       text: `Unusual surge: ${lastHour} SOS report${lastHour !== 1 ? 's' : ''} in the last hour vs. ~${trailingAvg.toFixed(1)}/hr baseline.`,
-      evidence: `last 60 min = ${lastHour}, prior 5h avg = ${trailingAvg.toFixed(1)}/hr`,
+      evidence: surgeEvidence,
       severity: 'high',
     })
   }
   const unresolvedOld = active.filter(r => r.created_at &&
     now - new Date(r.created_at).getTime() > 120 * 60e3).length
   if (unresolvedOld > 0) {
+    const stalePct = active.length > 0 ? ` (${((unresolvedOld / active.length) * 100).toFixed(0)}%)` : ''
+    const staleEvidence = `${unresolvedOld} of ${active.length} active reports exceed 120 min without resolution${stalePct}; ${coverageNote}`
     anomalies.push({
       id: `stale-${unresolvedOld}-of-${active.length}`,
       text: `${unresolvedOld} active SOS report${unresolvedOld !== 1 ? 's' : ''} older than 2 hours — review for escalation.`,
-      evidence: `${unresolvedOld} of ${active.length} active reports exceed 120 min without resolution`,
+      evidence: staleEvidence,
       severity: unresolvedOld >= 3 ? 'high' : 'medium',
     })
   }

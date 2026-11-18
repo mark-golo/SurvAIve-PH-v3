@@ -214,6 +214,7 @@ export function AdminAnalytics() {
   const [offlineMode,  setOfflineMode]  = useState(false)
   const [snapshotAge,  setSnapshotAge]  = useState(null)
   const [expandedZone, setExpandedZone] = useState(null)
+  const [lastFetchedAt, setLastFetchedAt] = useState(null)
 
   const load = async () => {
     setSyncing(true)
@@ -222,6 +223,7 @@ export function AdminAnalytics() {
       setReports(res)
       setOfflineMode(false)
       setSnapshotAge(null)
+      setLastFetchedAt(new Date())
     } catch {
       try {
         const cached = await db.getCachedReports()
@@ -449,10 +451,17 @@ export function AdminAnalytics() {
               Aggregating {reports.length} SOS report{reports.length !== 1 ? 's' : ''} across {zones.length} barangay{zones.length !== 1 ? 's' : ''} · {muni ?? 'All municipalities'}
             </p>
           </div>
-          <NeonButton size="sm" variant="ghost" onClick={load} loading={syncing}>
-            <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
-            <span className="ml-1.5">Refresh</span>
-          </NeonButton>
+          <div className="flex flex-col items-end gap-1">
+            {!offlineMode && lastFetchedAt && (
+              <span className="text-[10px] text-slate-500">
+                Last refreshed {lastFetchedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            <NeonButton size="sm" variant="ghost" onClick={load} loading={syncing}>
+              <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
+              <span className="ml-1.5">Refresh</span>
+            </NeonButton>
+          </div>
         </div>
 
         {/* 4 stat tiles */}

@@ -60,6 +60,10 @@ export function clusterSOS(reports) {
     const avgScore = members.reduce((s, r) => s + (r.ai_priority_score ?? 50), 0) / members.length
     const barangays = [...new Set(members.map(r => r.barangay).filter(Boolean))]
     const criticalCount = members.filter(r => r.priority === 'CRITICAL').length
+    const categories = {}
+    members.forEach(r => {
+      if (r.ai_classification) categories[r.ai_classification] = (categories[r.ai_classification] || 0) + 1
+    })
     return {
       centroid,
       count: members.length,
@@ -67,6 +71,7 @@ export function clusterSOS(reports) {
       priority: avgScore >= 80 ? 'CRITICAL' : avgScore >= 60 ? 'HIGH' : avgScore >= 40 ? 'MODERATE' : 'LOW',
       barangays,
       criticalCount,
+      categories,
     }
   }).sort((a, b) => b.avgScore - a.avgScore)
 }
