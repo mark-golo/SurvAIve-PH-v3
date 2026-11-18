@@ -8,7 +8,7 @@ import { GlassCard } from '../../components/ui/GlassCard'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassTextarea } from '../../components/ui/GlassInput'
-import api from '../../lib/api'
+import api, { logActivity } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { getNetworkOnline } from '../../lib/capacitor'
 import { Geolocation } from '@capacitor/geolocation'
@@ -62,6 +62,8 @@ export function RescueDetail() {
   const lastPushRef = useRef(0)
   const [sosEvents,     setSosEvents]     = useState([])
   const [weatherRisk,   setWeatherRisk]   = useState(null)
+  const [weatherChecked, setWeatherChecked] = useState(false)
+  const [agencyContext,  setAgencyContext]  = useState(null)
   const [erdiAssessment,setErdiAssessment]= useState(null)
   const [notesDraft,    setNotesDraft]    = useState(null)
   const [briefingExpanded, setBriefingExpanded] = useState(true)
@@ -127,16 +129,40 @@ export function RescueDetail() {
   useEffect(() => {
     if (!victim?.lat || !victim?.lng) return
     fetchWeather(victim.lat, victim.lng)
-      .then(w => setWeatherRisk(w))
-      .catch(() => {})
+      .then(w => { setWeatherRisk(w); setWeatherChecked(true) })
+      .catch(() => { setWeatherChecked(true) })
   }, [victim?.lat, victim?.lng])
+
+  // Fetch agency workload context for ERDI (once per municipality)
+  useEffect(() => {
+    const muni = victim?.municipality
+    if (!muni) return
+    Promise.all([
+      supabase.from('responders').select('id', { count: 'exact', head: true }).eq('duty_status', 'on_duty').eq('municipality', muni),
+      supabase.from('sos_reports').select('id', { count: 'exact', head: true }).neq('rescue_status', 'rescued').neq('rescue_status', 'cannot_reach').eq('municipality', muni),
+    ]).then(([{ count: onDutyCount }, { count: activeLoad }]) => {
+      setAgencyContext({ onDutyCount: onDutyCount ?? 0, activeLoad: activeLoad ?? 0 })
+    }).catch(() => {})
+  }, [victim?.municipality])
 
   // Recompute ERDI assessment
   useEffect(() => {
     if (!victim) return
     const report = { ...victim, ai_priority_score: victim.ai_priority_score ?? 60 }
-    setErdiAssessment(assessDelay(report, sosEvents, responderGps, weatherRisk))
-  }, [victim?.rescue_status, sosEvents.length, weatherRisk, responderGps])
+    setErdiAssessment(assessDelay(report, sosEvents, responderGps, weatherRisk, agencyContext))
+  }, [victim?.rescue_status, sosEvents.length, weatherRisk, responderGps, agencyContext])
+
+  // Log ERDI assessments at DELAYED or CRITICAL_DELAY tier
+  useEffect(() => {
+    if (!erdiAssessment) return
+    if (erdiAssessment.tier !== 'DELAYED' && erdiAssessment.tier !== 'CRITICAL_DELAY') return
+    logActivity('POST', 'erdi', 'erdi_assessment', victim?.id, {
+      tier: erdiAssessment.tier,
+      confidence: erdiAssessment.confidence,
+      factorCount: erdiAssessment.factors?.length ?? 0,
+      role: 'responder',
+    })
+  }, [erdiAssessment?.tier])
 
   // GPS location sharing — active only when en_route or on_scene
   useEffect(() => {
@@ -524,7 +550,14 @@ export function RescueDetail() {
 
         {/* ERDI — delay intelligence (hidden after rescue/cannot_reach) */}
         {erdiAssessment && !['rescued','cannot_reach'].includes(rescueStatus) && (
-          <ERDIPanel assessment={erdiAssessment} role="responder" />
+          <>
+            <ERDIPanel assessment={erdiAssessment} role="responder" />
+            {weatherChecked && weatherRisk === null && (
+              <p className="text-xs text-slate-500 text-center -mt-2 mb-1 px-2">
+                Weather data unavailable — delay estimate based on incident and location data only.
+              </p>
+            )}
+          </>
         )}
 
         {/* AI Review — human validation of AI assessment (hidden after rescue/cannot_reach) */}

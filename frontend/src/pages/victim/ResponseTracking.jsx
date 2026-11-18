@@ -6,7 +6,7 @@ import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline } from '../../lib/capacitor'
-import api from '../../lib/api'
+import api, { logActivity } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { db } from '../../lib/db'
 import { fmtSosId } from '../../lib/format'
@@ -124,6 +124,8 @@ export function ResponseTracking() {
 
   // ── ERDI state ───────────────────────────────────────────────────────────
   const [weatherRisk,     setWeatherRisk]     = useState(null)
+  const [weatherChecked,  setWeatherChecked]  = useState(false)
+  const [agencyContext,   setAgencyContext]   = useState(null)
   const [erdiAssessment,  setErdiAssessment]  = useState(null)
 
   async function load() {
@@ -277,15 +279,39 @@ export function ResponseTracking() {
   useEffect(() => {
     if (!report?.lat || !report?.lng) return
     fetchWeather(report.lat, report.lng)
-      .then(w => setWeatherRisk(w))
-      .catch(() => {})
+      .then(w => { setWeatherRisk(w); setWeatherChecked(true) })
+      .catch(() => { setWeatherChecked(true) })
   }, [report?.lat, report?.lng])
+
+  // Fetch agency workload context for ERDI (once per municipality)
+  useEffect(() => {
+    const muni = report?.municipality
+    if (!muni) return
+    Promise.all([
+      supabase.from('responders').select('id', { count: 'exact', head: true }).eq('duty_status', 'on_duty').eq('municipality', muni),
+      supabase.from('sos_reports').select('id', { count: 'exact', head: true }).neq('rescue_status', 'rescued').neq('rescue_status', 'cannot_reach').eq('municipality', muni),
+    ]).then(([{ count: onDutyCount }, { count: activeLoad }]) => {
+      setAgencyContext({ onDutyCount: onDutyCount ?? 0, activeLoad: activeLoad ?? 0 })
+    }).catch(() => {})
+  }, [report?.municipality])
 
   // Recompute ERDI assessment whenever key inputs change
   useEffect(() => {
     if (!report) return
-    setErdiAssessment(assessDelay(report, events, responder, weatherRisk))
-  }, [report?.rescue_status, report?.ai_priority_score, events.length, responder?.lat, responder?.lng, responder?.last_seen_at, weatherRisk])
+    setErdiAssessment(assessDelay(report, events, responder, weatherRisk, agencyContext))
+  }, [report?.rescue_status, report?.ai_priority_score, events.length, responder?.lat, responder?.lng, responder?.last_seen_at, weatherRisk, agencyContext])
+
+  // Log ERDI assessments at DELAYED or CRITICAL_DELAY tier
+  useEffect(() => {
+    if (!erdiAssessment) return
+    if (erdiAssessment.tier !== 'DELAYED' && erdiAssessment.tier !== 'CRITICAL_DELAY') return
+    logActivity('POST', 'erdi', 'erdi_assessment', report?.id, {
+      tier: erdiAssessment.tier,
+      confidence: erdiAssessment.confidence,
+      factorCount: erdiAssessment.factors?.length ?? 0,
+      role: 'victim',
+    })
+  }, [erdiAssessment?.tier])
 
   // Arrival announcement — triggered by rescue_status reaching on_scene
   useEffect(() => {
@@ -370,7 +396,14 @@ export function ResponseTracking() {
 
             {/* ERDI — delay intelligence (hidden after rescue) */}
             {erdiAssessment && report?.rescue_status !== 'rescued' && (
-              <ERDIPanel assessment={erdiAssessment} role="victim" />
+              <>
+                <ERDIPanel assessment={erdiAssessment} role="victim" />
+                {weatherChecked && weatherRisk === null && (
+                  <p className="text-xs text-slate-500 text-center -mt-2 mb-1 px-2">
+                    Weather data unavailable — delay estimate based on incident and location data only.
+                  </p>
+                )}
+              </>
             )}
 
             {/* Responder Location — enhanced with distance, freshness, ETA, voice */}
