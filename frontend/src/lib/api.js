@@ -1199,7 +1199,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function isUUID(v) { return typeof v === 'string' && UUID_RE.test(v) }
 
 const ACTION_LABELS = {
-  POST:   { sos_reports: 'Submitted SOS report', responders: 'Created responder', admins: 'Created admin account', agencies: 'Created agency account', evacuation_centers: 'Created evacuation center', evacuation_center_assessments: 'Added center assessment', evacuation_center_resources: 'Added center resource', evacuation_occupancy_logs: 'Logged occupancy update', evacuation_capacity_forecasts: 'Generated capacity forecast', evacuation_history: 'Recorded evacuation event', constituents: 'Registered constituent', province_reports: 'Submitted province report', escalations: 'Created escalation' },
+  POST:   { sos_reports: 'Submitted SOS report', responders: 'Created responder', admins: 'Created admin account', agencies: 'Created agency account', evacuation_centers: 'Created evacuation center', evacuation_center_assessments: 'Added center assessment', evacuation_center_resources: 'Added center resource', evacuation_occupancy_logs: 'Logged occupancy update', evacuation_capacity_forecasts: 'Generated capacity forecast', evacuation_history: 'Recorded evacuation event', constituents: 'Registered constituent', province_reports: 'Submitted province report', escalations: 'Created escalation', erdi_assessment: 'ERDI delay assessment logged' },
   PUT:    { sos_reports: 'Updated SOS report', responders: 'Updated responder record', admins: 'Updated admin account', agencies: 'Updated agency account', evacuation_centers: 'Updated evacuation center', evacuation_center_assessments: 'Updated center assessment', evacuation_center_resources: 'Updated center resource', evacuation_history: 'Updated evacuation event', constituents: 'Updated constituent', escalations: 'Acknowledged/updated escalation', superadmins: 'Updated superadmin', profiles: 'Updated profile' },
   DELETE: { sos_reports: 'Deleted SOS report', responders: 'Deleted responder', admins: 'Deleted admin account', agencies: 'Deleted agency account', evacuation_centers: 'Deleted evacuation center', evacuation_center_assessments: 'Deleted center assessment', evacuation_center_resources: 'Deleted center resource', evacuation_history: 'Deleted evacuation event', constituents: 'Removed constituent', superadmins: 'Deleted superadmin' },
   LOGIN:  { auth: 'Staff logged in' },
@@ -1209,7 +1209,7 @@ const ACTION_LABELS = {
 
 export function logActivity(method, resource, table, id, extra = {}) {
   const { user, role } = _getAuthState()
-  if (!user || role === 'victim' || !role) return
+  if (!user || !role || (role === 'victim' && resource !== 'erdi')) return
   const label = ACTION_LABELS[method]?.[table] ?? `${method} ${resource}`
   supabase.from('activity_logs').insert({
     actor_id:     isUUID(user.id) ? user.id : null,

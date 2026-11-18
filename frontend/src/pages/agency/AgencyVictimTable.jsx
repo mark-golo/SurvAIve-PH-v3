@@ -69,13 +69,14 @@ function AcknowledgmentPanel({ agencyType, agencyId }) {
 
   // Fetch on-duty responder count for agencyContext
   useEffect(() => {
-    if (!agencyId) return
+    if (!agencyId || !muni) return
     supabase.from('responders')
       .select('id', { count: 'exact', head: true })
       .eq('duty_status', 'on_duty')
+      .eq('municipality', muni)
       .then(({ count }) => setOnDutyCount(count ?? 0))
       .catch(() => {})
-  }, [agencyId])
+  }, [agencyId, muni])
 
   const agencyCtx = useMemo(() => ({
     onDutyCount,
