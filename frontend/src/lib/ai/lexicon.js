@@ -144,6 +144,11 @@ export const STATUS_LEXICON = {
     fil: ['nawawala', 'nawala', 'hindi makita', 'di namin makita'],
     bis: ['nawala', 'wala makita', 'nawagtang'],
   },
+  stranded: {
+    en:  ['stranded', 'cannot leave', "can't leave", 'stuck on', 'marooned', 'cut off'],
+    fil: ['naiiwan', 'hindi makaalis', 'nakulong sa', 'naiipit sa daan'],
+    bis: ['dili makalayas', 'nabilin', 'nakulong sa'],
+  },
 }
 
 // Special conditions — keys mirror the existing special_conditions values
@@ -167,6 +172,11 @@ export const CONDITION_LEXICON = {
     en:  ['flood', 'flooding', 'submerged', 'water rising', 'rising water', 'flash flood'],
     fil: ['baha', 'bumabaha', 'binabaha', 'tumataas ang tubig', 'lumulubog'],
     bis: ['lunop', 'nagbaha', 'nagataas ang tubig'],
+  },
+  needs_evacuation: {
+    en:  ['need evacuation', 'needs evacuation', 'evacuate', 'evacuation needed', 'must evacuate', 'requesting evacuation'],
+    fil: ['kailangan ng bakwit', 'bakwit', 'kailangang lumikas', 'lumikas', 'likas'],
+    bis: ['kinahanglan og bakwit', 'bakwit', 'kinahanglan og likas', 'likas'],
   },
 }
 

@@ -120,6 +120,10 @@ function analyzeData(reports, centers, responders, muni) {
     outcome: 'Reliable emergency reporting across all barangays and accountable, human-verified use of AI triage support.',
   })
 
+  recs.forEach(rec => {
+    rec.policyRefs = searchPolicyKB(`${rec.category} ${rec.title}`, 2)
+  })
+
   return recs
 }
 
@@ -217,6 +221,26 @@ function RecommendationCard({ rec, status, onStatusChange }) {
           <Detail label="Suggested Responsible Office" value={rec.office} />
           <Detail label="Suggested Policy Instrument" value={rec.instrument} />
           <Detail label="Expected Outcome" value={rec.outcome} />
+          {rec.policyRefs?.length > 0 && (
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1.5">Policy Basis</p>
+              <div className="space-y-2">
+                {rec.policyRefs.map(p => (
+                  <div key={p.id} className="rounded-lg p-2.5 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)]">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-[11px] text-white font-medium leading-tight">{p.title}</p>
+                      {p.source_url && (
+                        <a href={p.source_url} target="_blank" rel="noopener noreferrer"
+                           className="text-[9px] text-[#00d4ff] hover:underline shrink-0">↗ Source</a>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1 leading-relaxed line-clamp-3">{p.body}</p>
+                    <p className="text-[9px] text-slate-600 mt-0.5">{p.source} · {p.section}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <p className="text-[10px] text-slate-600 italic pt-1">
             ⚠ AI-generated recommendation. Requires data validation, stakeholder consultation, and appropriate LGU legal review before adoption.
           </p>
@@ -458,8 +482,23 @@ function PolicySearchPanel({ query, onQueryChange, results, onSearch, onClear })
                     <span className="text-[9px] px-2 py-0.5 rounded-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-slate-400">
                       {entry.instrument}
                     </span>
+                    {entry.issuing_org && (
+                      <span className="text-[9px] px-2 py-0.5 rounded-full bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.3)] text-amber-400">
+                        {entry.issuing_org}
+                      </span>
+                    )}
                   </div>
                   <p className="text-[11px] text-slate-300 leading-relaxed">{entry.body}</p>
+                  {entry.source_url && (
+                    <a
+                      href={entry.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[9px] text-[#00d4ff] hover:underline mt-0.5"
+                    >
+                      ↗ View source document
+                    </a>
+                  )}
                 </div>
               ))}
               <p className="text-[10px] text-slate-600 text-center pt-1">

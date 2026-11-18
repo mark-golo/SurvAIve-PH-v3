@@ -136,6 +136,16 @@ function ZoneBar({ zone, rank, isExpanded, onToggle }) {
                 ))}
               </div>
 
+              {(zone.reviewCounts.confirmed + zone.reviewCounts.corrected + zone.reviewCounts.rejected) > 0 && (
+                <div className="flex flex-wrap gap-1.5 text-[9px] pt-0.5">
+                  <span className="text-slate-500 font-semibold uppercase tracking-wider">AI Review:</span>
+                  {zone.reviewCounts.confirmed > 0 && <span className="text-[#22c55e]">✓ {zone.reviewCounts.confirmed} confirmed</span>}
+                  {zone.reviewCounts.corrected > 0 && <span className="text-blue-400">✎ {zone.reviewCounts.corrected} corrected</span>}
+                  {zone.reviewCounts.rejected > 0 && <span className="text-[#ef4444]">✕ {zone.reviewCounts.rejected} rejected</span>}
+                  <span className="text-slate-600">{zone.reviewCounts.unreviewed} unreviewed</span>
+                </div>
+              )}
+
               {/* Badges */}
               <div className="flex flex-wrap gap-1.5">
                 {zone.isSurging && (
@@ -652,6 +662,7 @@ export function SituationalAwareness() {
                             <span className="text-[#22c55e] font-semibold">{row.safe} safe</span>
                             <span className="text-[#ef4444] font-semibold">{row.unsafe} unsafe</span>
                             <span className="text-slate-500">{row.unknown} unknown</span>
+                            <span className="text-[9px] text-slate-600">{row.coveragePct}% rptd</span>
                           </div>
                         </div>
                       ))}

@@ -768,10 +768,14 @@ async function post(path, body = {}) {
       }
     }
 
-    const score = calcPriorityScore(body)
-
     // AI classification — runs fully offline, stored for traceability (blueprint §6.1)
-    const aiClassification = classifyIncident(body.notes || '')
+    // try/catch ensures a classifier bug never blocks the SOS submission (blueprint §2.1)
+    let score = 50
+    let aiClassification = { primary: null, confidence: null }
+    try {
+      score = calcPriorityScore(body)
+      aiClassification = classifyIncident(body.notes || '')
+    } catch {}
 
     // Resolve device-auth victim_id → verified status + best-effort Supabase user_id
     // victim_id is only included in the payload for authenticated users (PIN-verified),
@@ -809,7 +813,7 @@ async function post(path, body = {}) {
         notes:               body.notes               ?? null,
         ai_priority_score:   score,
         ai_classification:   aiClassification.primary      ?? null,
-        ai_confidence:       aiClassification.confidence   ?? null,
+        ai_confidence:       aiClassification.confidence != null ? Math.round(aiClassification.confidence * 100) : null,
         ai_rules_version:    AI_RULES_VERSION,
         rescue_status:       'pending',
         is_verified:         isVerified,
@@ -1199,12 +1203,13 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function isUUID(v) { return typeof v === 'string' && UUID_RE.test(v) }
 
 const ACTION_LABELS = {
-  POST:   { sos_reports: 'Submitted SOS report', responders: 'Created responder', admins: 'Created admin account', agencies: 'Created agency account', evacuation_centers: 'Created evacuation center', evacuation_center_assessments: 'Added center assessment', evacuation_center_resources: 'Added center resource', evacuation_occupancy_logs: 'Logged occupancy update', evacuation_capacity_forecasts: 'Generated capacity forecast', evacuation_history: 'Recorded evacuation event', constituents: 'Registered constituent', province_reports: 'Submitted province report', escalations: 'Created escalation', erdi_assessment: 'ERDI delay assessment logged' },
-  PUT:    { sos_reports: 'Updated SOS report', responders: 'Updated responder record', admins: 'Updated admin account', agencies: 'Updated agency account', evacuation_centers: 'Updated evacuation center', evacuation_center_assessments: 'Updated center assessment', evacuation_center_resources: 'Updated center resource', evacuation_history: 'Updated evacuation event', constituents: 'Updated constituent', escalations: 'Acknowledged/updated escalation', superadmins: 'Updated superadmin', profiles: 'Updated profile' },
+  POST:   { sos_reports: 'Submitted SOS report', responders: 'Created responder', admins: 'Created admin account', agencies: 'Created agency account', evacuation_centers: 'Created evacuation center', evacuation_center_assessments: 'Added center assessment', evacuation_center_resources: 'Added center resource', evacuation_occupancy_logs: 'Logged occupancy update', evacuation_capacity_forecasts: 'Generated capacity forecast', evacuation_history: 'Recorded evacuation event', constituents: 'Registered constituent', province_reports: 'Submitted province report', escalations: 'Created escalation', erdi_assessment: 'ERDI delay assessment logged', policy_intelligence: 'Policy analysis loaded' },
+  PUT:    { sos_reports: 'Updated SOS report', responders: 'Updated responder record', admins: 'Updated admin account', agencies: 'Updated agency account', evacuation_centers: 'Updated evacuation center', evacuation_center_assessments: 'Updated center assessment', evacuation_center_resources: 'Updated center resource', evacuation_history: 'Updated evacuation event', constituents: 'Updated constituent', escalations: 'Acknowledged/updated escalation', superadmins: 'Updated superadmin', profiles: 'Updated profile', policy_intelligence: 'Updated policy recommendation status' },
   DELETE: { sos_reports: 'Deleted SOS report', responders: 'Deleted responder', admins: 'Deleted admin account', agencies: 'Deleted agency account', evacuation_centers: 'Deleted evacuation center', evacuation_center_assessments: 'Deleted center assessment', evacuation_center_resources: 'Deleted center resource', evacuation_history: 'Deleted evacuation event', constituents: 'Removed constituent', superadmins: 'Deleted superadmin' },
   LOGIN:  { auth: 'Staff logged in' },
   LOGOUT: { auth: 'Staff logged out' },
   SYNC:   { profiles: 'Synced staff to cloud' },
+  GET:    { policy_kb_search: 'Policy KB search performed' },
 }
 
 export function logActivity(method, resource, table, id, extra = {}) {
