@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import {
   Sparkles, RefreshCw, AlertTriangle, ChevronRight, ChevronDown, ChevronUp,
   FileText, Activity, ListOrdered, ClipboardList, Copy, Check,
-  Home, List, Map, Settings,
+  Home, List, Map, Settings, Route, BookOpen, Mic, MicOff,
 } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
@@ -14,6 +14,8 @@ import { useAuthStore } from '../../store/auth'
 import { getResponderTheme } from '../../lib/victimTheme'
 import api from '../../lib/api'
 import { summarizeSOS, rankQueue, assessSituation, parseFieldNotes } from '../../lib/ai/responderIntelligence'
+import { planMission } from '../../lib/ai/missionPlanner'
+import { searchKB, KB_CATEGORIES } from '../../lib/ai/responderKnowledgeBase'
 
 const NAV = [
   { icon: Home,     label: 'Home',     path: '/responder'           },
@@ -28,7 +30,12 @@ const TABS = [
   { key: 'priority',  label: 'Priority',  Icon: ListOrdered   },
   { key: 'situation', label: 'Situation', Icon: Activity      },
   { key: 'notes',     label: 'Notes',     Icon: ClipboardList },
+  { key: 'mission',   label: 'Mission',   Icon: Route         },
+  { key: 'knowledge', label: 'Knowledge', Icon: BookOpen      },
 ]
+
+const HAS_SPEECH = typeof window !== 'undefined' &&
+  ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
 
 const TIER_COLORS = { URGENT: '#ef4444', HIGH: '#f59e0b', ROUTINE: '#00d4ff' }
 const PRIORITY_COLORS = { CRITICAL: '#ef4444', HIGH: '#f59e0b', MODERATE: '#00d4ff', LOW: '#22c55e' }
@@ -50,6 +57,10 @@ export function ResponderAssistant() {
   const [noteText,   setNoteText]   = useState('')
   const [noteDraft,  setNoteDraft]  = useState(null)
   const [copied,     setCopied]     = useState(false)
+  const [kbQuery,    setKbQuery]    = useState('')
+  const [kbCat,      setKbCat]      = useState('all')
+  const [kbEntry,    setKbEntry]    = useState(null)
+  const [listening,  setListening]  = useState(false)
 
   const refresh = async () => {
     setLoading(true)
@@ -72,6 +83,8 @@ export function ResponderAssistant() {
   const briefings = active.map(r => ({ id: r.id, s: summarizeSOS(r) }))
   const ranked    = rankQueue(active)
   const situation = assessSituation(reports, centers, responders)
+  const mission   = planMission(active, null)
+  const kbResults = searchKB(kbQuery, kbCat, 6)
 
   const analyzeNotes = () => {
     if (!noteText.trim()) return
@@ -106,11 +119,11 @@ export function ResponderAssistant() {
         }
       />
 
-      {/* Tabs */}
-      <div className="flex gap-1 px-4 pt-3 shrink-0">
+      {/* Tabs — scrollable so all 6 fit on small screens */}
+      <div className="flex gap-1 px-4 pt-3 shrink-0 overflow-x-auto scrollbar-hide">
         {TABS.map(({ key, label, Icon }) => (
           <button key={key} onClick={() => setTab(key)}
-            className={`flex-1 flex items-center justify-center gap-1 px-2 py-2 rounded-xl text-[11px] font-semibold transition-all border ${
+            className={`shrink-0 flex items-center justify-center gap-1 px-2.5 py-2 rounded-xl text-[11px] font-semibold transition-all border ${
               tab === key
                 ? 'bg-[rgba(0,212,255,0.15)] text-[#00d4ff] border-[rgba(0,212,255,0.3)]'
                 : 'glass text-slate-400 border-transparent'
@@ -307,9 +320,39 @@ export function ResponderAssistant() {
                 onChange={(e) => setNoteText(e.target.value)}
                 rows={4}
               />
-              <NeonButton variant="primary" size="md" onClick={analyzeNotes} className="w-full mt-3">
-                Structure Notes
-              </NeonButton>
+              <div className="flex gap-2 mt-3">
+                <NeonButton variant="primary" size="md" onClick={analyzeNotes} className="flex-1">
+                  Structure Notes
+                </NeonButton>
+                {HAS_SPEECH && (
+                  <button
+                    type="button"
+                    title={listening ? 'Stop listening' : 'Dictate notes'}
+                    onClick={() => {
+                      if (listening) return
+                      const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition
+                      const rec = new SR()
+                      rec.lang = 'en-PH'
+                      rec.interimResults = false
+                      rec.onresult = (e) => {
+                        const t = Array.from(e.results).map(r => r[0].transcript).join(' ')
+                        setNoteText(prev => prev ? `${prev} ${t}` : t)
+                      }
+                      rec.onend = () => setListening(false)
+                      rec.onerror = () => setListening(false)
+                      setListening(true)
+                      rec.start()
+                    }}
+                    className={`shrink-0 px-3 py-2 rounded-xl border text-xs font-semibold transition-all ${
+                      listening
+                        ? 'bg-[rgba(239,68,68,0.2)] border-[rgba(239,68,68,0.4)] text-red-400 animate-pulse'
+                        : 'glass border-[rgba(255,255,255,0.12)] text-slate-400 hover:text-[#00d4ff]'
+                    }`}
+                  >
+                    {listening ? <MicOff size={14} /> : <Mic size={14} />}
+                  </button>
+                )}
+              </div>
             </GlassCard>
 
             {noteDraft && (
@@ -359,6 +402,159 @@ export function ResponderAssistant() {
                   </p>
                 </GlassCard>
               </motion.div>
+            )}
+          </>
+        )}
+
+        {/* ── Mission Planning — §3.4 ───────────────────────────────────── */}
+        {tab === 'mission' && (
+          <>
+            {!mission.canSequence ? (
+              <GlassCard>
+                <div className="flex items-start gap-2.5 py-2">
+                  <Route size={14} className="text-slate-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold text-slate-300 mb-1">Need 2+ Active Reports with GPS</p>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Mission sequencing requires at least two active SOS reports with GPS coordinates.
+                      Refresh to load the latest reports.
+                    </p>
+                  </div>
+                </div>
+              </GlassCard>
+            ) : (
+              <>
+                <GlassCard>
+                  <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-1">
+                    Suggested Response Sequence
+                  </p>
+                  <p className="text-[10px] text-slate-500 mb-3">
+                    Greedy nearest-neighbor from highest-urgency report. Verify conditions before deployment.
+                  </p>
+                  <div className="space-y-2">
+                    {mission.sequence.map((step, i) => (
+                      <div key={step.report.id}
+                        className="flex items-start gap-3 p-2.5 rounded-xl glass border border-[rgba(255,255,255,0.06)]">
+                        <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5"
+                          style={{
+                            background: i === 0 ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.06)',
+                            border: `1px solid ${i === 0 ? 'rgba(239,68,68,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                          }}>
+                          <span className="text-[11px] font-black"
+                            style={{ color: i === 0 ? '#ef4444' : '#94a3b8' }}>
+                            {step.order}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-semibold text-white truncate">
+                              {step.report.name ?? 'Unknown'} — {step.report.barangay ?? step.report.municipality ?? '—'}
+                            </p>
+                            <span className="text-[10px] font-black shrink-0 px-1.5 py-0.5 rounded"
+                              style={{
+                                color: PRIORITY_COLORS[step.urgencyLabel] ?? '#fff',
+                                background: `${PRIORITY_COLORS[step.urgencyLabel] ?? '#fff'}20`,
+                              }}>
+                              {step.urgencyLabel}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            {step.distanceFromPrevKm} km · est. {step.estMinutes} min travel
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-3 pt-2 border-t border-[rgba(255,255,255,0.06)]">
+                    Total estimated distance: <span className="text-slate-300">{mission.totalDistanceKm} km</span>
+                    {' '}(road-adjusted) · {mission.sequence.length} stop{mission.sequence.length !== 1 ? 's' : ''}
+                  </p>
+                </GlassCard>
+                <p className="text-[10px] text-slate-500 text-center px-2">
+                  Distance estimates use Haversine ×1.3 road factor at 30 km/h.
+                  Verify actual route and road conditions independently.
+                  AI never dispatches or deprioritizes reports automatically.
+                </p>
+              </>
+            )}
+          </>
+        )}
+
+        {/* ── Knowledge Base — §4.2 ─────────────────────────────────────── */}
+        {tab === 'knowledge' && (
+          <>
+            {kbEntry ? (
+              <GlassCard>
+                <button type="button" onClick={() => setKbEntry(null)}
+                  className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white mb-3">
+                  <ChevronDown size={12} style={{ transform: 'rotate(90deg)' }} /> Back to results
+                </button>
+                <p className="text-xs font-bold text-slate-200 mb-1">{kbEntry.title}</p>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.2)] text-[#00d4ff] mb-3 inline-block capitalize">
+                  {kbEntry.category.replace(/_/g, ' ')}
+                </span>
+                <div className="mt-2 text-xs text-slate-300 leading-relaxed space-y-1.5 whitespace-pre-line">
+                  {kbEntry.content}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-3 pt-2 border-t border-[rgba(255,255,255,0.06)] italic">
+                  Source: {kbEntry.source}
+                </p>
+              </GlassCard>
+            ) : (
+              <>
+                <GlassCard>
+                  <p className="text-xs font-semibold text-[#00d4ff] uppercase tracking-wider mb-2">
+                    Responder Knowledge Base
+                  </p>
+                  <input
+                    type="text"
+                    value={kbQuery}
+                    onChange={e => setKbQuery(e.target.value)}
+                    placeholder="Search procedures, e.g. "rescue completion" …"
+                    className="w-full text-xs rounded-xl bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.1)] px-3 py-2 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-[rgba(0,212,255,0.4)] mb-2"
+                  />
+                  <div className="flex gap-1.5 flex-wrap">
+                    {KB_CATEGORIES.map(c => (
+                      <button key={c.key} type="button" onClick={() => setKbCat(c.key)}
+                        className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-all ${
+                          kbCat === c.key
+                            ? 'bg-[rgba(0,212,255,0.15)] text-[#00d4ff] border-[rgba(0,212,255,0.3)]'
+                            : 'glass text-slate-500 border-[rgba(255,255,255,0.1)]'
+                        }`}>
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                </GlassCard>
+
+                {kbResults.length === 0 ? (
+                  <GlassCard>
+                    <p className="text-xs text-slate-400 text-center py-3">No procedures match your search.</p>
+                  </GlassCard>
+                ) : kbResults.map(entry => (
+                  <button key={entry.id} type="button" onClick={() => setKbEntry(entry)}
+                    className="w-full text-left">
+                    <GlassCard className="hover:border-[rgba(0,212,255,0.25)] transition-all cursor-pointer">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-slate-200 leading-snug mb-0.5">
+                            {entry.title}
+                          </p>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">{entry.summary}</p>
+                        </div>
+                        <ChevronRight size={14} className="text-slate-500 shrink-0 mt-0.5" />
+                      </div>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[rgba(255,255,255,0.05)] text-slate-500 mt-1.5 inline-block capitalize">
+                        {entry.category.replace(/_/g, ' ')}
+                      </span>
+                    </GlassCard>
+                  </button>
+                ))}
+
+                <p className="text-[10px] text-slate-500 text-center">
+                  Procedures are for reference only. Follow your agency's authorized guidelines.
+                </p>
+              </>
             )}
           </>
         )}

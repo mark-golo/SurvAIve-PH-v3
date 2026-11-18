@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { getPosition, onNetworkChange } from '../../lib/capacitor'
 import { MUNICIPALITY_PSGC } from '../../lib/philippineLocations'
+import { reverseGeocode } from '../../lib/reverseGeocode'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const CACHE_KEY        = 'survAIve-weather-v1'
@@ -138,20 +139,6 @@ function IconStorm() {
 const ICONS = {
   'clear': IconClear, 'mostly-clear': IconMostlyClear, 'partly': IconPartlyCloudy,
   'cloudy': IconCloudy, 'overcast': IconCloudy, 'rain': IconRain, 'storm': IconStorm,
-}
-
-// ── Reverse geocode ────────────────────────────────────────────────────────────
-async function reverseGeocode(lat, lon) {
-  const res  = await fetch(
-    `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
-    { headers: { 'Accept-Language': 'en', 'User-Agent': 'SurvAIve-PH/1.0' } }
-  )
-  const data = await res.json()
-  const addr = data.address ?? {}
-  return {
-    barangay: addr.village ?? addr.suburb ?? addr.neighbourhood ?? addr.quarter ?? '',
-    city:     addr.city ?? addr.town ?? addr.municipality ?? addr.county ?? '',
-  }
 }
 
 // ── Weather fetch ──────────────────────────────────────────────────────────────

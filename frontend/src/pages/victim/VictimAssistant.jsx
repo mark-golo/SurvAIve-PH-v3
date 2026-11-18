@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sparkles, Send, ChevronDown, ChevronUp, AlertTriangle,
-  BookOpen, Check, WifiOff, MapPin,
+  BookOpen, Check, WifiOff, MapPin, Mic, MicOff,
   Home, Map, Settings, MessageSquare, FileText,
 } from 'lucide-react'
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
@@ -12,7 +12,8 @@ import { GlassSelect, GlassInput, GlassTextarea } from '../../components/ui/Glas
 import { NeonButton } from '../../components/ui/NeonButton'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
-import { getNetworkOnline } from '../../lib/capacitor'
+import { getNetworkOnline, getPosition } from '../../lib/capacitor'
+import { reverseGeocode } from '../../lib/reverseGeocode'
 import { buildStructuredSOS } from '../../lib/ai/emergencyIntelligence'
 import { getInstructions } from '../../lib/ai/instructionKnowledgeBase'
 
@@ -45,12 +46,18 @@ export function VictimAssistant() {
   const [isLight] = useState(() => getVictimTheme() === 'light')
   const offline = !getNetworkOnline()
 
-  const [input,    setInput]    = useState('')
-  const [analysis, setAnalysis] = useState(null)  // buildStructuredSOS result
-  const [draft,    setDraft]    = useState(null)  // user-editable copy of form fields
-  const [showWhy,  setShowWhy]  = useState(false)
-  const [lang,     setLang]     = useState('en')
-  const [landmark, setLandmark] = useState('')
+  const [input,       setInput]       = useState('')
+  const [analysis,    setAnalysis]    = useState(null)  // buildStructuredSOS result
+  const [draft,       setDraft]       = useState(null)  // user-editable copy of form fields
+  const [showWhy,     setShowWhy]     = useState(false)
+  const [lang,        setLang]        = useState('en')
+  const [landmark,    setLandmark]    = useState('')
+  const [geoLocation, setGeoLocation] = useState(null)  // { barangay, city } from Nominatim
+  const [coords,      setCoords]      = useState(null)  // { latitude, longitude }
+  const [micActive,   setMicActive]   = useState(false)
+
+  const hasSpeech = typeof window !== 'undefined' &&
+    ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
 
   const analyze = () => {
     const text = input.trim()
@@ -69,6 +76,17 @@ export function VictimAssistant() {
       setLandmark(result.entities.landmarks[0])
     }
     setShowWhy(false)
+    // §2.4 — GPS + reverse geocoding (non-blocking, online only)
+    if (getNetworkOnline()) {
+      getPosition()
+        .then(p => {
+          const c = { latitude: p.latitude, longitude: p.longitude }
+          setCoords(c)
+          return reverseGeocode(c.latitude, c.longitude)
+        })
+        .then(loc => setGeoLocation(loc))
+        .catch(() => {})
+    }
   }
 
   const toggleService = (v) =>
@@ -91,6 +109,8 @@ export function VictimAssistant() {
           },
           ageGroup:   draft.ageGroup,
           conditions: draft.conditions,
+          lat:        coords?.latitude  ?? null,
+          lng:        coords?.longitude ?? null,
         },
       },
     })
@@ -136,9 +156,39 @@ export function VictimAssistant() {
             onChange={(e) => setInput(e.target.value)}
             rows={3}
           />
-          <NeonButton variant="primary" size="md" onClick={analyze} className="w-full mt-3">
-            <Send size={14} className="mr-1.5" /> Analyze Situation
-          </NeonButton>
+          <div className="flex gap-2 mt-3">
+            <NeonButton variant="primary" size="md" onClick={analyze} className="flex-1">
+              <Send size={14} className="mr-1.5" /> Analyze Situation
+            </NeonButton>
+            {hasSpeech && (
+              <button
+                type="button"
+                title={micActive ? 'Stop dictation' : 'Dictate description'}
+                onClick={() => {
+                  if (micActive) return
+                  const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition
+                  const rec = new SR()
+                  rec.lang = 'en-PH'
+                  rec.interimResults = false
+                  rec.onresult = (e) => {
+                    const t = Array.from(e.results).map(r => r[0].transcript).join(' ')
+                    setInput(prev => prev ? `${prev} ${t}` : t)
+                  }
+                  rec.onend = () => setMicActive(false)
+                  rec.onerror = () => setMicActive(false)
+                  setMicActive(true)
+                  rec.start()
+                }}
+                className={`shrink-0 px-3 py-2 rounded-xl border text-xs font-semibold transition-all ${
+                  micActive
+                    ? 'bg-[rgba(239,68,68,0.2)] border-[rgba(239,68,68,0.4)] text-red-400 animate-pulse'
+                    : 'glass border-[rgba(255,255,255,0.12)] text-slate-400 hover:text-[#00d4ff]'
+                }`}
+              >
+                {micActive ? <MicOff size={14} /> : <Mic size={14} />}
+              </button>
+            )}
+          </div>
           <p className="text-[10px] text-slate-500 mt-2 text-center">
             In immediate danger? Skip this —{' '}
             <button onClick={() => navigate('/sos/new')} className="text-[#ef4444] font-semibold underline">
@@ -295,6 +345,14 @@ export function VictimAssistant() {
                   <MapPin size={10} className="text-[#00d4ff]" />
                   Nearby Landmark (optional)
                 </label>
+                {geoLocation && (geoLocation.barangay || geoLocation.city) && (
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <MapPin size={10} className="text-[#22c55e] shrink-0" />
+                    <span className="text-[10px] text-[#22c55e]">
+                      GPS detected: {[geoLocation.barangay, geoLocation.city].filter(Boolean).join(', ')}
+                    </span>
+                  </div>
+                )}
                 <input
                   type="text"
                   value={landmark}
