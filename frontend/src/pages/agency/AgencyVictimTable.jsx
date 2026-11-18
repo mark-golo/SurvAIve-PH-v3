@@ -10,6 +10,11 @@ import { assessDelay, tierColor, tierLabel } from '../../lib/ai/erdiEngine'
 import { ERDIPanel } from '../../components/ui/ERDIPanel'
 import { fetchWeather } from '../../lib/weatherService'
 
+const AI_CATEGORY_LABELS = {
+  mdrrmo: 'Disaster (MDRRMO)', hospital: 'Medical', bfp: 'Fire (BFP)',
+  pnp: 'Crime / Security (PNP)', pcg: 'Maritime (PCG)',
+}
+
 // ── Acknowledgment Panel ──────────────────────────────────────────────────────
 // Shows agency-level acknowledgment actions for each pending SOS.
 // Displayed as a collapsible card above the main VictimTable.
@@ -41,7 +46,7 @@ function AcknowledgmentPanel({ agencyType, agencyId }) {
 
       let q = supabase
         .from('sos_reports')
-        .select('id,barangay,municipality,status,rescue_status,service_type,created_at,name')
+        .select('id,barangay,municipality,status,rescue_status,service_type,created_at,name,ai_classification,ai_confidence,ai_review_status')
         .contains('service_type', [agencyType])
         .eq('rescue_status', 'pending')
         .order('created_at', { ascending: false })
@@ -169,6 +174,26 @@ function AcknowledgmentPanel({ agencyType, agencyId }) {
                     <p className="text-xs text-slate-500">
                       {sos.barangay ?? '—'} · {new Date(sos.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}
                     </p>
+                    {(sos.ai_classification || sos.ai_confidence != null) && (
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        {sos.ai_classification && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(0,212,255,0.08)] border border-[rgba(0,212,255,0.2)] text-[#00d4ff]">
+                            {AI_CATEGORY_LABELS[sos.ai_classification] ?? sos.ai_classification}
+                          </span>
+                        )}
+                        {sos.ai_confidence != null && (
+                          <span className="text-[9px] text-slate-500">{sos.ai_confidence}% conf.</span>
+                        )}
+                        {sos.ai_review_status && sos.ai_review_status !== 'unreviewed' && (
+                          <span className={`text-[9px] ${
+                            sos.ai_review_status === 'confirmed' ? 'text-green-500' :
+                            sos.ai_review_status === 'corrected' ? 'text-blue-400' : 'text-red-400'
+                          }`}>
+                            {sos.ai_review_status}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </button>
                   <div className="flex items-center gap-2 shrink-0">
                     <button

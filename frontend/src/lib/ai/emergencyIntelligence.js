@@ -83,7 +83,7 @@ export function extractEntities(text) {
 
   // Victim status — priority order mirrors calcPriorityScore weights
   let status = null
-  for (const key of ['trapped', 'injured', 'missing']) {
+  for (const key of ['trapped', 'injured', 'missing', 'stranded']) {
     const hits = matchLangMap(norm, STATUS_LEXICON[key])
     if (hits.length > 0) {
       hits.forEach(h => matchedTerms.push({ ...h, category: 'status', key }))

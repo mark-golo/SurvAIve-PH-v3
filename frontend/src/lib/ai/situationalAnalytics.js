@@ -106,6 +106,7 @@ export function detectAnomalies(reports = []) {
   const anomalies = []
   if (lastHour >= 3 && lastHour > trailingAvg * 2) {
     anomalies.push({
+      id: `surge-${lastHour}-${trailingAvg.toFixed(1)}`,
       text: `Unusual surge: ${lastHour} SOS report${lastHour !== 1 ? 's' : ''} in the last hour vs. ~${trailingAvg.toFixed(1)}/hr baseline.`,
       evidence: `last 60 min = ${lastHour}, prior 5h avg = ${trailingAvg.toFixed(1)}/hr`,
       severity: 'high',
@@ -115,6 +116,7 @@ export function detectAnomalies(reports = []) {
     now - new Date(r.created_at).getTime() > 120 * 60e3).length
   if (unresolvedOld > 0) {
     anomalies.push({
+      id: `stale-${unresolvedOld}-of-${active.length}`,
       text: `${unresolvedOld} active SOS report${unresolvedOld !== 1 ? 's' : ''} older than 2 hours — review for escalation.`,
       evidence: `${unresolvedOld} of ${active.length} active reports exceed 120 min without resolution`,
       severity: unresolvedOld >= 3 ? 'high' : 'medium',

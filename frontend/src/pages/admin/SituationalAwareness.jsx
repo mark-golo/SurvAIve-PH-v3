@@ -10,7 +10,7 @@ import { fetchWeather } from '../../lib/weatherService'
 import { AdminLayout } from './AdminLayout'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassCard } from '../../components/ui/GlassCard'
-import api from '../../lib/api'
+import api, { logActivity } from '../../lib/api'
 import { getNetworkOnline, probeBackend, invalidateProbeCache, onNetworkChange } from '../../lib/capacitor'
 import { db } from '../../lib/db'
 import { useAuthStore } from '../../store/auth'
@@ -191,8 +191,18 @@ export function SituationalAwareness() {
   const [activeTab, setActiveTab]   = useState('zones') // 'zones' | 'insights' | 'delay' | 'safety'
   const [delayWeather, setDelayWeather] = useState(null)
   const [onDutyCount,  setOnDutyCount]  = useState(0)
+  const [acknowledgedAnomalies, setAcknowledgedAnomalies] = useState(new Set())
 
   const muni = scope?.municipality
+
+  function handleAcknowledgeAnomaly(anomaly) {
+    setAcknowledgedAnomalies(prev => new Set([...prev, anomaly.id]))
+    logActivity('POST', 'anomaly_ack', 'ai_anomaly', null, {
+      anomalyId: anomaly.id,
+      text: anomaly.text,
+      evidence: anomaly.evidence,
+    })
+  }
 
   const load = async () => {
     setSyncing(true)
@@ -549,15 +559,29 @@ export function SituationalAwareness() {
                   </div>
                 </div>
 
-                {/* Statistical anomaly alerts — §4.6 */}
-                {anomalies.map((anomaly, i) => (
-                  <div key={`anomaly-${i}`} className="glass rounded-xl p-3.5 border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.05)]">
+                {/* Statistical anomaly alerts — §4.6 (with human verification) */}
+                {anomalies.length === 0 ? (
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[rgba(34,197,94,0.06)] border border-[rgba(34,197,94,0.15)]">
+                    <span className="text-green-500 text-[10px]">●</span>
+                    <p className="text-[11px] text-[rgba(34,197,94,0.8)]">No anomalies detected in current reporting window.</p>
+                  </div>
+                ) : anomalies.map((anomaly) => (
+                  <div key={anomaly.id} className="glass rounded-xl p-3.5 border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.05)]">
                     <div className="flex items-start gap-2.5">
                       <AlertTriangle size={14} className="text-red-400 shrink-0 mt-0.5" />
-                      <div>
+                      <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold mb-1 text-red-400">Anomaly Detected</p>
                         <p className="text-xs text-slate-300 leading-relaxed">{anomaly.text}</p>
                         <p className="text-[10px] text-slate-500 mt-1">Evidence: {anomaly.evidence}</p>
+                        {!acknowledgedAnomalies.has(anomaly.id) ? (
+                          <button
+                            onClick={() => handleAcknowledgeAnomaly(anomaly)}
+                            className="mt-2 text-[10px] px-2 py-1 rounded-lg bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.3)] text-amber-400 hover:bg-[rgba(245,158,11,0.2)] transition-colors">
+                            Acknowledge
+                          </button>
+                        ) : (
+                          <span className="block mt-2 text-[10px] text-slate-500">✓ Acknowledged</span>
+                        )}
                       </div>
                     </div>
                   </div>
