@@ -127,6 +127,7 @@ function analyzeData(reports, centers, responders, muni) {
   })
 
   recs.forEach(rec => {
+    rec.type = 'recommendation'
     rec.policyRefs = searchPolicyKB(`${rec.category} ${rec.title}`, 2)
   })
 
