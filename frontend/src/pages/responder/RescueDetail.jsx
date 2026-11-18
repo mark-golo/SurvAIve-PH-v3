@@ -58,8 +58,9 @@ export function RescueDetail() {
   const [responderProfile, setResponderProfile] = useState(null)
   const [gpsStatus, setGpsStatus] = useState('inactive') // 'inactive'|'active'|'error'
   const [responderGps, setResponderGps] = useState(null)
-  const watchIdRef  = useRef(null)
-  const lastPushRef = useRef(0)
+  const watchIdRef      = useRef(null)
+  const lastPushRef     = useRef(0)
+  const prevErdiTierRef = useRef(null)
   const [sosEvents,     setSosEvents]     = useState([])
   const [weatherRisk,   setWeatherRisk]   = useState(null)
   const [weatherChecked, setWeatherChecked] = useState(false)
@@ -152,10 +153,11 @@ export function RescueDetail() {
     setErdiAssessment(assessDelay(report, sosEvents, responderGps, weatherRisk, agencyContext))
   }, [victim?.rescue_status, sosEvents.length, weatherRisk, responderGps, agencyContext])
 
-  // Log ERDI assessments at DELAYED or CRITICAL_DELAY tier
+  // Log ERDI assessments on tier change (all tiers) — blueprint §16 AC 8
   useEffect(() => {
     if (!erdiAssessment) return
-    if (erdiAssessment.tier !== 'DELAYED' && erdiAssessment.tier !== 'CRITICAL_DELAY') return
+    if (erdiAssessment.tier === prevErdiTierRef.current) return
+    prevErdiTierRef.current = erdiAssessment.tier
     logActivity('POST', 'erdi', 'erdi_assessment', victim?.id, {
       tier: erdiAssessment.tier,
       confidence: erdiAssessment.confidence,

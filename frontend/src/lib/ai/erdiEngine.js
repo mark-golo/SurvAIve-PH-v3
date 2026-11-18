@@ -232,6 +232,11 @@ export function assessDelay(report = {}, events = [], responder = null, weatherR
   // Role-appropriate recommendations
   const recs = buildRecommendations(tier, stageResults, report, geoTier, weatherRisk)
 
+  // Rank factors: observed (live system data) first, reported (external/user) next,
+  // inferred (heuristic) last — blueprint §3 Obj 2
+  const TYPE_RANK = { observed: 0, reported: 1, inferred: 2 }
+  factors.sort((a, b) => (TYPE_RANK[a.type] ?? 3) - (TYPE_RANK[b.type] ?? 3))
+
   // Potential impact summary (§7 output structure)
   const potentialImpact = (() => {
     if (tier === 'ON_TRACK') return null
@@ -250,8 +255,9 @@ export function assessDelay(report = {}, events = [], responder = null, weatherR
     recommendations: recs,
     potentialImpact,
     confidence,
-    staleDataWarning: staleGPS || events.length === 0,
+    staleDataWarning: staleGPS || events.length === 0 || weatherRisk === null,
     assessedAt: new Date(now),
+    incidentId: report?.id ?? null,
   }
 }
 

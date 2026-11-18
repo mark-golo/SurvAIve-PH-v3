@@ -119,8 +119,9 @@ export function ResponseTracking() {
     try { return JSON.parse(localStorage.getItem('survAIve-voice-prefs'))?.lang ?? 'en' } catch { return 'en' }
   })
   const [lastAnnouncement, setLastAnnouncement] = useState(null)
-  const announcedRef = useRef(new Set())
-  const prevDistRef  = useRef(null)
+  const announcedRef     = useRef(new Set())
+  const prevDistRef      = useRef(null)
+  const prevErdiTierRef  = useRef(null)
 
   // ── ERDI state ───────────────────────────────────────────────────────────
   const [weatherRisk,     setWeatherRisk]     = useState(null)
@@ -301,10 +302,11 @@ export function ResponseTracking() {
     setErdiAssessment(assessDelay(report, events, responder, weatherRisk, agencyContext))
   }, [report?.rescue_status, report?.ai_priority_score, events.length, responder?.lat, responder?.lng, responder?.last_seen_at, weatherRisk, agencyContext])
 
-  // Log ERDI assessments at DELAYED or CRITICAL_DELAY tier
+  // Log ERDI assessments on tier change (all tiers) — blueprint §16 AC 8
   useEffect(() => {
     if (!erdiAssessment) return
-    if (erdiAssessment.tier !== 'DELAYED' && erdiAssessment.tier !== 'CRITICAL_DELAY') return
+    if (erdiAssessment.tier === prevErdiTierRef.current) return
+    prevErdiTierRef.current = erdiAssessment.tier
     logActivity('POST', 'erdi', 'erdi_assessment', report?.id, {
       tier: erdiAssessment.tier,
       confidence: erdiAssessment.confidence,
