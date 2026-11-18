@@ -177,6 +177,13 @@ export function CommandCenter() {
     [adjustedReports, activeResponders]
   )
 
+  const agencyCtx = useMemo(() => ({
+    onDutyCount: activeResponders.length,
+    activeLoad: adjustedReports.filter(
+      r => !['rescued', 'cannot_reach'].includes(r.rescue_status)
+    ).length,
+  }), [activeResponders, adjustedReports])
+
   useEffect(() => {
     api.get(muni ? `/evacuation_centers?municipality=${encodeURIComponent(muni)}` : '/evacuation_centers')
       .then(rows => {
@@ -686,7 +693,7 @@ export function CommandCenter() {
           {(() => {
             const criticalDelays = adjustedReports
               .filter(r => !['rescued','cannot_reach'].includes(r.rescue_status))
-              .map(r => ({ r, a: assessDelay(r, [], null, weather) }))
+              .map(r => ({ r, a: assessDelay(r, [], null, weather, agencyCtx) }))
               .filter(({ a }) => a.tier === 'CRITICAL_DELAY' || a.tier === 'DELAYED')
               .slice(0, 5)
             if (!criticalDelays.length) return null
@@ -723,7 +730,7 @@ export function CommandCenter() {
                 const isSelected = selectedSOS && r.lat === selectedSOS[0] && r.lng === selectedSOS[1]
                 const isRescued  = r.rescue_status === 'rescued'
                 const dotColor   = isRescued ? '#22c55e' : COLORS[r.priority]
-                const erdi       = isRescued ? null : assessDelay(r, [], null, weather)
+                const erdi       = isRescued ? null : assessDelay(r, [], null, weather, agencyCtx)
                 return (
                   <div
                     key={r.id}

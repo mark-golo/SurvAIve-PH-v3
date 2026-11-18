@@ -177,6 +177,7 @@ export function SituationalAwareness() {
   const [expandedZone, setExpandedZone] = useState(null)
   const [activeTab, setActiveTab]   = useState('zones') // 'zones' | 'insights' | 'delay' | 'safety'
   const [delayWeather, setDelayWeather] = useState(null)
+  const [onDutyCount,  setOnDutyCount]  = useState(0)
 
   const muni = scope?.municipality
 
@@ -208,6 +209,12 @@ export function SituationalAwareness() {
   }
 
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    let q = supabase.from('responders').select('id', { count: 'exact', head: true }).eq('duty_status', 'on_duty')
+    if (muni) q = q.eq('municipality', muni)
+    q.then(({ count }) => setOnDutyCount(count ?? 0)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     const channel = supabase
@@ -282,12 +289,19 @@ export function SituationalAwareness() {
       .catch(() => {})
   }, [reports])
 
+  const agencyCtx = useMemo(() => ({
+    onDutyCount,
+    activeLoad: reports.filter(
+      r => !['rescued', 'cannot_reach'].includes(r.rescue_status)
+    ).length,
+  }), [onDutyCount, reports])
+
   // ERDI: assess each active report (no per-report events available in admin view)
   const delayAssessments = useMemo(() => {
     return reports
       .filter(r => !['rescued', 'cannot_reach'].includes(r.rescue_status))
-      .map(r => ({ report: r, assessment: assessDelay(r, [], null, delayWeather) }))
-  }, [reports, delayWeather])
+      .map(r => ({ report: r, assessment: assessDelay(r, [], null, delayWeather, agencyCtx) }))
+  }, [reports, delayWeather, agencyCtx])
 
   const delayTierCounts = useMemo(() => {
     const counts = { CRITICAL_DELAY: 0, DELAYED: 0, MINOR_DELAY: 0, ON_TRACK: 0 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { VictimTable } from '../admin/VictimTable'
 import { CheckCircle, XCircle, Users, RefreshCw } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
@@ -7,16 +7,22 @@ import { useAuthStore } from '../../store/auth'
 import { fmtSosId } from '../../lib/format'
 import api from '../../lib/api'
 import { assessDelay, tierColor, tierLabel } from '../../lib/ai/erdiEngine'
+import { ERDIPanel } from '../../components/ui/ERDIPanel'
+import { fetchWeather } from '../../lib/weatherService'
 
 // ── Acknowledgment Panel ──────────────────────────────────────────────────────
 // Shows agency-level acknowledgment actions for each pending SOS.
 // Displayed as a collapsible card above the main VictimTable.
 
 function AcknowledgmentPanel({ agencyType, agencyId }) {
-  const [pendingSOS, setPendingSOS] = useState([])
-  const [loading,    setLoading]    = useState(false)
-  const [actioning,  setActioning]  = useState(null)
-  const [expanded,   setExpanded]   = useState(true)
+  const [pendingSOS,  setPendingSOS]  = useState([])
+  const [loading,     setLoading]     = useState(false)
+  const [actioning,   setActioning]   = useState(null)
+  const [expanded,    setExpanded]    = useState(true)
+  const [expandedId,  setExpandedId]  = useState(null)
+  const [erdiWeather, setErdiWeather] = useState(null)
+  const [onDutyCount, setOnDutyCount] = useState(0)
+  const [eventsCache, setEventsCache] = useState({})
   const isOnline = getNetworkOnline()
   const { scope }  = useAuthStore()
   const muni = scope?.municipality
@@ -52,6 +58,40 @@ function AcknowledgmentPanel({ agencyType, agencyId }) {
   }
 
   useEffect(() => { load() }, [agencyType, muni])
+
+  // Fetch weather once (using first SOS with coords) for ERDI assessments
+  useEffect(() => {
+    if (!pendingSOS.length) return
+    const ref = pendingSOS.find(s => s.lat && s.lng)
+    if (!ref) return
+    fetchWeather(ref.lat, ref.lng).then(setErdiWeather).catch(() => {})
+  }, [pendingSOS])
+
+  // Fetch on-duty responder count for agencyContext
+  useEffect(() => {
+    if (!agencyId) return
+    supabase.from('responders')
+      .select('id', { count: 'exact', head: true })
+      .eq('duty_status', 'on_duty')
+      .then(({ count }) => setOnDutyCount(count ?? 0))
+      .catch(() => {})
+  }, [agencyId])
+
+  const agencyCtx = useMemo(() => ({
+    onDutyCount,
+    activeLoad: pendingSOS.length,
+  }), [onDutyCount, pendingSOS.length])
+
+  function expandRow(sosId) {
+    setExpandedId(id => id === sosId ? null : sosId)
+    if (eventsCache[sosId] !== undefined) return
+    supabase.from('sos_status_events')
+      .select('status,created_at')
+      .eq('sos_id', sosId)
+      .order('created_at', { ascending: true })
+      .then(({ data }) => setEventsCache(prev => ({ ...prev, [sosId]: data ?? [] })))
+      .catch(() => {})
+  }
 
   async function acknowledge(sosId, status, declineReason) {
     setActioning(sosId)
@@ -105,47 +145,62 @@ function AcknowledgmentPanel({ agencyType, agencyId }) {
 
       {expanded && (
         <div className="divide-y divide-[rgba(255,255,255,0.05)]">
-          {pendingSOS.map(sos => (
-            <div key={sos.id} className="px-4 py-3 flex items-center justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-medium text-white truncate">
-                    {fmtSosId(sos.id)} · {sos.name ?? 'Guest'}
-                  </p>
-                  {(() => {
-                    const erdi = assessDelay(sos, [], null, null)
-                    return erdi.tier !== 'ON_TRACK' ? (
-                      <span className="text-[9px] font-bold shrink-0" style={{ color: tierColor(erdi.tier) }}>
-                        {tierLabel(erdi.tier)}
-                      </span>
-                    ) : null
-                  })()}
+          {pendingSOS.map(sos => {
+            const isExpanded = expandedId === sos.id
+            const erdi = assessDelay(sos, eventsCache[sos.id] ?? [], null, erdiWeather, agencyCtx)
+            return (
+              <div key={sos.id} className="px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <button
+                    className="flex-1 min-w-0 text-left"
+                    onClick={() => expandRow(sos.id)}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-medium text-white truncate">
+                        {fmtSosId(sos.id)} · {sos.name ?? 'Guest'}
+                      </p>
+                      {erdi.tier !== 'ON_TRACK' && (
+                        <span className="text-[9px] font-bold shrink-0" style={{ color: tierColor(erdi.tier) }}>
+                          {tierLabel(erdi.tier)}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {sos.barangay ?? '—'} · {new Date(sos.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      disabled={actioning === sos.id}
+                      onClick={() => acknowledge(sos.id, 'acknowledged')}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-900/40 border border-green-700/40 text-green-400 text-xs font-semibold hover:bg-green-900/60 transition-all disabled:opacity-50">
+                      <CheckCircle size={12} />
+                      Acknowledge
+                    </button>
+                    <button
+                      disabled={actioning === sos.id}
+                      onClick={() => {
+                        const reason = window.prompt('Reason for inability to respond (optional):') ?? ''
+                        acknowledge(sos.id, 'unable_to_respond', reason || null)
+                      }}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-900/30 border border-red-700/30 text-red-400 text-xs font-semibold hover:bg-red-900/50 transition-all disabled:opacity-50">
+                      <XCircle size={12} />
+                      Unable
+                    </button>
+                    <button
+                      onClick={() => expandRow(sos.id)}
+                      className="text-slate-500 hover:text-[#00d4ff] transition-colors text-xs px-1"
+                    >
+                      {isExpanded ? '▲' : '▼'}
+                    </button>
+                  </div>
                 </div>
-                <p className="text-xs text-slate-500">
-                  {sos.barangay ?? '—'} · {new Date(sos.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}
-                </p>
+                {isExpanded && (
+                  <ERDIPanel assessment={erdi} role="admin" className="mt-3" />
+                )}
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  disabled={actioning === sos.id}
-                  onClick={() => acknowledge(sos.id, 'acknowledged')}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-900/40 border border-green-700/40 text-green-400 text-xs font-semibold hover:bg-green-900/60 transition-all disabled:opacity-50">
-                  <CheckCircle size={12} />
-                  Acknowledge
-                </button>
-                <button
-                  disabled={actioning === sos.id}
-                  onClick={() => {
-                    const reason = window.prompt('Reason for inability to respond (optional):') ?? ''
-                    acknowledge(sos.id, 'unable_to_respond', reason || null)
-                  }}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-900/30 border border-red-700/30 text-red-400 text-xs font-semibold hover:bg-red-900/50 transition-all disabled:opacity-50">
-                  <XCircle size={12} />
-                  Unable
-                </button>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
