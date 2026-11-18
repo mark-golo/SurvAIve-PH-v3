@@ -106,6 +106,10 @@ export function detectAnomalies(reports = []) {
   const withTs = active.filter(r => r.created_at)
   const coverageNote = `based on ${withTs.length} of ${active.length} records with timestamps`
 
+  // Hour bucket gives IDs stable within a clock-hour so localStorage acknowledgements
+  // survive count changes in the same event window (e.g., 5 → 6 reports in the same hour).
+  const hourBucket = new Date(now).toISOString().slice(0, 13) // "YYYY-MM-DDTHH"
+
   const anomalies = []
   if (lastHour >= 3 && lastHour > trailingAvg * 2) {
     const magnitude = trailingAvg > 0 ? (lastHour / trailingAvg).toFixed(1) : null
@@ -113,7 +117,7 @@ export function detectAnomalies(reports = []) {
       ? `last 60 min = ${lastHour}, prior 5h avg = ${trailingAvg.toFixed(1)}/hr (${magnitude}× baseline); ${coverageNote}`
       : `last 60 min = ${lastHour}, prior 5h avg = ${trailingAvg.toFixed(1)}/hr; ${coverageNote}`
     anomalies.push({
-      id: `surge-${lastHour}-${trailingAvg.toFixed(1)}`,
+      id: `surge-${hourBucket}`,
       text: `Unusual surge: ${lastHour} SOS report${lastHour !== 1 ? 's' : ''} in the last hour vs. ~${trailingAvg.toFixed(1)}/hr baseline.`,
       evidence: surgeEvidence,
       severity: 'high',
@@ -125,7 +129,7 @@ export function detectAnomalies(reports = []) {
     const stalePct = active.length > 0 ? ` (${((unresolvedOld / active.length) * 100).toFixed(0)}%)` : ''
     const staleEvidence = `${unresolvedOld} of ${active.length} active reports exceed 120 min without resolution${stalePct}; ${coverageNote}`
     anomalies.push({
-      id: `stale-${unresolvedOld}-of-${active.length}`,
+      id: `stale-${hourBucket}`,
       text: `${unresolvedOld} active SOS report${unresolvedOld !== 1 ? 's' : ''} older than 2 hours — review for escalation.`,
       evidence: staleEvidence,
       severity: unresolvedOld >= 3 ? 'high' : 'medium',

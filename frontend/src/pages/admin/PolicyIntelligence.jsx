@@ -660,9 +660,9 @@ export function PolicyIntelligence() {
         {situationSummary && situationSummary.totalSOS > 0 && (
           <div className="grid grid-cols-3 gap-2">
             <div className="glass rounded-xl p-3">
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">SOS Reports (30d)</p>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Active SOS Reports</p>
               <p className="text-xl font-bold text-white">{situationSummary.totalSOS}</p>
-              <p className="text-[9px] text-slate-500">Total submitted this period</p>
+              <p className="text-[9px] text-slate-500">Total in current data window</p>
             </div>
             <div className="glass rounded-xl p-3">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Unresolved</p>

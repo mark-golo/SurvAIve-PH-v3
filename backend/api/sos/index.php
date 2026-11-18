@@ -85,9 +85,10 @@ if ($method === 'POST') {
     $ageGroup = $body['victim_age_group']   ?? 'adult';
     $conds    = $body['special_conditions'] ?? '';
 
-    if      ($status === 'trapped') $score += 30;
-    elseif  ($status === 'injured') $score += 20;
-    elseif  ($status === 'missing') $score += 15;
+    if      ($status === 'trapped')  $score += 30;
+    elseif  ($status === 'injured')  $score += 20;
+    elseif  ($status === 'missing')  $score += 15;
+    elseif  ($status === 'stranded') $score += 10;
 
     if      ($people >= 10) $score += 25;
     elseif  ($people >= 5)  $score += 15;
@@ -101,6 +102,7 @@ if ($method === 'POST') {
     if (in_array('fire',                $condList)) $score += 15;
     if (in_array('structural_collapse', $condList)) $score += 10;
     if (in_array('flooding',            $condList)) $score += 10;
+    if (in_array('needs_evacuation',    $condList)) $score += 15;
 
     if (!$isVerified) $score -= 10;
     $score = min(99, $score);

@@ -167,6 +167,7 @@ export function calcPriorityScore(body) {
   if (conds.includes('fire'))                score += 15
   if (conds.includes('structural_collapse')) score += 10
   if (conds.includes('flooding'))            score += 10
+  if (conds.includes('needs_evacuation'))    score += 15
 
   if (!body.is_verified) score -= 10
 
