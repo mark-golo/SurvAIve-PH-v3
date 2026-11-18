@@ -178,7 +178,7 @@ CREATE TABLE IF NOT EXISTS sos_reports (
   ai_classification      VARCHAR(50)      DEFAULT NULL,
   ai_confidence          TINYINT UNSIGNED DEFAULT NULL,
   ai_rules_version       VARCHAR(20)      DEFAULT NULL,
-  ai_review_status       VARCHAR(20)      NOT NULL DEFAULT 'unreviewed',
+  ai_review_status       ENUM('unreviewed','confirmed','corrected','rejected') NOT NULL DEFAULT 'unreviewed',
   ai_review_note         TEXT             DEFAULT NULL,
   ai_reviewed_by         VARCHAR(100)     DEFAULT NULL,
   ai_reviewed_at         TIMESTAMP        NULL DEFAULT NULL,

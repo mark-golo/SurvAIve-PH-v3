@@ -16,6 +16,9 @@ import { db } from '../../lib/db'
 import { useAuthStore } from '../../store/auth'
 import { supabase } from '../../lib/supabase'
 import { analyzeZones, generateInsights, detectAnomalies, computeSafetyAggregation } from '../../lib/ai/situationalAnalytics'
+import { clusterSOS } from '../../lib/kmeans'
+import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
+import 'leaflet/dist/leaflet.css'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-components
@@ -278,6 +281,7 @@ export function SituationalAwareness() {
   const insights = useMemo(() => generateInsights(zones), [zones])
   const anomalies  = useMemo(() => detectAnomalies(reports), [reports])
   const safetyAgg  = useMemo(() => computeSafetyAggregation(constituents), [constituents])
+  const clusters   = useMemo(() => clusterSOS(reports), [reports])
 
   // Fetch weather for Delay Intel tab using first available report with coords
   useEffect(() => {
@@ -452,6 +456,51 @@ export function SituationalAwareness() {
                     ))}
                   </div>
                 </GlassCard>
+
+                {/* K-means++ geographic cluster map — §4.2 GIS presentation */}
+                <div className="mt-3">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2 px-1">GPS Cluster Map</p>
+                  {clusters.length === 0 ? (
+                    <div className="glass rounded-xl p-4 text-center border border-[rgba(255,255,255,0.06)]">
+                      <p className="text-xs text-slate-500">No GPS coordinates available for spatial clustering.</p>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl overflow-hidden border border-[rgba(255,255,255,0.08)]" style={{ height: 240 }}>
+                      <MapContainer
+                        bounds={clusters.map(c => [c.centroid[0], c.centroid[1]])}
+                        boundsOptions={{ padding: [30, 30] }}
+                        style={{ height: '100%', width: '100%' }}
+                        zoomControl
+                        scrollWheelZoom={false}
+                      >
+                        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OpenStreetMap contributors" />
+                        {clusters.map((c, i) => {
+                          const color = c.priority === 'CRITICAL' ? '#ef4444'
+                                      : c.priority === 'HIGH'     ? '#f59e0b'
+                                      : c.priority === 'MODERATE' ? '#3b82f6'
+                                      :                             '#22c55e'
+                          return (
+                            <CircleMarker
+                              key={i}
+                              center={[c.centroid[0], c.centroid[1]]}
+                              radius={Math.min(24, 6 + c.count * 2)}
+                              pathOptions={{ color, fillColor: color, fillOpacity: 0.45, weight: 2 }}
+                            >
+                              <Popup>
+                                <div style={{ fontSize: 12, lineHeight: 1.5, minWidth: 130 }}>
+                                  <strong style={{ color }}>{c.priority}</strong><br />
+                                  {c.count} report{c.count !== 1 ? 's' : ''} · avg score {c.avgScore}
+                                  {c.criticalCount > 0 && <><br />{c.criticalCount} CRITICAL</>}
+                                  {c.barangays.length > 0 && <><br /><span style={{ color: '#64748b' }}>{c.barangays.join(', ')}</span></>}
+                                </div>
+                              </Popup>
+                            </CircleMarker>
+                          )
+                        })}
+                      </MapContainer>
+                    </div>
+                  )}
+                </div>
 
                 {/* Legend */}
                 <div className="glass rounded-xl px-4 py-3 flex flex-wrap gap-x-5 gap-y-2">
