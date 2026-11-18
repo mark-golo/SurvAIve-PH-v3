@@ -5,7 +5,6 @@ import {
   PieChart, Pie, Legend,
 } from 'recharts'
 import { AdminLayout } from './AdminLayout'
-import { SuperAdminLayout } from '../superadmin/SuperAdminLayout'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 import api from '../../lib/api'
@@ -765,7 +764,7 @@ export function EmergencyOpsReports() {
   const [fromDate, setFromDate] = useState(todayStr())
   const [toDate, setToDate]     = useState(todayStr())
 
-  const Layout = role === 'superadmin' ? SuperAdminLayout : AdminLayout
+  const Layout = AdminLayout
 
   // Superadmin gets an extra Province Snapshots tab
   const visibleTabs = role === 'superadmin'
