@@ -555,7 +555,7 @@ export function RescueDetail() {
         {/* ERDI — delay intelligence (hidden after rescue/cannot_reach) */}
         {erdiAssessment && !['rescued','cannot_reach'].includes(rescueStatus) && (
           <>
-            <ERDIPanel assessment={erdiAssessment} role="responder" />
+            <ERDIPanel assessment={erdiAssessment} role="responder" isOnline={getNetworkOnline()} />
             {weatherChecked && weatherRisk === null && (
               <p className="text-xs text-slate-500 text-center -mt-2 mb-1 px-2">
                 Weather data unavailable — delay estimate based on incident and location data only.

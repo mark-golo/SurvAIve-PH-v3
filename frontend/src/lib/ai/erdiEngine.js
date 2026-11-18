@@ -2,6 +2,8 @@
 // Follows the same pattern as responderIntelligence.js: pure deterministic JS,
 // no network calls, works offline. All timing is in milliseconds internally.
 
+export const ERDI_RULES_VERSION = 'erdi-rules-v1'
+
 const MIN = 60_000
 
 // ── Priority baselines (ms per stage) ────────────────────────────────────────
@@ -258,6 +260,12 @@ export function assessDelay(report = {}, events = [], responder = null, weatherR
     staleDataWarning: staleGPS || events.length === 0 || weatherRisk === null,
     assessedAt: new Date(now),
     incidentId: report?.id ?? null,
+    assessmentVersion: ERDI_RULES_VERSION,
+    rescueStatus: report?.rescue_status ?? 'pending',
+    reassessmentTrigger: {
+      events: ['rescue_status_change', 'responder_gps_update', 'weather_update'],
+      intervalMs: 5 * 60_000,
+    },
   }
 }
 

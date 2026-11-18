@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Shield, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, Clock, Info } from 'lucide-react'
+import { Shield, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, Clock, Info, WifiOff } from 'lucide-react'
 import { GlassCard } from './GlassCard'
 import { tierColor, tierLabel, formatMsShort, explainDelay } from '../../lib/ai/erdiEngine'
 
@@ -57,17 +57,23 @@ function ConfidenceDot({ level }) {
  *   className  — optional extra classes for the outer GlassCard
  */
 const FACTOR_TYPE_STYLES = {
-  observed: { symbol: '●', color: 'rgba(34,197,94,0.7)',   title: 'Observed — live system data' },
+  observed: { symbol: '●', color: 'rgba(34,197,94,0.7)',   title: 'Confirmed — live system data' },
   reported: { symbol: '!', color: 'rgba(251,191,36,0.8)',  title: 'Reported — from user or external source' },
-  inferred: { symbol: '~', color: 'rgba(148,163,184,0.6)', title: 'Inferred — derived from available context' },
+  inferred: { symbol: '~', color: 'rgba(148,163,184,0.6)', title: 'Possible (estimated) — derived from available context' },
 }
 
-export function ERDIPanel({ assessment, role = 'victim', className = '' }) {
+function fmtAgo(ts) {
+  if (!ts) return null
+  const mins = Math.round((Date.now() - new Date(ts).getTime()) / 60_000)
+  return mins < 1 ? 'just now' : mins < 60 ? `${mins} min ago` : `${Math.round(mins / 60)}h ago`
+}
+
+export function ERDIPanel({ assessment, role = 'victim', isOnline = true, className = '' }) {
   const [expanded, setExpanded] = useState(false)
 
   if (!assessment) return null
 
-  const { tier, factors, stages, recommendations, potentialImpact, confidence, staleDataWarning, assessedAt } = assessment
+  const { tier, factors, stages, recommendations, potentialImpact, confidence, staleDataWarning, assessedAt, incidentId } = assessment
   const color   = tierColor(tier)
   const label   = tierLabel(tier)
   const TierIcon = TIER_ICONS[tier] ?? Clock
@@ -76,6 +82,7 @@ export function ERDIPanel({ assessment, role = 'victim', className = '' }) {
   const timeStr = assessedAt
     ? assessedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : ''
+  const agoStr = fmtAgo(assessedAt)
 
   return (
     <GlassCard className={`border border-[rgba(255,255,255,0.08)] ${className}`}>
@@ -179,10 +186,26 @@ export function ERDIPanel({ assessment, role = 'victim', className = '' }) {
           {/* Footer */}
           <div className="flex items-center justify-between pt-1 border-t border-[rgba(255,255,255,0.06)]">
             <ConfidenceDot level={confidence} />
-            {timeStr && (
-              <span className="text-[10px] text-[rgba(255,255,255,0.3)]">Updated {timeStr}</span>
-            )}
+            <div className="flex flex-col items-end gap-0.5">
+              {timeStr && (
+                <span className="text-[10px] text-[rgba(255,255,255,0.3)]">
+                  Updated {timeStr}{agoStr ? ` · ${agoStr}` : ''}
+                </span>
+              )}
+              {incidentId && (
+                <span className="text-[9px] font-mono text-slate-600 truncate">
+                  SOS {String(incidentId).slice(0, 8).toUpperCase()}
+                </span>
+              )}
+            </div>
           </div>
+
+          {!isOnline && (
+            <div className="flex items-center gap-1.5 text-[10px] text-amber-400 mt-1">
+              <WifiOff size={11} className="shrink-0" />
+              <span>Offline — assessment uses cached data only</span>
+            </div>
+          )}
 
           {staleDataWarning && (
             <div className="flex items-start gap-1.5 text-[10px] text-[rgba(245,158,11,0.7)]">

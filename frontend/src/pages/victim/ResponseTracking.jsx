@@ -424,7 +424,7 @@ export function ResponseTracking() {
             {/* ERDI — delay intelligence (hidden after rescue) */}
             {erdiAssessment && report?.rescue_status !== 'rescued' && (
               <>
-                <ERDIPanel assessment={erdiAssessment} role="victim" />
+                <ERDIPanel assessment={erdiAssessment} role="victim" isOnline={isOnline} />
                 {weatherChecked && weatherRisk === null && (
                   <p className="text-xs text-slate-500 text-center -mt-2 mb-1 px-2">
                     Weather data unavailable — delay estimate based on incident and location data only.

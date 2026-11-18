@@ -222,7 +222,7 @@ function AcknowledgmentPanel({ agencyType, agencyId }) {
                   </div>
                 </div>
                 {isExpanded && (
-                  <ERDIPanel assessment={erdi} role="agency" className="mt-3" />
+                  <ERDIPanel assessment={erdi} role="agency" isOnline={isOnline} className="mt-3" />
                 )}
               </div>
             )
