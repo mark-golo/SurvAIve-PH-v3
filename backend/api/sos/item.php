@@ -19,7 +19,8 @@ if ($method === 'PUT') {
     $body = json_decode(file_get_contents('php://input'), true) ?? [];
 
     $allowed = ['rescue_status', 'assigned_responder_id', 'notes', 'status', 'confirmed_by_name', 'confirmed_at',
-                'dismissed', 'flagged', 'removed_from_view'];
+                'dismissed', 'flagged', 'removed_from_view',
+                'ai_review_status', 'ai_review_note', 'ai_reviewed_by', 'ai_reviewed_at'];
     $sets    = [];
     $params  = [];
     foreach ($allowed as $f) {

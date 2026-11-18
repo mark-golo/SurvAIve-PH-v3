@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Scale, RefreshCw, WifiOff, AlertTriangle, CheckCircle2, Clock, FileText, Printer, ChevronDown, ChevronUp, Info } from 'lucide-react'
+import { Scale, RefreshCw, WifiOff, AlertTriangle, CheckCircle2, Clock, FileText, Printer, ChevronDown, ChevronUp, Info, Search, BookOpen, X } from 'lucide-react'
 import api, { logActivity } from '../../lib/api'
+import { searchPolicyKB } from '../../lib/ai/policyKnowledgeBase'
 import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
 import { useAuthStore } from '../../store/auth'
 
@@ -340,6 +341,130 @@ function PolicyBriefPanel({ recommendations, statuses, muni, generatedAt }) {
   )
 }
 
+// ── Suggested policy queries ──────────────────────────────────────────────────
+const SUGGESTED_QUERIES = [
+  'LGU duties during disaster',
+  'state of calamity declaration',
+  'LDRRM Office mandate',
+  'Quick Response Fund',
+  'evacuation center standards',
+  'BDRRMC composition',
+  'early warning system',
+]
+
+// ── Policy search panel ───────────────────────────────────────────────────────
+function PolicySearchPanel({ query, onQueryChange, results, onSearch, onClear }) {
+  const [open, setOpen] = useState(true)
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSearch() }
+  }
+
+  return (
+    <div className="glass rounded-2xl border border-[rgba(0,212,255,0.15)] overflow-hidden">
+      {/* Header */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-5 py-3.5 text-xs font-semibold text-[#00d4ff] uppercase tracking-wider"
+      >
+        <span className="flex items-center gap-2">
+          <BookOpen size={13} />
+          Policy Knowledge Base — Ask a Question
+        </span>
+        {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
+
+      {open && (
+        <div className="px-5 pb-5 space-y-3 border-t border-[rgba(255,255,255,0.06)]">
+          {/* Suggested queries */}
+          <div className="pt-3">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2">Suggested queries</p>
+            <div className="flex flex-wrap gap-1.5">
+              {SUGGESTED_QUERIES.map(q => (
+                <button
+                  key={q}
+                  onClick={() => { onQueryChange(q); onSearch.call(null, q) }}
+                  className="text-[10px] px-2.5 py-1 rounded-full bg-[rgba(0,212,255,0.08)] border border-[rgba(0,212,255,0.2)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.16)] transition-colors"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Search input */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+              <input
+                type="text"
+                value={query}
+                onChange={e => onQueryChange(e.target.value)}
+                onKeyDown={handleKey}
+                placeholder="Ask a policy question or type keywords…"
+                className="w-full text-xs rounded-xl bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.1)] pl-8 pr-3 py-2.5 text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-[rgba(0,212,255,0.4)]"
+              />
+            </div>
+            <button
+              onClick={() => onSearch()}
+              disabled={!query.trim()}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[rgba(0,212,255,0.15)] border border-[rgba(0,212,255,0.3)] text-[#00d4ff] text-xs font-semibold hover:bg-[rgba(0,212,255,0.25)] transition-colors disabled:opacity-40"
+            >
+              <Search size={11} /> Search
+            </button>
+            {results !== null && (
+              <button
+                onClick={onClear}
+                className="p-2 rounded-xl text-slate-500 hover:text-slate-200 border border-[rgba(255,255,255,0.08)] transition-colors"
+                title="Clear results"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+
+          {/* Results */}
+          {results === null && (
+            <p className="text-[11px] text-slate-600 text-center py-3">
+              Search the Philippines DRRM policy knowledge base for official provisions, definitions, and LGU duties.
+            </p>
+          )}
+          {results !== null && results.length === 0 && (
+            <p className="text-xs text-slate-400 text-center py-4">No matching policy provisions found. Try different keywords.</p>
+          )}
+          {results !== null && results.length > 0 && (
+            <div className="space-y-3 pt-1">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
+                {results.length} result{results.length !== 1 ? 's' : ''} — keyword-indexed retrieval
+              </p>
+              {results.map(entry => (
+                <div key={entry.id} className="glass-bright rounded-xl p-4 space-y-2">
+                  <p className="text-xs font-bold text-white">{entry.title}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.3)] text-[#00d4ff] font-semibold">
+                      {entry.source}
+                    </span>
+                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-[rgba(139,92,246,0.1)] border border-[rgba(139,92,246,0.3)] text-violet-400">
+                      {entry.section}
+                    </span>
+                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-slate-400">
+                      {entry.instrument}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">{entry.body}</p>
+                </div>
+              ))}
+              <p className="text-[10px] text-slate-600 text-center pt-1">
+                This retrieval is keyword-based. Verify provisions against the full source document before official use.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 export function PolicyIntelligence() {
   const { scope } = useAuthStore()
@@ -353,6 +478,8 @@ export function PolicyIntelligence() {
   const [showBrief,       setShowBrief]        = useState(false)
   const [briefTime,       setBriefTime]        = useState(null)
   const [dataRange,       setDataRange]        = useState(null)
+  const [policyQuery,     setPolicyQuery]      = useState('')
+  const [policyResults,   setPolicyResults]    = useState(null)
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true)
@@ -508,6 +635,18 @@ export function PolicyIntelligence() {
             generatedAt={briefTime ?? new Date()}
           />
         )}
+
+        {/* Policy knowledge base search */}
+        <PolicySearchPanel
+          query={policyQuery}
+          onQueryChange={setPolicyQuery}
+          results={policyResults}
+          onSearch={(q) => {
+            const effectiveQuery = typeof q === 'string' ? q : policyQuery
+            setPolicyResults(searchPolicyKB(effectiveQuery))
+          }}
+          onClear={() => { setPolicyQuery(''); setPolicyResults(null) }}
+        />
 
         {/* Footer note */}
         <p className="text-[10px] text-slate-600 text-right pb-2">

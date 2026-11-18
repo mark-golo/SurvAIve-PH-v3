@@ -21,11 +21,19 @@ function confidenceLabel(val) {
 }
 
 const REVIEW_STYLES = {
-  confirmed: { color: '#22c55e', label: 'AI Confirmed',      icon: CheckCircle },
-  corrected: { color: '#3b82f6', label: 'Priority Corrected', icon: Edit3       },
-  rejected:  { color: '#ef4444', label: 'Assessment Rejected', icon: XCircle    },
-  unreviewed:{ color: '#f59e0b', label: 'Unreviewed',          icon: Clock      },
+  confirmed: { color: '#22c55e', label: 'AI Confirmed',        icon: CheckCircle },
+  corrected: { color: '#3b82f6', label: 'Assessment Corrected', icon: Edit3       },
+  rejected:  { color: '#ef4444', label: 'Assessment Rejected',  icon: XCircle    },
+  unreviewed:{ color: '#f59e0b', label: 'Unreviewed',           icon: Clock      },
 }
+
+const SERVICE_TYPES = [
+  { value: 'mdrrmo',   label: 'MDRRMO / Disaster'       },
+  { value: 'hospital', label: 'Medical / Hospital'      },
+  { value: 'bfp',      label: 'Fire (BFP)'              },
+  { value: 'pnp',      label: 'Crime / Security (PNP)'  },
+  { value: 'pcg',      label: 'Maritime (PCG)'          },
+]
 
 const PRIORITY_TIERS = [
   { label: 'CRITICAL',  score: 80 },
@@ -50,9 +58,10 @@ export function AIReviewPanel({ report, reviewerName, onReviewed }) {
   const confLabel     = confidenceLabel(report.ai_confidence)
   const serviceLabel  = SERVICE_LABEL[report.ai_classification] ?? report.ai_classification ?? '—'
 
-  const [mode, setMode]       = useState(null)   // null | 'override' | 'reject'
+  const [mode, setMode]           = useState(null)   // null | 'override' | 'reject'
   const [overrideTier, setOverrideTier] = useState(PRIORITY_TIERS[0].label)
-  const [note, setNote]       = useState('')
+  const [overrideType, setOverrideType] = useState(report.ai_classification ?? 'mdrrmo')
+  const [note, setNote]           = useState('')
   const [saving, setSaving]   = useState(false)
   const [offlineWarn, setOfflineWarn] = useState(false)
 
@@ -196,6 +205,17 @@ export function AIReviewPanel({ report, reviewerName, onReviewed }) {
       {/* Override form */}
       {mode === 'override' && (
         <div className="space-y-2">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Incident Type</p>
+          <select
+            value={overrideType}
+            onChange={e => setOverrideType(e.target.value)}
+            className="w-full text-xs rounded-xl bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.1)] px-3 py-2 text-slate-200"
+          >
+            {SERVICE_TYPES.map(s => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
+          <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Priority Tier</p>
           <select
             value={overrideTier}
             onChange={e => setOverrideTier(e.target.value)}
@@ -213,7 +233,9 @@ export function AIReviewPanel({ report, reviewerName, onReviewed }) {
             className="w-full text-xs rounded-xl bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.1)] px-3 py-2 text-slate-200 resize-none"
           />
           <div className="flex gap-2">
-            <button onClick={() => submit('corrected', `Priority overridden to ${overrideTier}${note ? ': ' + note : ''}`)}
+            <button
+              onClick={() => submit('corrected',
+                `Type: ${overrideType} · Priority: ${overrideTier}${note ? ' · ' + note : ''}`)}
               disabled={saving}
               className="flex-1 text-xs font-semibold py-1.5 rounded-xl bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 disabled:opacity-40">
               {saving ? 'Saving…' : 'Save Override'}

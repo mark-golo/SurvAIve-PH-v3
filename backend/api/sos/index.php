@@ -105,6 +105,37 @@ if ($method === 'POST') {
     if (!$isVerified) $score -= 10;
     $score = min(99, $score);
 
+    // AI classification — mirrors frontend emergencyIntelligence.js / lexicon.js
+    $desc    = strtolower(($body['description'] ?? '') . ' ' . ($body['notes'] ?? ''));
+    $aiLexicon = [
+      'mdrrmo'   => ['flood','baha','landslide','guho','earthquake','lindol','typhoon','bagyo',
+                     'storm','stranded','evacuat','trapped','nakulong','rescue','sakuna','disaster',
+                     'collapsed','bumagsak','nasiraan'],
+      'hospital' => ['injured','nasugatan','medical','hospital','heart','stroke','unconscious',
+                     'himatay','breathing','hininga','bleed','dugo','sick','maysakit','baby','anak',
+                     'seizure','labor','buntis','nanghihina','hindi makagalaw'],
+      'bfp'      => ['fire','sunog','burning','nasusunog','smoke','usok','flame','apoy','nagliliyab'],
+      'pnp'      => ['crime','krimen','robbery','holdap','assault','threat','banta','violence',
+                     'missing person','nawala','kidnap','suspicio','nagtatago','armado','droga'],
+      'pcg'      => ['sea','dagat','boat','bangka','capsiz','drown','nalunod','coast','shore',
+                     'maritime','vessel','ship','tubig','nalubog','nasiraan sa dagat'],
+    ];
+    $aiScores = ['mdrrmo' => 0, 'hospital' => 0, 'bfp' => 0, 'pnp' => 0, 'pcg' => 0];
+    foreach ($aiLexicon as $type => $terms) {
+      foreach ($terms as $term) {
+        if ($term !== '' && str_contains($desc, $term)) $aiScores[$type]++;
+      }
+    }
+    arsort($aiScores);
+    $aiPrimary    = array_key_first($aiScores);
+    $aiTopScore   = $aiScores[$aiPrimary];
+    $aiTotal      = array_sum($aiScores);
+    $aiConfidence = $aiTotal > 0 ? (int)round(($aiTopScore / $aiTotal) * 100) : 0;
+    if ($aiTopScore === 0 && !empty($serviceTypes)) {
+      $aiPrimary    = $serviceTypes[0];
+      $aiConfidence = 50;
+    }
+
     $reporterName = isset($body['name']) ? substr(trim($body['name']), 0, 200) : null;
 
     $rawTypes     = $body['service_type'] ?? [];
@@ -118,8 +149,9 @@ if ($method === 'POST') {
           (user_id, name, barangay, municipality, province, lat, lng, status, people_count,
            victim_age_group, special_conditions, notes,
            is_verified, trust_score, ai_priority_score, rescue_status,
-           service_type, mesh_packet_id, timestamp)
-        VALUES (?,?,?,?,?,?,?,?,?, ?,?,?, ?,?,?,'pending', ?, ?, NOW())
+           service_type, mesh_packet_id, timestamp,
+           ai_classification, ai_confidence, ai_rules_version)
+        VALUES (?,?,?,?,?,?,?,?,?, ?,?,?, ?,?,?,'pending', ?, ?, NOW(), ?,?,?)
     ");
     $stmt->execute([
         $userId,
@@ -139,6 +171,9 @@ if ($method === 'POST') {
         $score,
         $serviceTypeJson,
         $meshPacketId,
+        $aiPrimary,
+        $aiConfidence,
+        '1.0',
     ]);
 
     if ($userId) {
