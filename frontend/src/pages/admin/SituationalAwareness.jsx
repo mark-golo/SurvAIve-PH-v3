@@ -597,7 +597,7 @@ export function SituationalAwareness() {
                 ) : anomalies.map((anomaly) => (
                   <div key={anomaly.id} className="glass rounded-xl p-3.5 border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.05)]">
                     <div className="flex items-start gap-2.5">
-                      <AlertTriangle size={14} className="text-red-400 shrink-0 mt-0.5" />
+              
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold mb-1 text-red-400">Anomaly Detected</p>
                         <p className="text-xs text-slate-300 leading-relaxed">{anomaly.text}</p>

@@ -188,7 +188,7 @@ export function generateInsights(zones) {
     .slice(0, 3)
   if (evacTop.length) {
     insights.push({
-      type: 'evacuation', icon: '🏃', color: '#8b5cf6',
+      type: 'evacuation', icon: '', color: '#8b5cf6',
       title: 'Evacuation Priorities',
       body: evacTop.map(z => `${z.barangay} (${z.unrescued} unrescued)`).join(' › ') +
         '. These zones have the most people awaiting rescue.',
