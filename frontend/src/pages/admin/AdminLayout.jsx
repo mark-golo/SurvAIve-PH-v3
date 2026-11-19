@@ -439,10 +439,6 @@ export function AdminLayout() {
           </button>
           <h1 className="font-bold text-white text-sm">{title}</h1>
           <div className="ml-auto flex items-center gap-3">
-            <ThemeToggle
-              theme={adminTheme}
-              onChange={v => { saveAdminTheme(v); setAdminTheme(v) }}
-            />
             {/* Alert count badge in header */}
             {alertQueue.length > 0 && (
               <button
@@ -455,6 +451,10 @@ export function AdminLayout() {
             )}
             <div className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse" />
             <span className="text-xs text-slate-500 hidden sm:block">Live</span>
+            <ThemeToggle
+              theme={resolveTheme(adminTheme)}
+              onChange={v => { saveAdminTheme(v); setAdminTheme(v) }}
+            />
           </div>
         </header>
         <main className="flex-1 overflow-auto"><Outlet /></main>

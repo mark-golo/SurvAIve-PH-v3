@@ -246,15 +246,15 @@ export function HomeScreen() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <ThemeToggle
-              theme={storedTheme}
-              onChange={v => { saveVictimTheme(v); setStoredTheme(v) }}
-            />
             {isGuest ? (
               <StatusBadge status="GUEST" />
             ) : (
               <StatusBadge status="VERIFIED" />
             )}
+            <ThemeToggle
+              theme={resolveTheme(storedTheme)}
+              onChange={v => { saveVictimTheme(v); setStoredTheme(v) }}
+            />
           </div>
         </div>
       </header>

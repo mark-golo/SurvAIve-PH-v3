@@ -290,10 +290,6 @@ export function AgencyLayout() {
           </button>
           <h1 className="font-bold text-white text-sm">{title}</h1>
           <div className="ml-auto flex items-center gap-3">
-            <ThemeToggle
-              theme={agencyTheme}
-              onChange={v => { saveAgencyTheme(v); setAgencyTheme(v) }}
-            />
             {alertQueue.length > 0 && (
               <button
                 onClick={() => alertQueue[0] && acknowledgeAlert(alertQueue[0].id)}
@@ -305,6 +301,10 @@ export function AgencyLayout() {
             )}
             <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: accentColor }} />
             <span className="text-xs text-slate-500 hidden sm:block">Live</span>
+            <ThemeToggle
+              theme={resolveTheme(agencyTheme)}
+              onChange={v => { saveAgencyTheme(v); setAgencyTheme(v) }}
+            />
           </div>
         </header>
         <main className="flex-1 overflow-auto"><Outlet /></main>

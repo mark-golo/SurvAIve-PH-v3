@@ -411,10 +411,6 @@ export function ResponderHome() {
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <ThemeToggle
-              theme={storedTheme}
-              onChange={v => { saveResponderTheme(v); setStoredTheme(v) }}
-            />
             {!networkOnline && (
               <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[rgba(239,68,68,0.15)] border border-[rgba(239,68,68,0.3)]">
                 <WifiOff size={10} className="text-[#ef4444]" />
@@ -422,6 +418,10 @@ export function ResponderHome() {
               </div>
             )}
             <StatusBadge status={onDuty ? 'ACTIVE' : 'STANDBY'} pulse={onDuty} />
+            <ThemeToggle
+              theme={resolveTheme(storedTheme)}
+              onChange={v => { saveResponderTheme(v); setStoredTheme(v) }}
+            />
           </div>
         </div>
         <p className="text-[10px] text-slate-600 mt-0.5">{today}</p>
