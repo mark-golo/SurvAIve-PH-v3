@@ -93,7 +93,7 @@ export function ResponseFeedback() {
       if (fromDate) q = q.gte('created_at', fromDate)
       if (toDate)   q = q.lte('created_at', toDate + 'T23:59:59')
       if (minRating) {
-        if (minRating === '1') q = q.eq('rating', 1)
+        if (Number(minRating) === 1) q = q.eq('rating', 1)
         else q = q.gte('rating', Number(minRating))
       }
       if (tab !== 'all') q = q.eq('target_type', tab === 'responder' ? 'responder' : 'agency')
