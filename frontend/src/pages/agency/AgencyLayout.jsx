@@ -6,7 +6,8 @@ import { useAuthStore } from '../../store/auth'
 import { useAlertStore } from '../../store/alertStore'
 import { supabase } from '../../lib/supabase'
 import api from '../../lib/api'
-import { getAdminTheme, saveAdminTheme } from '../../lib/victimTheme'
+import { getAgencyTheme, saveAgencyTheme, resolveTheme } from '../../lib/victimTheme'
+import { ThemeToggle } from '../../components/ui/ThemeToggle'
 
 const AGENCY_LABELS = {
   mdrrmo:   'MDRRMO',
@@ -74,7 +75,7 @@ export function AgencyLayout() {
   const accentColor = AGENCY_COLORS[agencyType] ?? '#00d4ff'
 
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [adminTheme, setAdminTheme] = useState(() => getAdminTheme())
+  const [agencyTheme, setAgencyTheme] = useState(() => getAgencyTheme())
 
   const { soundEnabled, visualEnabled, notificationEnabled, volume } = useAlertStore()
 
@@ -132,8 +133,15 @@ export function AgencyLayout() {
   }, [triggerAlert, muteCurrentAlert])
 
   useEffect(() => {
-    window.__setAdminTheme = (t) => { saveAdminTheme(t); setAdminTheme(t) }
-    return () => { delete window.__setAdminTheme }
+    window.__setAgencyTheme = (t) => { saveAgencyTheme(t); setAgencyTheme(t) }
+    return () => { delete window.__setAgencyTheme }
+  }, [])
+
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = () => setAgencyTheme(prev => prev)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
   }, [])
 
   // Supabase realtime — filter by municipality AND agency service_type
@@ -196,7 +204,7 @@ export function AgencyLayout() {
   }, [muni, triggerAlert])
 
   return (
-    <div className={`h-screen overflow-hidden bg-mesh flex relative${adminTheme === 'light' ? ' light-theme' : ''}`}>
+    <div className={`h-screen overflow-hidden bg-mesh flex relative${resolveTheme(agencyTheme) === 'light' ? ' light-theme' : ''}`}>
 
       {/* ── Sidebar ── */}
       <aside className={`
@@ -282,6 +290,10 @@ export function AgencyLayout() {
           </button>
           <h1 className="font-bold text-white text-sm">{title}</h1>
           <div className="ml-auto flex items-center gap-3">
+            <ThemeToggle
+              theme={agencyTheme}
+              onChange={v => { saveAgencyTheme(v); setAgencyTheme(v) }}
+            />
             {alertQueue.length > 0 && (
               <button
                 onClick={() => alertQueue[0] && acknowledgeAlert(alertQueue[0].id)}

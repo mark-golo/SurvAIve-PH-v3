@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { getResponderTheme } from '../../lib/victimTheme'
+import { getResponderTheme, saveResponderTheme, resolveTheme } from '../../lib/victimTheme'
+import { ThemeToggle } from '../../components/ui/ThemeToggle'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -86,7 +87,7 @@ function MyRatingsSummary({ responderId }) {
 export function ResponderHome() {
   const navigate  = useNavigate()
   const { scope } = useAuthStore()
-  const [isLight] = useState(() => getResponderTheme() === 'light')
+  const [storedTheme, setStoredTheme] = useState(() => getResponderTheme())
   const muni = scope?.municipality
 
   // Core state
@@ -385,12 +386,19 @@ export function ResponderHome() {
     }
   }, [showQRScanner])
 
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = () => setStoredTheme(prev => prev)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
   // ── Helpers ───────────────────────────────────────────────────────────────
   const name = profile?.name || 'Responder'
   const today = new Date().toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })
 
   return (
-    <div className={`h-screen bg-mesh flex flex-col overflow-hidden${isLight ? ' light-theme' : ''}`}>
+    <div className={`h-screen bg-mesh flex flex-col overflow-hidden${resolveTheme(storedTheme) === 'light' ? ' light-theme' : ''}`}>
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <header className="glass border-b border-[rgba(255,255,255,0.08)] px-4 py-3 shrink-0">
@@ -403,6 +411,10 @@ export function ResponderHome() {
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <ThemeToggle
+              theme={storedTheme}
+              onChange={v => { saveResponderTheme(v); setStoredTheme(v) }}
+            />
             {!networkOnline && (
               <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[rgba(239,68,68,0.15)] border border-[rgba(239,68,68,0.3)]">
                 <WifiOff size={10} className="text-[#ef4444]" />

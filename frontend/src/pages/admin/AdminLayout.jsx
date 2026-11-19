@@ -6,7 +6,8 @@ import { useAuthStore } from '../../store/auth'
 import { useAlertStore } from '../../store/alertStore'
 import { supabase } from '../../lib/supabase'
 import api from '../../lib/api'
-import { getAdminTheme, saveAdminTheme } from '../../lib/victimTheme'
+import { getAdminTheme, saveAdminTheme, resolveTheme } from '../../lib/victimTheme'
+import { ThemeToggle } from '../../components/ui/ThemeToggle'
 
 const NAV_GROUPS = [
   {
@@ -225,6 +226,14 @@ export function AdminLayout() {
     return () => { delete window.__setAdminTheme }
   }, [])
 
+  // ── Re-render when OS color scheme changes (for 'system' theme) ───────────
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = () => setAdminTheme(prev => prev)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
   // ── Supabase realtime — immediate notification for verified SOS ───────────
   useEffect(() => {
     const ch = supabase.channel(`admin-sos-alert-${Date.now()}`)
@@ -308,7 +317,7 @@ export function AdminLayout() {
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className={`h-screen overflow-hidden bg-mesh flex relative${adminTheme === 'light' ? ' light-theme' : ''}`}>
+    <div className={`h-screen overflow-hidden bg-mesh flex relative${resolveTheme(adminTheme) === 'light' ? ' light-theme' : ''}`}>
 
       {/* ── Sidebar ──────────────────────────────────────────────────────── */}
       <aside className={`
@@ -430,6 +439,10 @@ export function AdminLayout() {
           </button>
           <h1 className="font-bold text-white text-sm">{title}</h1>
           <div className="ml-auto flex items-center gap-3">
+            <ThemeToggle
+              theme={adminTheme}
+              onChange={v => { saveAdminTheme(v); setAdminTheme(v) }}
+            />
             {/* Alert count badge in header */}
             {alertQueue.length > 0 && (
               <button

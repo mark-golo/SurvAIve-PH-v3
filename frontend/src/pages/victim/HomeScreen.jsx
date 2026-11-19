@@ -6,7 +6,8 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { MobileNavBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { useState, useEffect, useRef } from 'react'
-import { getVictimTheme } from '../../lib/victimTheme'
+import { getVictimTheme, saveVictimTheme, resolveTheme } from '../../lib/victimTheme'
+import { ThemeToggle } from '../../components/ui/ThemeToggle'
 import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
 import { WeatherCard } from '../../components/ui/WeatherCard'
 import { supabase } from '../../lib/supabase'
@@ -188,7 +189,7 @@ const NAV = [
 export function HomeScreen() {
   const navigate = useNavigate()
   const { user, isGuest } = useAuthStore()
-  const [isLight] = useState(() => getVictimTheme() === 'light')
+  const [storedTheme, setStoredTheme] = useState(() => getVictimTheme())
   const [isOnline, setIsOnline] = useState(getNetworkOnline())
   const [gpsState, setGpsState] = useState('unknown') // 'active' | 'denied' | 'unknown'
   const [battery, setBattery]   = useState(null)      // null = API not available
@@ -218,10 +219,17 @@ export function HomeScreen() {
     return () => { handlePromise.then(h => h.remove()).catch(() => {}) }
   }, [])
 
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = () => setStoredTheme(prev => prev)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
   const handleSOS = () => navigate('/sos/new')
 
   return (
-    <div className={`h-screen bg-mesh flex flex-col overflow-hidden${isLight ? ' light-theme' : ''}`}>
+    <div className={`h-screen bg-mesh flex flex-col overflow-hidden${resolveTheme(storedTheme) === 'light' ? ' light-theme' : ''}`}>
       {/* Top bar */}
       <header
         className="border-b border-[rgba(0,0,0,0.12)] px-4 pb-3"
@@ -238,6 +246,10 @@ export function HomeScreen() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <ThemeToggle
+              theme={storedTheme}
+              onChange={v => { saveVictimTheme(v); setStoredTheme(v) }}
+            />
             {isGuest ? (
               <StatusBadge status="GUEST" />
             ) : (
