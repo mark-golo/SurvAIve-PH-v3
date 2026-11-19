@@ -93,8 +93,7 @@ export function ResponseFeedback() {
       if (fromDate) q = q.gte('created_at', fromDate)
       if (toDate)   q = q.lte('created_at', toDate + 'T23:59:59')
       if (minRating) {
-        if (Number(minRating) === 1) q = q.eq('rating', 1)
-        else q = q.gte('rating', Number(minRating))
+        q = q.eq('rating', Number(minRating))
       }
       if (tab !== 'all') q = q.eq('target_type', tab === 'responder' ? 'responder' : 'agency')
 
@@ -225,7 +224,7 @@ export function ResponseFeedback() {
             className="bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg px-2 py-2 text-xs text-slate-300">
             <option value="">All ratings</option>
             {[5,4,3,2,1].map(n => (
-              <option key={n} value={n}>{n === 1 ? '1★' : `${n}★ & above`}</option>
+              <option key={n} value={n}>{n}★</option>
             ))}
           </select>
           <button onClick={load}
