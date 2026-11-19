@@ -202,6 +202,7 @@ export function SituationalAwareness() {
       return new Set(stored ? JSON.parse(stored) : [])
     } catch { return new Set() }
   })
+  const [closedSections, setClosedSections] = useState(new Set())
   const [lastFetchedAt, setLastFetchedAt] = useState(null)
 
   const muni = scope?.municipality
@@ -216,6 +217,14 @@ export function SituationalAwareness() {
       anomalyId: anomaly.id,
       text: anomaly.text,
       evidence: anomaly.evidence,
+    })
+  }
+
+  function toggleSection(key) {
+    setClosedSections(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
     })
   }
 
@@ -594,31 +603,269 @@ export function SituationalAwareness() {
                     <span className="text-green-500 text-[10px]">●</span>
                     <p className="text-[11px] text-[rgba(34,197,94,0.8)]">No anomalies detected in current reporting window.</p>
                   </div>
-                ) : anomalies.map((anomaly) => (
-                  <div key={anomaly.id} className="glass rounded-xl p-3.5 border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.05)]">
-                    <div className="flex items-start gap-2.5">
-              
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold mb-1 text-red-400">Anomaly Detected</p>
-                        <p className="text-xs text-slate-300 leading-relaxed">{anomaly.text}</p>
-                        <p className="text-[10px] text-slate-500 mt-1">Evidence: {anomaly.evidence}</p>
+                ) : anomalies.map((anomaly) => {
+                  const isAnomalyOpen = !closedSections.has(anomaly.id)
+                  return (
+                    <div key={anomaly.id} className="glass rounded-xl border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.05)] overflow-hidden">
+                      {/* Header */}
+                      <button
+                        type="button"
+                        onClick={() => toggleSection(anomaly.id)}
+                        className="w-full text-left px-3.5 pt-3.5 pb-2 flex items-start gap-2.5"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="text-xs font-bold text-red-400">Anomaly Detected</p>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${anomaly.severity === 'high' ? 'bg-[rgba(239,68,68,0.15)] text-red-400' : 'bg-[rgba(245,158,11,0.15)] text-amber-400'}`}>
+                              {anomaly.severity.toUpperCase()}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-300 leading-relaxed">{anomaly.text}</p>
+                        </div>
+                        <ChevronDown
+                          size={14}
+                          className="text-slate-500 shrink-0 mt-0.5 transition-transform"
+                          style={{ transform: isAnomalyOpen ? 'rotate(180deg)' : 'none' }}
+                        />
+                      </button>
+
+                      {/* Acknowledge */}
+                      <div className="px-3.5 pb-2.5">
                         {!acknowledgedAnomalies.has(anomaly.id) ? (
                           <button
                             onClick={() => handleAcknowledgeAnomaly(anomaly)}
-                            className="mt-2 text-[10px] px-2 py-1 rounded-lg bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.3)] text-amber-400 hover:bg-[rgba(245,158,11,0.2)] transition-colors">
+                            className="text-[10px] px-2 py-1 rounded-lg bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.3)] text-amber-400 hover:bg-[rgba(245,158,11,0.2)] transition-colors">
                             Acknowledge
                           </button>
                         ) : (
-                          <span className="block mt-2 text-[10px] text-slate-500">✓ Acknowledged</span>
+                          <span className="text-[10px] text-slate-500">✓ Acknowledged</span>
                         )}
                       </div>
-                    </div>
-                  </div>
-                ))}
 
-                {insights.map((insight, i) => (
-                  <InsightCard key={insight.type} insight={insight} delay={i * 0.07} />
-                ))}
+                      {/* Expandable viz */}
+                      <AnimatePresence>
+                        {isAnomalyOpen && (
+                          <motion.div
+                            key="anomaly-viz"
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="px-3.5 pb-3.5 border-t border-[rgba(239,68,68,0.15)] space-y-2.5">
+                              <p className="text-[9px] text-slate-500 uppercase tracking-wider mt-2.5 font-semibold">Evidence</p>
+                              <p className="text-[10px] text-slate-400 leading-relaxed">{anomaly.evidence}</p>
+
+                              {/* Surge viz */}
+                              {'lastHour' in anomaly && (
+                                <div className="space-y-2">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="glass rounded-lg p-2.5 text-center">
+                                      <p className="text-lg font-black text-red-400">{anomaly.lastHour}</p>
+                                      <p className="text-[9px] text-slate-500">Last Hour</p>
+                                    </div>
+                                    <div className="glass rounded-lg p-2.5 text-center">
+                                      <p className="text-lg font-black text-slate-400">{anomaly.trailingAvg.toFixed(1)}</p>
+                                      <p className="text-[9px] text-slate-500">Avg / Hr (5h)</p>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="flex justify-between text-[9px] text-slate-500 mb-1">
+                                      <span>Surge ratio</span>
+                                      <span>{anomaly.trailingAvg > 0 ? `${(anomaly.lastHour / anomaly.trailingAvg).toFixed(1)}× baseline` : 'No baseline'}</span>
+                                    </div>
+                                    <div className="h-2 rounded-full bg-[rgba(255,255,255,0.08)]">
+                                      <div
+                                        className="h-full rounded-full bg-gradient-to-r from-amber-500 to-red-500 transition-all duration-700"
+                                        style={{ width: `${Math.min(anomaly.trailingAvg > 0 ? Math.round((anomaly.lastHour / (anomaly.lastHour + anomaly.trailingAvg * 2)) * 100) : 100, 100)}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Stale viz */}
+                              {'unresolvedOld' in anomaly && (
+                                <div className="space-y-2">
+                                  <div className="grid grid-cols-3 gap-2">
+                                    <div className="glass rounded-lg p-2.5 text-center">
+                                      <p className="text-lg font-black text-amber-400">{anomaly.unresolvedOld}</p>
+                                      <p className="text-[9px] text-slate-500">Stale &gt;2h</p>
+                                    </div>
+                                    <div className="glass rounded-lg p-2.5 text-center">
+                                      <p className="text-lg font-black text-slate-400">{anomaly.totalActive}</p>
+                                      <p className="text-[9px] text-slate-500">Total Active</p>
+                                    </div>
+                                    <div className="glass rounded-lg p-2.5 text-center">
+                                      <p className="text-lg font-black text-amber-400">
+                                        {anomaly.totalActive > 0 ? Math.round(anomaly.unresolvedOld / anomaly.totalActive * 100) : 0}%
+                                      </p>
+                                      <p className="text-[9px] text-slate-500">Stale Rate</p>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="flex justify-between text-[9px] text-slate-500 mb-1">
+                                      <span>Stale proportion</span>
+                                      <span>{anomaly.unresolvedOld} of {anomaly.totalActive} reports</span>
+                                    </div>
+                                    <div className="h-2 rounded-full bg-[rgba(255,255,255,0.08)]">
+                                      <div
+                                        className="h-full rounded-full bg-gradient-to-r from-amber-600 to-amber-400 transition-all duration-700"
+                                        style={{ width: `${anomaly.totalActive > 0 ? Math.round(anomaly.unresolvedOld / anomaly.totalActive * 100) : 0}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )
+                })}
+
+                {insights.map((insight, i) => {
+                  if (insight.type === 'priority') {
+                    const isOpen = !closedSections.has('priority')
+                    const zone = insight.zone
+                    return (
+                      <div key="priority" className="glass rounded-xl border overflow-hidden" style={{ borderColor: `${insight.color}35` }}>
+                        <button
+                          type="button"
+                          onClick={() => toggleSection('priority')}
+                          className="w-full text-left px-3.5 py-3 flex items-start gap-2.5"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold mb-1" style={{ color: insight.color }}>{insight.title}</p>
+                            <p className="text-xs text-slate-300 leading-relaxed">{insight.body}</p>
+                          </div>
+                          <ChevronDown
+                            size={14}
+                            className="text-slate-500 shrink-0 mt-0.5 transition-transform"
+                            style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }}
+                          />
+                        </button>
+                        <AnimatePresence>
+                          {isOpen && (
+                            <motion.div
+                              key="priority-viz"
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="px-3.5 pb-3.5 border-t space-y-3" style={{ borderColor: `${insight.color}20` }}>
+                                <div className="grid grid-cols-4 gap-2 pt-3">
+                                  {[
+                                    { label: 'Total SOS', value: zone.total,        color: '#00d4ff' },
+                                    { label: 'Critical',  value: zone.criticalCount, color: '#ef4444' },
+                                    { label: 'High',      value: zone.highCount,     color: '#f59e0b' },
+                                    { label: 'Avg Score', value: zone.avgScore,      color: '#8b5cf6' },
+                                  ].map(s => (
+                                    <div key={s.label} className="glass rounded-lg p-2 text-center">
+                                      <p className="text-base font-black" style={{ color: s.color }}>{s.value}</p>
+                                      <p className="text-[9px] text-slate-500 leading-tight">{s.label}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                                {(zone.rescued + zone.unrescued) > 0 && (
+                                  <div>
+                                    <div className="flex justify-between text-[9px] mb-1.5">
+                                      <span className="text-green-400">{zone.rescued} rescued</span>
+                                      <span className="text-red-400">{zone.unrescued} unrescued</span>
+                                    </div>
+                                    <div className="h-2.5 rounded-full bg-[rgba(255,255,255,0.08)] overflow-hidden flex">
+                                      <div
+                                        className="h-full bg-green-500 transition-all duration-700"
+                                        style={{ width: `${Math.round(zone.rescued / (zone.rescued + zone.unrescued) * 100)}%` }}
+                                      />
+                                      <div className="h-full bg-red-500 flex-1" />
+                                    </div>
+                                    <p className="text-[9px] text-slate-500 mt-1 text-right">
+                                      {Math.round(zone.rescued / (zone.rescued + zone.unrescued) * 100)}% resolved
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    )
+                  }
+
+                  if (insight.type === 'evacuation') {
+                    const isOpen = !closedSections.has('evacuation')
+                    const evacZones = insight.evacZones ?? []
+                    const maxScore = Math.max(...evacZones.map(z => z.evacScore), 1)
+                    return (
+                      <div key="evacuation" className="glass rounded-xl border overflow-hidden" style={{ borderColor: `${insight.color}35` }}>
+                        <button
+                          type="button"
+                          onClick={() => toggleSection('evacuation')}
+                          className="w-full text-left px-3.5 py-3 flex items-start gap-2.5"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold mb-1" style={{ color: insight.color }}>{insight.title}</p>
+                            <p className="text-xs text-slate-300 leading-relaxed">{insight.body}</p>
+                          </div>
+                          <ChevronDown
+                            size={14}
+                            className="text-slate-500 shrink-0 mt-0.5 transition-transform"
+                            style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }}
+                          />
+                        </button>
+                        <AnimatePresence>
+                          {isOpen && (
+                            <motion.div
+                              key="evac-viz"
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="px-3.5 pb-3.5 border-t pt-3 space-y-3" style={{ borderColor: `${insight.color}20` }}>
+                                {evacZones.map((zone, idx) => (
+                                  <div key={zone.barangay} className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] font-black w-4 text-right shrink-0 text-violet-400">{idx + 1}</span>
+                                      <span className="text-xs font-semibold text-white flex-1 truncate">{zone.barangay}</span>
+                                      <span className="text-[10px] text-red-400 shrink-0">{zone.unrescued} unrescued</span>
+                                      {zone.criticalCount > 0 && (
+                                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(239,68,68,0.15)] text-red-400 shrink-0">
+                                          {zone.criticalCount} CRIT
+                                        </span>
+                                      )}
+                                      {zone.isSurging && (
+                                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(249,115,22,0.15)] text-orange-400 shrink-0">⚡</span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-4 shrink-0" />
+                                      <div className="flex-1 h-1.5 rounded-full bg-[rgba(255,255,255,0.08)]">
+                                        <div
+                                          className="h-full rounded-full bg-gradient-to-r from-violet-600 to-violet-400 transition-all duration-700"
+                                          style={{ width: `${Math.round(zone.evacScore / maxScore * 100)}%` }}
+                                        />
+                                      </div>
+                                      <span className="text-[9px] text-slate-500 w-16 text-right shrink-0">score {zone.evacScore}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    )
+                  }
+
+                  return <InsightCard key={insight.type} insight={insight} delay={i * 0.07} />
+                })}
 
                 {/* Rescue resource allocation table */}
                 <GlassCard>

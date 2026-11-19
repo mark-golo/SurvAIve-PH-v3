@@ -121,6 +121,8 @@ export function detectAnomalies(reports = []) {
       text: `Unusual surge: ${lastHour} SOS report${lastHour !== 1 ? 's' : ''} in the last hour vs. ~${trailingAvg.toFixed(1)}/hr baseline.`,
       evidence: surgeEvidence,
       severity: 'high',
+      lastHour,
+      trailingAvg,
     })
   }
   const unresolvedOld = active.filter(r => r.created_at &&
@@ -133,6 +135,8 @@ export function detectAnomalies(reports = []) {
       text: `${unresolvedOld} active SOS report${unresolvedOld !== 1 ? 's' : ''} older than 2 hours — review for escalation.`,
       evidence: staleEvidence,
       severity: unresolvedOld >= 3 ? 'high' : 'medium',
+      unresolvedOld,
+      totalActive: active.length,
     })
   }
   return anomalies
@@ -169,6 +173,7 @@ export function generateInsights(zones) {
     type: 'priority', icon: '', color: '#ef4444',
     title: 'Immediate Priority Zone',
     body: `${top.barangay} requires immediate action — ${top.total} SOS report${top.total > 1 ? 's' : ''}, ${top.criticalCount} CRITICAL, average AI score ${top.avgScore}.`,
+    zone: top,
   })
 
   // 2 — Surge zones
@@ -178,6 +183,7 @@ export function generateInsights(zones) {
       type: 'surge', icon: '⚡', color: '#f97316',
       title: `Surge Detected — ${surging.length} Zone${surging.length > 1 ? 's' : ''}`,
       body: `${surging.map(z => z.barangay).join(', ')} ${surging.length === 1 ? 'is' : 'are'} showing rapidly increasing incident rates. Pre-position rescue resources immediately.`,
+      surgingZones: surging,
     })
   }
 
@@ -192,6 +198,7 @@ export function generateInsights(zones) {
       title: 'Evacuation Priorities',
       body: evacTop.map(z => `${z.barangay} (${z.unrescued} unrescued)`).join(' › ') +
         '. These zones have the most people awaiting rescue.',
+      evacZones: evacTop,
     })
   }
 
