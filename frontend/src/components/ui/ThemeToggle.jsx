@@ -12,7 +12,7 @@ export function ThemeToggle({ theme, onChange }) {
   return (
     <div
       className="flex items-center rounded-full p-1 gap-0.5"
-      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}
+      style={{ background: '#f1f5f9', border: '1px solid rgba(0,0,0,0.12)' }}
       role="group"
       aria-label="Theme"
     >
@@ -29,22 +29,18 @@ export function ThemeToggle({ theme, onChange }) {
               aria-pressed={active}
               className="w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200"
               style={active
-                ? { background: 'rgba(255,255,255,0.18)', color: '#ffffff' }
-                : { color: 'rgba(148,163,184,0.5)' }
+                ? { background: 'rgba(0,212,255,0.15)', color: '#00d4ff' }
+                : { color: '#94a3b8' }
               }
             >
               <Icon size={13} strokeWidth={2} />
             </button>
             {hovered === value && (
               <div
-                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded-md text-[10px] font-medium whitespace-nowrap pointer-events-none z-50"
-                style={{ background: 'rgba(15,23,42,0.92)', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.1)' }}
+                className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 rounded-md text-[10px] font-medium whitespace-nowrap pointer-events-none z-50"
+                style={{ background: '#ffffff', color: '#000000', border: '1px solid #000000' }}
               >
                 {label}
-                <div
-                  className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent"
-                  style={{ borderTopColor: 'rgba(15,23,42,0.92)' }}
-                />
               </div>
             )}
           </div>
