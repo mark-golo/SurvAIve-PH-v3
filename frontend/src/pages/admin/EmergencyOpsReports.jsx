@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie, Legend,
 } from 'recharts'
-import { AdminLayout } from './AdminLayout'
+
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 import api from '../../lib/api'
@@ -764,8 +764,6 @@ export function EmergencyOpsReports() {
   const [fromDate, setFromDate] = useState(todayStr())
   const [toDate, setToDate]     = useState(todayStr())
 
-  const Layout = AdminLayout
-
   // Superadmin gets an extra Province Snapshots tab
   const visibleTabs = role === 'superadmin'
     ? [...TABS, { id: 'province', label: 'Province Snapshots' }]
@@ -775,22 +773,19 @@ export function EmergencyOpsReports() {
   // rather than letting all 6 tabs crash with a network error.
   if (!getNetworkOnline()) {
     return (
-      <Layout title="Emergency Operations Reports">
-        <div className="flex flex-col items-center justify-center h-64 gap-4 text-center px-6">
-          <WifiOff size={32} className="text-amber-400" />
-          <p className="text-white font-semibold text-lg">Reports unavailable offline</p>
-          <p className="text-slate-400 text-sm max-w-xs leading-relaxed">
-            Emergency reports require a live connection to generate.
-            Reconnect to the internet to access all report tabs.
-          </p>
-        </div>
-      </Layout>
+      <div className="flex flex-col items-center justify-center h-64 gap-4 text-center px-6">
+        <WifiOff size={32} className="text-amber-400" />
+        <p className="text-white font-semibold text-lg">Reports unavailable offline</p>
+        <p className="text-slate-400 text-sm max-w-xs leading-relaxed">
+          Emergency reports require a live connection to generate.
+          Reconnect to the internet to access all report tabs.
+        </p>
+      </div>
     )
   }
 
   return (
-    <Layout title="Emergency Operations Reports">
-      <div className="p-4 space-y-4">
+    <div className="p-4 space-y-4">
         {/* Header */}
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.2)] flex items-center justify-center">
@@ -859,7 +854,6 @@ export function EmergencyOpsReports() {
           {tab === 'ai'         && <AIReport               muni={muni} prov={prov} fromDate={fromDate} toDate={toDate} />}
           {tab === 'province'   && <ProvinceSnapshotsReport prov={prov} />}
         </div>
-      </div>
-    </Layout>
+    </div>
   )
 }

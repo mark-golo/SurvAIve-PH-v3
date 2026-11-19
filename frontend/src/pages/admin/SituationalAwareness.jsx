@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { assessDelay, tierColor, tierLabel, formatMsShort } from '../../lib/ai/erdiEngine'
 import { fetchWeather } from '../../lib/weatherService'
-import { AdminLayout } from './AdminLayout'
+
 import { NeonButton } from '../../components/ui/NeonButton'
 import { GlassCard } from '../../components/ui/GlassCard'
 import api, { logActivity } from '../../lib/api'
@@ -362,15 +362,13 @@ export function SituationalAwareness() {
   const totalUnrescued = zones.reduce((s, z) => s + z.unrescued, 0)
 
   if (loading) return (
-    <AdminLayout title="AI Situational Awareness">
-      <div className="flex items-center justify-center h-64 text-slate-400 text-sm">
-        <Brain size={16} className="mr-2 animate-pulse" /> Analysing SOS data…
-      </div>
-    </AdminLayout>
+    <div className="flex items-center justify-center h-64 text-slate-400 text-sm">
+      <Brain size={16} className="mr-2 animate-pulse" /> Analysing SOS data…
+    </div>
   )
 
   return (
-    <AdminLayout title="AI Situational Awareness">
+    <>
 
       {/* Offline banner */}
       {offlineMode && (
@@ -845,6 +843,6 @@ export function SituationalAwareness() {
         )}
 
       </div>
-    </AdminLayout>
+    </>
   )
 }
