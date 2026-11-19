@@ -157,6 +157,12 @@ export function AdminLayout() {
     })
   }, [visualEnabled, soundEnabled, volume])
 
+  // Keep a stable ref so the subscription effect can always call the latest
+  // triggerAlert without listing it as a dep (prevents channel re-subscription
+  // every time alert preferences change).
+  const triggerAlertRef = useRef(triggerAlert)
+  useEffect(() => { triggerAlertRef.current = triggerAlert }, [triggerAlert])
+
   // ── Acknowledge one alert ─────────────────────────────────────────────────
   const acknowledgeAlert = useCallback((id) => {
     // Write acknowledged status to DB so victim's SOSCenter reflects it
@@ -232,7 +238,7 @@ export function AdminLayout() {
           // Dedup: if polling already alerted this ID, skip
           if (seenIdsRef.current.has(r.id)) return
           seenIdsRef.current.add(r.id)
-          triggerAlert({
+          triggerAlertRef.current({
             id:           r.id,
             name:         r.name ?? 'Unknown',
             barangay:     r.barangay ?? '—',
@@ -244,7 +250,7 @@ export function AdminLayout() {
       )
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [muni, triggerAlert])
+  }, [muni])
 
   // ── Polling fallback — catches guest SOS that bypass Supabase realtime ────
   // Seeds seenIdsRef on mount (prevents historic records from alerting),
