@@ -227,7 +227,7 @@ export function AdminLayout() {
 
   // ── Supabase realtime — immediate notification for verified SOS ───────────
   useEffect(() => {
-    const ch = supabase.channel('admin-sos-alert')
+    const ch = supabase.channel(`admin-sos-alert-${Date.now()}`)
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'sos_reports' },
         payload => {

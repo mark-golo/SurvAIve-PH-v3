@@ -257,7 +257,7 @@ export function SituationalAwareness() {
 
   useEffect(() => {
     const channel = supabase
-      .channel('sa-sos-rescue')
+      .channel(`sa-sos-rescue-${Date.now()}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sos_reports' }, () => load())
       .on('postgres_changes', { event: 'UPDATE',  schema: 'public', table: 'sos_reports' }, () => load())
       .subscribe()
