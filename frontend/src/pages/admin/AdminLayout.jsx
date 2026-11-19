@@ -43,8 +43,8 @@ const NAV_GROUPS = [
     label: 'INTELLIGENCE',
     items: [
 
-      { icon: Activity,        label: 'Situational Awareness',    path: '/admin/situational-awareness'   },
-      { icon: Scale,           label: 'AI Policy Intelligence',   path: '/admin/policy-intelligence'     },
+      { icon: Activity,        label: 'Situational Analytics',    path: '/admin/situational-awareness'   },
+      { icon: Scale,           label: 'Policy Intelligence',      path: '/admin/policy-intelligence'     },
     ],
   },
   {
@@ -62,7 +62,7 @@ const PAGE_TITLES = {
   '/admin/victims':            'Affected Person Status',
   '/admin/constituents':       'Constituent Registry',
 
-  '/admin/policy-intelligence':    'AI Policy Intelligence',
+  '/admin/policy-intelligence':    'Policy Intelligence',
   '/admin/responders':         'Rescue Updates',
   '/admin/staff':              'User Management',
   '/admin/evacuation-centers': 'Evacuation Centers',
@@ -72,7 +72,7 @@ const PAGE_TITLES = {
   '/admin/settings':           'Settings',
   '/admin/audit-logs':             'Audit Logs',
   '/admin/response-feedback':      'Response Feedback',
-  '/admin/situational-awareness':  'Situational Awareness',
+  '/admin/situational-awareness':  'Situational Analytics',
 
 }
 

@@ -392,7 +392,7 @@ export function SituationalAwareness() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Brain size={18} className="text-violet-400" />
-              <h2 className="text-sm font-black text-white">AI-Assisted Situational Awareness</h2>
+              <h2 className="text-sm font-black text-white">AI-Assisted Situational Analytics</h2>
             </div>
             <p className="text-[11px] text-slate-400">
               Aggregating {reports.length} SOS report{reports.length !== 1 ? 's' : ''} across {zones.length} barangay{zones.length !== 1 ? 's' : ''} · {muni ?? 'All municipalities'}
