@@ -34,7 +34,7 @@ import { AdminLayout }         from './pages/admin/AdminLayout'
 import { CommandCenter }       from './pages/admin/CommandCenter'
 import { VictimTable }         from './pages/admin/VictimTable'
 import { ConstituentRegistry } from './pages/admin/ConstituentRegistry'
-import { AdminAnalytics }      from './pages/admin/AdminAnalytics'
+
 import { PolicyIntelligence }  from './pages/admin/PolicyIntelligence'
 import { RespondersView }      from './pages/admin/RespondersView'
 import { StaffManagement as AdminStaffManagement } from './pages/admin/StaffManagement'
@@ -48,7 +48,7 @@ import AuditLogs                  from './pages/admin/AuditLogs'
 import { ResponseFeedback }       from './pages/admin/ResponseFeedback'
 import { BarangaysComparison }    from './pages/admin/BarangaysComparison'
 import { SituationalAwareness }   from './pages/admin/SituationalAwareness'
-import { EmergencyOpsReports }    from './pages/admin/EmergencyOpsReports'
+
 
 // Agency pages
 import { AgencyLayout }           from './pages/agency/AgencyLayout'
@@ -121,7 +121,7 @@ export const router = createHashRouter([
           { path: '/admin',                     element: <CommandCenter /> },
           { path: '/admin/victims',             element: <VictimTable /> },
           { path: '/admin/constituents',        element: <ConstituentRegistry /> },
-          { path: '/admin/analytics',             element: <AdminAnalytics /> },
+
           { path: '/admin/policy-intelligence',  element: <PolicyIntelligence /> },
           { path: '/admin/responders',          element: <RespondersView /> },
           { path: '/admin/staff',               element: <AdminStaffManagement /> },
@@ -134,7 +134,7 @@ export const router = createHashRouter([
           { path: '/admin/audit-logs',           element: <AuditLogs /> },
           { path: '/admin/response-feedback',      element: <ResponseFeedback /> },
           { path: '/admin/situational-awareness', element: <SituationalAwareness /> },
-          { path: '/admin/emergency-ops-reports', element: <EmergencyOpsReports /> },
+
         ],
       },
     ],

@@ -36,13 +36,13 @@ const NAV_GROUPS = [
     items: [
       { icon: Layers,          label: 'Barangays Comparison',     path: '/admin/barangays-comparison'  },
       { icon: ClipboardList,   label: 'SITREP',                   path: '/admin/sitrep'                },
-      { icon: FileSearch,      label: 'Emergency Ops Reports',    path: '/admin/emergency-ops-reports' },
+
     ],
   },
   {
     label: 'INTELLIGENCE',
     items: [
-      { icon: BarChart2,       label: 'AI Situational Analytics', path: '/admin/analytics'                },
+
       { icon: Activity,        label: 'Situational Awareness',    path: '/admin/situational-awareness'   },
       { icon: Scale,           label: 'AI Policy Intelligence',   path: '/admin/policy-intelligence'     },
     ],
@@ -61,7 +61,7 @@ const PAGE_TITLES = {
   '/admin':                    'Command Center',
   '/admin/victims':            'Affected Person Status',
   '/admin/constituents':       'Constituent Registry',
-  '/admin/analytics':              'AI Situational Analytics',
+
   '/admin/policy-intelligence':    'AI Policy Intelligence',
   '/admin/responders':         'Rescue Updates',
   '/admin/staff':              'User Management',
@@ -73,7 +73,7 @@ const PAGE_TITLES = {
   '/admin/audit-logs':             'Audit Logs',
   '/admin/response-feedback':      'Response Feedback',
   '/admin/situational-awareness':  'Situational Awareness',
-  '/admin/emergency-ops-reports':  'Emergency Ops Reports',
+
 }
 
 // ─── Web Audio alarm tone (synthesised — no audio file needed) ────────────────
