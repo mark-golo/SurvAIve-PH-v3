@@ -10,6 +10,9 @@
     <!-- Required on Android 10+ for watchPosition to continue when screen is locked -->
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
+    <!-- ── SMS — offline emergency fallback when internet is unavailable ──────── -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+
     <!-- ── Notifications ─────────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Vibrate for incoming SOS alerts -->

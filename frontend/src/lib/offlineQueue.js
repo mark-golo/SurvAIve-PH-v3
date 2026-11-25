@@ -3,6 +3,8 @@
 import { db } from './db'
 import api from './api'
 import { supabase } from './supabase'
+import { sendEmergencySMS, isSMSCapable } from './smsPlugin'
+import { PHILSMS_RECEIVING_NUMBER } from './smsConfig'
 
 const MAX_RETRY_COUNT = 5
 
@@ -39,6 +41,45 @@ export async function drainOfflineQueue() {
     }
   } catch (e) {
     console.warn('[offlineQueue] drainOfflineQueue error:', e?.message)
+  }
+}
+
+// Drain SMS-pending records: when internet is not available but cellular is, retry
+// any records that were queued with smsStatus 'pending' (SMS was not attempted yet).
+// Called from capacitor.js on startup when only cellular connectivity is detected.
+export async function drainSMSPendingQueue() {
+  if (!isSMSCapable()) return
+  try {
+    const all = await db.getPendingSOS()
+    const smsUnsent = all.filter(r => r.smsStatus === 'pending' && r.source === 'sms')
+    if (!smsUnsent.length) return
+    console.log('[offlineQueue] retrying SMS for', smsUnsent.length, 'queued record(s)')
+    for (const item of smsUnsent) {
+      try {
+        const svcArr = Array.isArray(item.service_type) ? item.service_type : [item.service_type ?? 'mdrrmo']
+        const lines = [
+          'SURVAIvePH SOS',
+          `ID: SVP-${(item.meshPacketId ?? item.mesh_packet_id ?? '').slice(0, 8).toUpperCase()}`,
+          `TYPE: ${svcArr[0]?.toUpperCase() ?? 'GENERAL'}`,
+          `STATUS: ${(item.status ?? 'unknown').toUpperCase()}`,
+          `LOC: ${[item.barangay, item.municipality].filter(Boolean).join(', ') || 'UNKNOWN'}`,
+        ]
+        if (item.lat && item.lng) lines.push(`GPS: ${Number(item.lat).toFixed(4)},${Number(item.lng).toFixed(4)}`)
+        if (item.notes) lines.push(`MSG: ${String(item.notes).slice(0, 80)}`)
+        const message = lines.join('\n')
+        await sendEmergencySMS({
+          reportId:  item.meshPacketId ?? item.mesh_packet_id ?? String(item.localId),
+          recipient: PHILSMS_RECEIVING_NUMBER,
+          message,
+        })
+        await db.markSMSSent(item.localId)
+        console.log('[offlineQueue] SMS retry succeeded for localId', item.localId)
+      } catch (e) {
+        console.warn('[offlineQueue] SMS retry failed for localId', item.localId, e?.message)
+      }
+    }
+  } catch (e) {
+    console.warn('[offlineQueue] drainSMSPendingQueue error:', e?.message)
   }
 }
 

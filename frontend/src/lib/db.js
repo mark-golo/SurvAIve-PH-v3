@@ -111,6 +111,38 @@ export const db = {
     }
   },
 
+  // ── SMS status helpers ─────────────────────────────────────────────────
+
+  async markSMSSent(localId) {
+    const database = await getDB()
+    const item = await database.get('sos_queue', localId)
+    if (item) {
+      await database.put('sos_queue', {
+        ...item,
+        smsStatus:  'submitted',
+        smsSentAt:  Date.now(),
+      })
+    }
+  },
+
+  async markSMSFailed(localId, reason) {
+    const database = await getDB()
+    const item = await database.get('sos_queue', localId)
+    if (item) {
+      await database.put('sos_queue', {
+        ...item,
+        smsStatus:     'failed',
+        smsFailReason: reason ?? 'unknown',
+      })
+    }
+  },
+
+  // Returns all records that were submitted via SMS but not yet synced to the server.
+  async getSMSPendingQueue() {
+    const all = await (await getDB()).getAll('sos_queue')
+    return all.filter(r => r.smsStatus === 'submitted' && !r.synced)
+  },
+
   async purgeSyncedSOS(olderThanMs = 7 * 24 * 60 * 60 * 1000) {
     const database = await getDB()
     const all = await database.getAll('sos_queue')

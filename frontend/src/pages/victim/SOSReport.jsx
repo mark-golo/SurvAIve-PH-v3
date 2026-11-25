@@ -16,6 +16,8 @@ import { db } from '../../lib/db'
 import api from '../../lib/api'
 import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
+import { sendEmergencySMS, isSMSCapable } from '../../lib/smsPlugin'
+import { PHILSMS_RECEIVING_NUMBER } from '../../lib/smsConfig'
 import { Home, Map, Sparkles, Settings, MessageSquare } from 'lucide-react'
 
 const NAV = [
@@ -70,6 +72,8 @@ export function SOSReport() {
   const [offline,       setOffline]       = useState(!getNetworkOnline())
   const [onlineDelivered, setOnlineDelivered] = useState(false)
   const [newSosId,        setNewSosId]        = useState(null)
+  // 'submitted' | 'failed' | 'queued' | null
+  const [smsDelivery,     setSmsDelivery]     = useState(null)
 
   // ── Voice state ──────────────────────────────────────────────────────────────
   const [listening,      setListening]      = useState(false)
@@ -180,8 +184,28 @@ export function SOSReport() {
 
   const stopVoice = () => { recognitionRef.current?.stop(); setListening(false) }
 
+  // ── SMS message builder ───────────────────────────────────────────────────────
+  const buildSMSMessage = ({ meshPacketId, service_type, status, barangay, municipality, lat, lng, notes }) => {
+    const id   = (meshPacketId ?? '').slice(0, 8).toUpperCase()
+    const type = Array.isArray(service_type) && service_type.length > 0
+      ? service_type[0].toUpperCase()
+      : 'GENERAL'
+    const loc  = [barangay, municipality].filter(Boolean).join(', ') || 'UNKNOWN'
+    const lines = [
+      'SURVAIvePH SOS',
+      `ID: SVP-${id}`,
+      `TYPE: ${type}`,
+      `STATUS: ${(status ?? 'unknown').toUpperCase()}`,
+      `LOC: ${loc}`,
+    ]
+    if (lat && lng) lines.push(`GPS: ${Number(lat).toFixed(4)},${Number(lng).toFixed(4)}`)
+    if (notes)      lines.push(`MSG: ${String(notes).slice(0, 80)}`)
+    return lines.join('\n')
+  }
+
   // ── Submit ────────────────────────────────────────────────────────────────────
-  const submit = async () => {
+  // useSMS=true: attempt native Android SMS after queuing to IndexedDB
+  const submit = async (useSMS = false) => {
     const svcArr = Array.isArray(form.service_type) ? form.service_type : [form.service_type]
     if (svcArr.length === 0) return
     setLoading(true)
@@ -207,9 +231,36 @@ export function SOSReport() {
     payload.mesh_packet_id = realPacketId
 
     if (offline || !getNetworkOnline()) {
-      // OFFLINE — save to the local queue; capacitor.js drains it automatically
-      // as soon as connectivity returns.
-      await db.queueSOS({ ...payload, meshPacketId: realPacketId, isGuest, timestamp: Date.now() })
+      // OFFLINE — always persist to the local queue first so the report is never lost.
+      const queuePayload = {
+        ...payload,
+        meshPacketId: realPacketId,
+        isGuest,
+        timestamp:    Date.now(),
+        smsStatus:    useSMS ? 'pending' : null,
+        source:       useSMS ? 'sms'     : 'queue_sync',
+      }
+      const localId = await db.queueSOS(queuePayload)
+
+      // If the user chose SMS and the device has native SMS capability, send it now.
+      if (useSMS && isSMSCapable()) {
+        try {
+          await sendEmergencySMS({
+            reportId:  realPacketId,
+            recipient: PHILSMS_RECEIVING_NUMBER,
+            message:   buildSMSMessage({ ...payload, meshPacketId: realPacketId }),
+          })
+          await db.markSMSSent(localId)
+          setSmsDelivery('submitted')
+        } catch (smsErr) {
+          console.warn('[SOSReport] SMS send failed:', smsErr?.message)
+          await db.markSMSFailed(localId, smsErr?.message ?? 'SMS send failed')
+          setSmsDelivery('failed')
+        }
+      } else {
+        setSmsDelivery('queued')
+      }
+
       setSubmitted(true)
       setLoading(false)
       return
@@ -278,8 +329,59 @@ export function SOSReport() {
                 </div>
               )}
             </>
+          ) : smsDelivery === 'submitted' ? (
+            /* ── SMS submitted ─────────────────────────────────────────────── */
+            <>
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[rgba(0,212,255,0.3)] to-[rgba(14,165,233,0.3)]
+                              border-2 border-[rgba(0,212,255,0.5)] flex items-center justify-center mx-auto
+                              shadow-[0_0_32px_rgba(0,212,255,0.4)]">
+                <Check size={28} className="text-white" />
+              </div>
+              <h2 className="text-xl font-black text-white">SMS Submitted</h2>
+              <div className="glass rounded-xl p-3 border border-[rgba(0,212,255,0.3)]">
+                <p className="text-xs text-[#00d4ff] font-semibold mb-1 tracking-wider">
+                  SMS SUBMITTED — DELIVERY NOT YET CONFIRMED
+                </p>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Your emergency report was sent via SMS to the response system.
+                  Standard SMS charges may apply. When internet becomes available,
+                  your report will also sync automatically — no action needed.
+                </p>
+              </div>
+              <div className="glass rounded-xl p-3 border border-[rgba(0,212,255,0.2)]">
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Stay in place if possible. If the SMS was not received, keep your
+                  phone on and move to an area with better cellular or Wi-Fi signal.
+                </p>
+              </div>
+            </>
+          ) : smsDelivery === 'failed' ? (
+            /* ── SMS failed — still saved locally ──────────────────────────── */
+            <>
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[rgba(239,68,68,0.3)] to-[rgba(220,38,38,0.3)]
+                              border-2 border-[rgba(239,68,68,0.5)] flex items-center justify-center mx-auto
+                              shadow-[0_0_32px_rgba(239,68,68,0.4)]">
+                <Check size={28} className="text-white" />
+              </div>
+              <h2 className="text-xl font-black text-white">SMS Failed — Saved</h2>
+              <div className="glass rounded-xl p-3 border border-[rgba(239,68,68,0.3)]">
+                <p className="text-xs text-[#ef4444] font-semibold mb-1 tracking-wider">
+                  SMS FAILED — SAVED ON DEVICE
+                </p>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Your report is safely saved on this device. SMS could not be sent
+                  (no cellular signal or SIM not available). It will sync automatically
+                  when internet is available.
+                </p>
+              </div>
+              <div className="glass rounded-xl p-3 border border-[rgba(239,68,68,0.2)]">
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Move to an area with cellular or Wi-Fi signal to send your report.
+                </p>
+              </div>
+            </>
           ) : (
-            /* ── Offline / queued path ──────────────────────────────────────── */
+            /* ── Queue-only / no SMS path ───────────────────────────────────── */
             <>
               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[rgba(245,158,11,0.3)] to-[rgba(217,119,6,0.3)]
                               border-2 border-[rgba(245,158,11,0.5)] flex items-center justify-center mx-auto
@@ -336,9 +438,17 @@ export function SOSReport() {
 
         {/* Offline banner */}
         {offline && (
-          <div className="glass rounded-xl p-3 border border-[rgba(245,158,11,0.3)]">
+          <div className="glass rounded-xl p-3 border border-[rgba(245,158,11,0.3)] space-y-1">
             <p className="text-xs text-[#f59e0b] font-medium">📡 Offline Mode</p>
-            <p className="text-xs text-slate-400 mt-0.5">SOS will be saved on this device and sent automatically when connection returns</p>
+            <p className="text-xs text-slate-400">No internet connection detected.</p>
+            {isSMSCapable() ? (
+              <p className="text-xs text-slate-400">
+                SMS can be sent if cellular signal is available. Standard charges may apply.
+                If there is no signal, your report will be saved and retried automatically.
+              </p>
+            ) : (
+              <p className="text-xs text-slate-400">Your SOS will be saved on this device and sent automatically when connection returns.</p>
+            )}
           </div>
         )}
 
@@ -602,15 +712,40 @@ export function SOSReport() {
           </div>
         )}
 
-        <NeonButton
-          variant="red"
-          size="lg"
-          onClick={submit}
-          loading={loading}
-          className="w-full"
-        >
-          Send Emergency SOS
-        </NeonButton>
+        {offline ? (
+          <div className="space-y-2">
+            {isSMSCapable() && (
+              <NeonButton
+                variant="red"
+                size="lg"
+                onClick={() => submit(true)}
+                loading={loading}
+                className="w-full"
+              >
+                SEND EMERGENCY VIA SMS
+              </NeonButton>
+            )}
+            <NeonButton
+              variant={isSMSCapable() ? 'ghost' : 'red'}
+              size="lg"
+              onClick={() => submit(false)}
+              loading={loading}
+              className="w-full"
+            >
+              {isSMSCapable() ? 'Save Only (Sync When Online)' : 'Save & Send When Online'}
+            </NeonButton>
+          </div>
+        ) : (
+          <NeonButton
+            variant="red"
+            size="lg"
+            onClick={() => submit(false)}
+            loading={loading}
+            className="w-full"
+          >
+            Send Emergency SOS
+          </NeonButton>
+        )}
 
       </main>
 

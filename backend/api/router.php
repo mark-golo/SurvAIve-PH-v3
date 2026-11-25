@@ -16,6 +16,8 @@ function _runPendingMigrations(): void {
             name       VARCHAR(100) PRIMARY KEY,
             applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB");
+
+        // ── 2026-11-04: acknowledged rescue_status ────────────────────────
         $name = '20261104_add_acknowledged_rescue_status';
         $st = $db->prepare("SELECT 1 FROM _migrations WHERE name = ?");
         $st->execute([$name]);
@@ -24,6 +26,34 @@ function _runPendingMigrations(): void {
                 ENUM('pending','acknowledged','en_route','on_scene','rescued','cannot_reach')
                 NOT NULL DEFAULT 'pending'");
             $db->prepare("INSERT INTO _migrations (name) VALUES (?)")->execute([$name]);
+        }
+
+        // ── 2026-11-25: SMS emergency fallback fields ─────────────────────
+        $name2 = '20261125_add_sms_fields';
+        $st2 = $db->prepare("SELECT 1 FROM _migrations WHERE name = ?");
+        $st2->execute([$name2]);
+        if (!$st2->fetch()) {
+            // source_channel — tracks whether a report arrived via internet, SMS, or queue sync
+            try { $db->exec("ALTER TABLE sos_reports ADD COLUMN source_channel ENUM('internet','sms','queue_sync') NOT NULL DEFAULT 'internet'"); } catch (\Throwable) {}
+            try { $db->exec("ALTER TABLE sos_reports ADD COLUMN sms_sender_number VARCHAR(20) NULL"); } catch (\Throwable) {}
+            try { $db->exec("ALTER TABLE sos_reports ADD COLUMN sms_provider_msg_id VARCHAR(100) NULL"); } catch (\Throwable) {}
+            $db->exec("CREATE TABLE IF NOT EXISTS sms_communication_log (
+                id               INT          AUTO_INCREMENT PRIMARY KEY,
+                report_id        INT          NULL,
+                channel          ENUM('native_sms','philsms') NOT NULL,
+                direction        ENUM('inbound','outbound')   NOT NULL,
+                provider_msg_id  VARCHAR(100) NULL,
+                sender_number    VARCHAR(20)  NULL,
+                recipient_number VARCHAR(20)  NULL,
+                status           VARCHAR(30)  NOT NULL DEFAULT 'pending',
+                attempt_count    TINYINT UNSIGNED NOT NULL DEFAULT 1,
+                error_code       VARCHAR(50)  NULL,
+                created_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_sms_report_id (report_id),
+                INDEX idx_sms_provider_msg_id (provider_msg_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $db->prepare("INSERT INTO _migrations (name) VALUES (?)")->execute([$name2]);
         }
     } catch (\Throwable $e) {
         // Never break an API request over a migration check
@@ -54,6 +84,10 @@ $routes = [
   'sync'               => __DIR__ . '/sync/index.php',
   'staff'              => __DIR__ . '/staff/index.php',
   'province_reports'   => __DIR__ . '/province_reports/index.php',
+  // SMS Emergency Fallback
+  'sos/sms-inbound'    => __DIR__ . '/sos/sms_inbound.php',
+  'sos/sms-status'     => __DIR__ . '/sos/sms_status.php',
+  'notifications/sms'  => __DIR__ . '/notifications/sms.php',
 ];
 
 // Dynamic routes — order matters (most specific first)
