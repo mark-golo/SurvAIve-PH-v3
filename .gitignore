@@ -6,3 +6,5 @@
 
 # IDE
 .vscode
+backend/config/sms.php
+backend/config/supabase.php
