@@ -120,14 +120,20 @@ class SmsPlugin : Plugin() {
                 return
             }
 
+            // divideMessage() correctly handles both GSM-7 (160 chars/seg) and
+            // Unicode (70 chars/seg), fixing the bug where `message.length > 160`
+            // would mis-route non-ASCII messages to the single-segment path.
+            val parts         = smsManager.divideMessage(message)
+            val remaining     = AtomicInteger(parts.size)
+            val resolved      = AtomicBoolean(false)
+            // Keep a reference to every per-segment receiver so they can all be
+            // unregistered in the outer catch block, preventing context leaks.
+            val partReceivers = ArrayList<BroadcastReceiver>()
             try {
-                if (message.length > 160) {
-                    // Unregister outer sentReceiver — multi-part uses per-segment receivers
+                if (parts.size > 1) {
+                    // Multi-part: single-segment sentReceiver is not used — unregister it now
                     try { context.applicationContext.unregisterReceiver(sentReceiver) } catch (_: Exception) {}
 
-                    val parts     = smsManager.divideMessage(message)
-                    val remaining = AtomicInteger(parts.size)
-                    val resolved  = AtomicBoolean(false)
                     val sentIntents = ArrayList<PendingIntent?>()
 
                     parts.forEachIndexed { i, _ ->
@@ -138,7 +144,13 @@ class SmsPlugin : Plugin() {
                                 try { context.applicationContext.unregisterReceiver(this) } catch (_: Exception) {}
                                 if (resultCode != Activity.RESULT_OK) {
                                     if (resolved.compareAndSet(false, true)) {
-                                        call.reject("SMS_SEND_FAILED", "Part $i failed with code: $resultCode")
+                                        val errCode = when (resultCode) {
+                                            SmsManager.RESULT_ERROR_RADIO_OFF  -> "SMS_RADIO_OFF"
+                                            SmsManager.RESULT_ERROR_NO_SERVICE -> "SMS_NO_SERVICE"
+                                            SmsManager.RESULT_ERROR_NULL_PDU   -> "SMS_NULL_PDU"
+                                            else                               -> "SMS_SEND_FAILED"
+                                        }
+                                        call.reject(errCode, "Part $i failed with code: $resultCode")
                                     }
                                     return
                                 }
@@ -156,15 +168,19 @@ class SmsPlugin : Plugin() {
                             @Suppress("UnspecifiedRegisterReceiverFlag")
                             context.applicationContext.registerReceiver(partReceiver, IntentFilter(partAction))
                         }
+                        partReceivers.add(partReceiver)
                         sentIntents.add(partPI)
                     }
                     smsManager.sendMultipartTextMessage(recipient, null, parts, sentIntents, null)
                 } else {
-                    smsManager.sendTextMessage(recipient, null, message, sentPI, null)
+                    smsManager.sendTextMessage(recipient, null, parts[0], sentPI, null)
                 }
             } catch (e: Exception) {
-                // Send failed before the BroadcastReceiver could be triggered — unregister to prevent leak.
+                // Unregister all BroadcastReceivers to prevent context leaks.
                 try { context.applicationContext.unregisterReceiver(sentReceiver) } catch (_: Exception) {}
+                partReceivers.forEach { r ->
+                    try { context.applicationContext.unregisterReceiver(r) } catch (_: Exception) {}
+                }
                 call.reject("SMS_EXCEPTION", e.message ?: "Unexpected error sending SMS")
             }
 

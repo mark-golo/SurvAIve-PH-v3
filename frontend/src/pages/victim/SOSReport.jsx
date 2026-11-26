@@ -15,7 +15,7 @@ import { useAuthStore } from '../../store/auth'
 import { db } from '../../lib/db'
 import api from '../../lib/api'
 import { getVictimTheme } from '../../lib/victimTheme'
-import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
+import { getNetworkOnline, onNetworkChange, probeBackend } from '../../lib/capacitor'
 import { sendEmergencySMS, isSMSCapable } from '../../lib/smsPlugin'
 import { PHILSMS_RECEIVING_NUMBER } from '../../lib/smsConfig'
 import { Home, Map, Sparkles, Settings, MessageSquare } from 'lucide-react'
@@ -289,6 +289,17 @@ export function SOSReport() {
         setLoading(false)
         return
       }
+      setLoading(false)
+      submittingRef.current = false
+      return
+    }
+
+    // Probe actual backend reachability — catches captive portals and no-WAN Wi-Fi where
+    // the OS reports "connected" but Supabase is unreachable. If the probe fails, switch
+    // to the offline UI so the victim can choose SMS (which works on cellular).
+    const backendUp = await probeBackend()
+    if (!backendUp) {
+      setOffline(true)
       setLoading(false)
       submittingRef.current = false
       return

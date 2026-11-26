@@ -144,9 +144,14 @@ export function initCapacitor() {
       import('./offlineQueue').then(({ drainOfflineQueue, drainPendingReviews }) => {
         drainOfflineQueue().catch(() => {})
         drainPendingReviews().catch(() => {})
-        // drainSMSPendingQueue is intentionally omitted here: it is called on startup
-        // when offline. Calling it again on reconnect would race with drainOfflineQueue
+        // drainSMSPendingQueue intentionally omitted here — it is called at startup
+        // when offline, and calling it on reconnect would race with drainOfflineQueue
         // and double-dispatch SMS-pending records.
+      }).catch(() => {})
+    } else if (!connected) {
+      // Internet lost — cellular may still be available; retry any pending SMS records
+      import('./offlineQueue').then(({ drainSMSPendingQueue }) => {
+        drainSMSPendingQueue().catch(() => {})
       }).catch(() => {})
     }
   })

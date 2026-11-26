@@ -67,11 +67,12 @@ export async function drainOfflineQueue() {
 export async function drainSMSPendingQueue() {
   if (!isSMSCapable()) return
   try {
-    const all = await db.getPendingSOS()
+    const all = await db.getSMSPendingSOS()
     const seen = new Set()
     const smsUnsent = all.filter(r => {
       // Accept smsStatus 'pending' (explicit first-attempt) or null (no explicit status set)
-      if ((r.smsStatus !== 'pending' && r.smsStatus != null) || r.source !== 'sms') return false
+      // source='sms' is already guaranteed by getSMSPendingSOS — no need to re-check here
+      if (r.smsStatus !== 'pending' && r.smsStatus != null) return false
       const key = r.meshPacketId ?? r.mesh_packet_id ?? String(r.localId)
       if (seen.has(key)) return false
       seen.add(key)

@@ -1,8 +1,8 @@
 import { registerPlugin, Capacitor } from '@capacitor/core'
 
-// Register the native Android SMS plugin.
-// On web/browser this stub is never called — isSMSCapable() guards every use.
-const SmsNative = registerPlugin('Sms')
+// Register the native Android SMS plugin only on Android — avoids Capacitor
+// console warnings on web builds where no native plugin is registered.
+const SmsNative = Capacitor.getPlatform() === 'android' ? registerPlugin('Sms') : null
 
 /**
  * Returns true when running inside the Android native container where the
@@ -24,7 +24,7 @@ export function isSMSCapable() {
  *          Android SMS subsystem rejects the message.
  */
 export async function sendEmergencySMS({ reportId, recipient, message }) {
-  if (Capacitor.getPlatform() !== 'android') {
+  if (!SmsNative) {
     throw new Error('Native SMS is only available on Android')
   }
   let timeoutId

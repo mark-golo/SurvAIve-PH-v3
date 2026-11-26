@@ -1,11 +1,11 @@
 import { openDB } from 'idb'
 
 const DB_NAME    = 'survAIve-ph'
-const DB_VERSION = 3
+const DB_VERSION = 4
 
 function getDB() {
   return openDB(DB_NAME, DB_VERSION, {
-    upgrade(db, oldVersion) {
+    upgrade(db, oldVersion, newVersion, transaction) {
       // ── Version 1 stores (created fresh on first install) ──────────────────────
       if (oldVersion < 1) {
         const profile = db.createObjectStore('profile', { keyPath: 'id' })    // eslint-disable-line no-unused-vars
@@ -48,6 +48,18 @@ function getDB() {
         if (db.objectStoreNames.contains('mesh_event_log')) db.deleteObjectStore('mesh_event_log')
         if (db.objectStoreNames.contains('mesh_state'))     db.deleteObjectStore('mesh_state')
       }
+
+      // ── Version 4: add source index to sos_queue for efficient SMS queue queries ─
+      // Cannot delete+recreate the store (would lose queued records); access the
+      // existing store through the upgrade transaction and add the index in-place.
+      if (oldVersion < 4) {
+        if (db.objectStoreNames.contains('sos_queue')) {
+          const store = transaction.objectStore('sos_queue')
+          if (!store.indexNames.contains('source')) {
+            store.createIndex('source', 'source', { unique: false })
+          }
+        }
+      }
     },
   })
 }
@@ -72,6 +84,12 @@ export const db = {
   async getPendingSOS() {
     const database = await getDB()
     return database.getAllFromIndex('sos_queue', 'synced', false)
+  },
+
+  async getSMSPendingSOS() {
+    const database = await getDB()
+    const all = await database.getAllFromIndex('sos_queue', 'source', 'sms')
+    return all.filter(r => !r.synced)
   },
 
   // Returns every record in the queue (both synced and pending).
