@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Star, WifiOff, RefreshCw, SlidersHorizontal, MessageSquare } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { getNetworkOnline } from '../../lib/capacitor'
+import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
 import { useAuthStore } from '../../store/auth'
 import { logActivity } from '../../lib/api'
 import { fmtSosId } from '../../lib/format'
@@ -65,7 +65,11 @@ export function ResponseFeedback() {
   const [toDate,    setToDate]    = useState(todayStr)
   const [search,    setSearch]    = useState('')
   const [minRating, setMinRating] = useState('')
-  const [isOnline]                = useState(getNetworkOnline)
+  const [isOnline, setIsOnline] = useState(getNetworkOnline())
+  useEffect(() => {
+    const h = onNetworkChange(connected => setIsOnline(connected))
+    return () => { h.then(handle => handle.remove()).catch(() => {}) }
+  }, [])
   const [modLoading, setModLoading] = useState(null)
 
   function applyPreset(p) {

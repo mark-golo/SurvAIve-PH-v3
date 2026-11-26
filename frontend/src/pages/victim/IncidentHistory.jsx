@@ -4,7 +4,7 @@ import { Clock, ChevronRight, Map, Sparkles, Settings, Home, MessageSquare, Refr
 import { MobileNavBar, TopBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
-import { getNetworkOnline } from '../../lib/capacitor'
+import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
 import api from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { db } from '../../lib/db'
@@ -66,7 +66,11 @@ export function IncidentHistory() {
   })
   const { user }  = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
-  const [isOnline]= useState(getNetworkOnline)
+  const [isOnline, setIsOnline] = useState(getNetworkOnline())
+  useEffect(() => {
+    const h = onNetworkChange(connected => setIsOnline(connected))
+    return () => { h.then(handle => handle.remove()).catch(() => {}) }
+  }, [])
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState(location.state?.overrideTab ?? 'all')

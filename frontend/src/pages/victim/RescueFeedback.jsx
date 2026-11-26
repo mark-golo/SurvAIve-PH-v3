@@ -5,7 +5,7 @@ import { Star, CheckCircle, WifiOff, AlertOctagon, Send, ChevronLeft, Home, Mess
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
-import { getNetworkOnline } from '../../lib/capacitor'
+import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
 import api, { localFetch } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { fmtSosId } from '../../lib/format'
@@ -43,7 +43,11 @@ export function RescueFeedback() {
   const navigate  = useNavigate()
   const { user }  = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
-  const [isOnline]= useState(getNetworkOnline)
+  const [isOnline, setIsOnline] = useState(getNetworkOnline())
+  useEffect(() => {
+    const h = onNetworkChange(connected => setIsOnline(connected))
+    return () => { h.then(handle => handle.remove()).catch(() => {}) }
+  }, [])
 
   const [report,       setReport]       = useState(null)
   const [existing,     setExisting]     = useState([])

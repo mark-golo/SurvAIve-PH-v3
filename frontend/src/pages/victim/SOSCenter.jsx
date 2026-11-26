@@ -6,7 +6,7 @@ import { MobileNavBar } from '../../components/ui/NavBar'
 import { TopBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
-import { getNetworkOnline } from '../../lib/capacitor'
+import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
 import api from '../../lib/api'
 import { db } from '../../lib/db'
 import { supabase } from '../../lib/supabase'
@@ -23,7 +23,11 @@ export function SOSCenter() {
   const navigate  = useNavigate()
   const { user }  = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
-  const [isOnline]= useState(getNetworkOnline)
+  const [isOnline, setIsOnline] = useState(getNetworkOnline())
+  useEffect(() => {
+    const h = onNetworkChange(connected => setIsOnline(connected))
+    return () => { h.then(handle => handle.remove()).catch(() => {}) }
+  }, [])
   const [reports, setReports]     = useState([])
   const [loading, setLoading]     = useState(true)
   const [hasPending, setHasPending] = useState(false)

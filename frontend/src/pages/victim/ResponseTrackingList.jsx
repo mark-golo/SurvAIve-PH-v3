@@ -7,7 +7,7 @@ import {
 import { MobileNavBar, TopBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
-import { getNetworkOnline } from '../../lib/capacitor'
+import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
 import api from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { db } from '../../lib/db'
@@ -58,7 +58,11 @@ const EMERGENCY_LABELS = {
 export function ResponseTrackingList() {
   const navigate   = useNavigate()
   const [isLight]  = useState(() => getVictimTheme() === 'light')
-  const [isOnline] = useState(getNetworkOnline)
+  const [isOnline, setIsOnline] = useState(getNetworkOnline())
+  useEffect(() => {
+    const h = onNetworkChange(connected => setIsOnline(connected))
+    return () => { h.then(handle => handle.remove()).catch(() => {}) }
+  }, [])
 
   const [reports,   setReports]  = useState([])
   const [loading,   setLoading]  = useState(true)

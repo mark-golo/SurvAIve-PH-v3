@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { RefreshCw, WifiOff, ScrollText, Search, SlidersHorizontal } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { getNetworkOnline } from '../../lib/capacitor'
+import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
 import { useAuthStore } from '../../store/auth'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -49,7 +49,11 @@ export default function AuditLogs() {
   const [preset,    setPreset]    = useState('today')
   const [fromDate,  setFromDate]  = useState(todayStr)
   const [toDate,    setToDate]    = useState(todayStr)
-  const [isOnline]                = useState(getNetworkOnline)
+  const [isOnline, setIsOnline] = useState(getNetworkOnline())
+  useEffect(() => {
+    const h = onNetworkChange(connected => setIsOnline(connected))
+    return () => { h.then(handle => handle.remove()).catch(() => {}) }
+  }, [])
 
   function applyPreset(p) {
     setPreset(p)

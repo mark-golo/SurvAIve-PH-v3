@@ -6,7 +6,7 @@ import { MobileNavBar, TopBar } from '../../components/ui/NavBar'
 import { PriorityCard } from '../../components/ui/PriorityCard'
 import { NeonButton } from '../../components/ui/NeonButton'
 import { getResponderTheme } from '../../lib/victimTheme'
-import { getNetworkOnline } from '../../lib/capacitor'
+import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
 import { supabase } from '../../lib/supabase'
 
 const NAV = [
@@ -32,7 +32,11 @@ function fmtDate(ts) {
 export function ResponderHistory() {
   const navigate   = useNavigate()
   const [isLight]  = useState(() => getResponderTheme() === 'light')
-  const [isOnline] = useState(getNetworkOnline)
+  const [isOnline, setIsOnline] = useState(getNetworkOnline())
+  useEffect(() => {
+    const h = onNetworkChange(connected => setIsOnline(connected))
+    return () => { h.then(handle => handle.remove()).catch(() => {}) }
+  }, [])
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(false)
   const [filter, setFilter]   = useState('all')

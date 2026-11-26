@@ -7,6 +7,7 @@ import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
+import { getNetworkOnline } from '../../lib/capacitor'
 
 const EC_CACHE_KEY = 'ec-cache'
 
@@ -119,6 +120,7 @@ export function LocalMap() {
   const [finderLoading, setFinderLoading] = useState(false)
   const [isOffline, setIsOffline]         = useState(false)
   const [cacheTime, setCacheTime]         = useState(null)
+  const [offlineReason, setOfflineReason] = useState(null)
 
   // In-app routing
   const [routeLine, setRouteLine]         = useState(null)
@@ -152,6 +154,7 @@ export function LocalMap() {
             setCenters(Array.isArray(cached) ? cached : [])
             setIsOffline(true)
             setCacheTime(new Date(ts).toLocaleString())
+            setOfflineReason(getNetworkOnline() ? 'server' : 'network')
           }
         } catch {}
       })
@@ -452,7 +455,9 @@ export function LocalMap() {
           <div className="rounded-2xl border border-[rgba(0,212,255,0.2)] bg-[rgba(0,0,0,0.5)] p-4 space-y-3">
             {isOffline && (
               <div className="text-[11px] text-[#f59e0b] bg-[rgba(245,158,11,0.08)] border border-[rgba(245,158,11,0.2)] rounded-lg px-3 py-2">
-                ⚠ Offline: showing last synced data ({cacheTime}). Actual conditions may have changed — verify before proceeding.
+                ⚠ {offlineReason === 'server'
+                  ? `Server unavailable — showing cached data (${cacheTime}). Refresh to retry.`
+                  : `Offline: showing last synced data (${cacheTime}). Actual conditions may have changed — verify before proceeding.`}
               </div>
             )}
             {recommendation.top ? (

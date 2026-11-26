@@ -5,7 +5,7 @@ import { CheckCircle, Clock, RefreshCw, AlertOctagon, Home, MessageSquare, Map, 
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme } from '../../lib/victimTheme'
-import { getNetworkOnline } from '../../lib/capacitor'
+import { getNetworkOnline, onNetworkChange } from '../../lib/capacitor'
 import api, { logActivity } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { db } from '../../lib/db'
@@ -103,7 +103,11 @@ export function ResponseTracking() {
   })
   const { user }  = useAuthStore()
   const [isLight] = useState(() => getVictimTheme() === 'light')
-  const [isOnline]= useState(getNetworkOnline)
+  const [isOnline, setIsOnline] = useState(getNetworkOnline())
+  useEffect(() => {
+    const h = onNetworkChange(connected => setIsOnline(connected))
+    return () => { h.then(handle => handle.remove()).catch(() => {}) }
+  }, [])
   const [report,    setReport]  = useState(null)
   const [events,    setEvents]  = useState([])
   const [loading,   setLoading] = useState(true)
