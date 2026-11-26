@@ -9,7 +9,7 @@ const SmsNative = registerPlugin('Sms')
  * SmsPlugin Kotlin class is registered.
  */
 export function isSMSCapable() {
-  return Capacitor.isNativePlatform()
+  return Capacitor.getPlatform() === 'android'
 }
 
 /**
@@ -24,8 +24,17 @@ export function isSMSCapable() {
  *          Android SMS subsystem rejects the message.
  */
 export async function sendEmergencySMS({ reportId, recipient, message }) {
-  if (!Capacitor.isNativePlatform()) {
+  if (Capacitor.getPlatform() !== 'android') {
     throw new Error('Native SMS is only available on Android')
   }
-  return SmsNative.sendSMS({ reportId, recipient, message })
+  let timeoutId
+  const send = SmsNative.sendSMS({ reportId, recipient, message })
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('SMS send timed out after 60s')), 60_000)
+  })
+  try {
+    return await Promise.race([send, timeout])
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }

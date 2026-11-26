@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getResponderTheme } from '../../lib/victimTheme'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -6,7 +6,6 @@ import { Home, List, Map, Sparkles, Settings, RefreshCw, SortAsc } from 'lucide-
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { PriorityCard } from '../../components/ui/PriorityCard'
 import { NeonButton } from '../../components/ui/NeonButton'
-import { db } from '../../lib/db'
 import api from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 import { supabase } from '../../lib/supabase'
@@ -24,11 +23,32 @@ export function VictimQueue() {
   const { scope } = useAuthStore()
   const [isLight] = useState(() => getResponderTheme() === 'light')
   const [queue, setQueue] = useState([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
 
   const muni = scope?.municipality
-  useEffect(() => { refresh() }, [])
+
+  const refresh = useCallback(async () => {
+    setLoading(true)
+    try {
+      const url = muni
+        ? `/sos?assigned_to=me&municipality=${encodeURIComponent(muni)}`
+        : '/sos?assigned_to=me'
+      const res = await api.get(url)
+      setQueue(res.map(r => {
+        const s       = r.ai_priority_score ?? 50
+        const isFlagged = r.flagged ?? false
+        const adj     = isFlagged ? Math.max(0, s - 20) : s
+        return {
+          ...r,
+          priority: adj >= 80 ? 'CRITICAL' : adj >= 60 ? 'HIGH' : adj >= 40 ? 'MODERATE' : 'LOW',
+        }
+      }))
+    } catch (err) { console.warn('[VictimQueue] refresh failed:', err?.message) }
+    setLoading(false)
+  }, [muni])
+
+  useEffect(() => { refresh() }, [refresh])
 
   useEffect(() => {
     const ch = supabase.channel('vq-sos-status')
@@ -36,35 +56,46 @@ export function VictimQueue() {
         { event: 'UPDATE', schema: 'public', table: 'sos_reports' },
         payload => {
           const r = payload.new
-          if (muni && r.municipality !== muni) return
+          if (muni && r.municipality !== null && r.municipality !== muni) return
           setQueue(prev => prev.map(x =>
-            x.id === r.id ? { ...x, rescue_status: r.rescue_status } : x
+            x.id === r.id ? {
+              ...x,
+              rescue_status:     r.rescue_status     ?? x.rescue_status,
+              ai_priority_score: r.ai_priority_score ?? x.ai_priority_score,
+              flagged:           r.flagged            ?? x.flagged ?? false,
+              dismissed:         r.dismissed          ?? x.dismissed,
+              removed_from_view: r.removed_from_view ?? x.removed_from_view,
+              priority: (() => {
+                const s = r.ai_priority_score ?? x.ai_priority_score
+                if (s == null) return x.priority
+                const isFlagged = r.flagged ?? x.flagged ?? false
+                const adj = isFlagged ? Math.max(0, s - 20) : s
+                return adj >= 80 ? 'CRITICAL' : adj >= 60 ? 'HIGH' : adj >= 40 ? 'MODERATE' : 'LOW'
+              })(),
+              source_channel:    r.source_channel    ?? x.source_channel,
+            } : x
           ))
+        }
+      )
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'sos_reports' },
+        payload => {
+          const r = payload.new
+          if (muni && r.municipality !== null && r.municipality !== muni) return
+          refresh()
         }
       )
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [])
-
-  const refresh = async () => {
-    setLoading(true)
-    try {
-      const url = muni
-        ? `/sos?assigned_to=me&municipality=${encodeURIComponent(muni)}`
-        : '/sos?assigned_to=me'
-      const res = await api.get(url)
-      setQueue(res)
-    } catch { setQueue([]) }
-    setLoading(false)
-  }
+  }, [muni, refresh])
 
   // Polling fallback — keeps the queue fresh every 30 s
   useEffect(() => {
-    const id = setInterval(() => refresh(), 30_000)
+    const id = setInterval(refresh, 30_000)
     return () => clearInterval(id)
-  }, [])
+  }, [refresh])
 
-  const activeQueue = queue.filter(r => r.rescue_status !== 'rescued')
+  const activeQueue = queue.filter(r => r.rescue_status !== 'rescued' && !r.dismissed && !r.removed_from_view)
   const filtered = filter === 'all'
     ? activeQueue
     : activeQueue.filter(r => r.priority === filter.toUpperCase())
@@ -126,11 +157,15 @@ export function VictimQueue() {
           ))}
         </AnimatePresence>
 
-        {filtered.length === 0 && (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-16">
+            <p className="text-slate-500 text-sm">Loading queue…</p>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <p className="text-slate-500 text-sm">No victims in this filter</p>
           </div>
-        )}
+        ) : null}
       </main>
 
       <MobileNavBar items={NAV} />

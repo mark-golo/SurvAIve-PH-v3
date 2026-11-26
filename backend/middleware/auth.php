@@ -23,11 +23,11 @@ function verifyJWT(string $token): ?array {
     $expected = base64UrlEncode(hash_hmac('sha256', "$header.$payload", JWT_SECRET, true));
     if (!hash_equals($expected, $sig)) return null;
     $data = json_decode(base64UrlDecode($payload), true);
-    if (!$data || $data['exp'] < time()) return null;
+    if (!$data || !isset($data['exp']) || $data['exp'] < time()) return null;
     return $data;
 }
 
-function requireAuth(?string $role = null): array {
+function requireAuth(string|array|null $role = null): array {
     $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
     if (!str_starts_with($header, 'Bearer ')) {
         errorResponse('Unauthorized', 401);
@@ -37,11 +37,15 @@ function requireAuth(?string $role = null): array {
     // Dev bypass — localhost only, sentinel token
     $fromLocal = in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true);
     if ($token === 'dev-admin' && $fromLocal) {
-        return ['id' => 1, 'role' => $role ?? 'admin', 'name' => 'Dev Admin'];
+        $firstRole = is_array($role) ? ($role[0] ?? 'admin') : ($role ?? 'admin');
+        return ['id' => 1, 'role' => $firstRole, 'name' => 'Dev Admin'];
     }
 
     $payload = verifyJWT($token);
     if (!$payload) errorResponse('Invalid or expired token', 401);
-    if ($role && $payload['role'] !== $role) errorResponse('Forbidden', 403);
+    if ($role !== null) {
+        $allowed = is_array($role) ? $role : [$role];
+        if (!in_array($payload['role'], $allowed, true)) errorResponse('Forbidden', 403);
+    }
     return $payload;
 }

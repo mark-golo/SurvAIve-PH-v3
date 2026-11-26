@@ -64,6 +64,8 @@ export const db = {
       retryCount:    0,
       lastAttemptAt: null,
       meshPacketId:  report.meshPacketId ?? report.mesh_packet_id ?? null,
+      smsStatus:     report.smsStatus ?? null,
+      source:        report.source    ?? null,
     })
   },
 
@@ -83,9 +85,11 @@ export const db = {
   // without requiring Supabase SELECT access (anon victims have no SELECT policy).
   async addConfirmedSOS(record) {
     const database = await getDB()
+    const { localId: _drop, ...rest } = record
     return database.add('sos_queue', {
-      ...record,
+      ...rest,
       synced:        true,
+      syncedAt:      Date.now(),
       createdAt:     Date.now(),
       retryCount:    0,
       lastAttemptAt: null,
@@ -99,14 +103,15 @@ export const db = {
     if (item) await database.put('sos_queue', { ...item, synced: true, serverId: serverId ?? null, syncedAt: Date.now() })
   },
 
-  async addRetryCount(localId) {
+  async addRetryCount(localId, failReason) {
     const database = await getDB()
     const item = await database.get('sos_queue', localId)
     if (item) {
       await database.put('sos_queue', {
         ...item,
-        retryCount:    (item.retryCount ?? 0) + 1,
-        lastAttemptAt: Date.now(),
+        retryCount:       (item.retryCount ?? 0) + 1,
+        lastAttemptAt:    Date.now(),
+        ...(failReason !== undefined ? { smsFailReason: failReason } : {}),
       })
     }
   },
@@ -137,11 +142,6 @@ export const db = {
     }
   },
 
-  // Returns all records that were submitted via SMS but not yet synced to the server.
-  async getSMSPendingQueue() {
-    const all = await (await getDB()).getAll('sos_queue')
-    return all.filter(r => r.smsStatus === 'submitted' && !r.synced)
-  },
 
   async purgeSyncedSOS(olderThanMs = 7 * 24 * 60 * 60 * 1000) {
     const database = await getDB()

@@ -60,7 +60,7 @@ class PhilSMSService
             return ['success' => false, 'provider_message_id' => null, 'error' => "cURL error: $curlErr"];
         }
 
-        $data = json_decode($raw ?? '', true);
+        $data = json_decode($raw ?: '', true);
 
         // PhilSMS returns 200/201 on success; response typically includes a message_id
         $providerMsgId = $data['message_id'] ?? $data['data']['message_id'] ?? null;
@@ -85,16 +85,18 @@ class PhilSMSService
      */
     public static function verifyWebhookSignature(string $rawBody, ?string $signature): bool
     {
-        if (!PHILSMS_WEBHOOK_SECRET || PHILSMS_WEBHOOK_SECRET === 'replace_with_webhook_secret') {
-            // Secret not configured — accept all inbound (for initial development only)
-            return true;
+        if (empty(PHILSMS_WEBHOOK_SECRET)) {
+            error_log('[PhilSMS] verifyWebhookSignature: PHILSMS_WEBHOOK_SECRET not configured — rejecting');
+            return false;
         }
         if (!$signature) {
             return false;
         }
-        // HMAC-SHA256 verification
+        // HMAC-SHA256 path (X-PhilSMS-Signature header)
         $expected = hash_hmac('sha256', $rawBody, PHILSMS_WEBHOOK_SECRET);
-        return hash_equals($expected, strtolower($signature));
+        if (hash_equals($expected, strtolower($signature))) return true;
+        // Plain shared-token path (X-PhilSMS-Token header)
+        return hash_equals(PHILSMS_WEBHOOK_SECRET, $signature);
     }
 
     // ── Number normalisation ────────────────────────────────────────────────
@@ -109,7 +111,13 @@ class PhilSMSService
         $digits = preg_replace('/\D/', '', $raw);
         if (!$digits) return null;
 
-        if (str_starts_with($digits, '63') && strlen($digits) === 12) {
+        // 0063XXXXXXXXXX (IDD trunk prefix used by older PSTN / feature phones)
+        if (str_starts_with($digits, '0063') && strlen($digits) === 14) {
+            $digits = '0' . substr($digits, 4);
+        } elseif (str_starts_with($digits, '630') && strlen($digits) === 13) {
+            // User typed +6309… (redundant 0 after country code) — strip it
+            $digits = '0' . substr($digits, 3);
+        } elseif (str_starts_with($digits, '63') && strlen($digits) === 12) {
             $digits = '0' . substr($digits, 2);
         } elseif (str_starts_with($digits, '9') && strlen($digits) === 10) {
             $digits = '0' . $digits;
@@ -154,6 +162,6 @@ class PhilSMSService
                   (report_id, channel, direction, provider_msg_id, sender_number, status)
                 VALUES (?, 'philsms', 'inbound', ?, ?, ?)
             ")->execute([$reportId, $providerMsgId, $senderNumber, $status]);
-        } catch (\Throwable) {}
+        } catch (\Throwable $e) { error_log('[PhilSMSService] logInbound failed: ' . $e->getMessage()); }
     }
 }

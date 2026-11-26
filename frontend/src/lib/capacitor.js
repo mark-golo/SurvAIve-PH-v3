@@ -10,12 +10,12 @@
 import { Geolocation } from '@capacitor/geolocation'
 import { Network }     from '@capacitor/network'
 
-// Sync flag — defaults to true (safe: assumes online until told otherwise).
-// Seeded accurately by initCapacitor() via Network.getStatus() on first call.
-// Do NOT read navigator.onLine here: in the Android WebView it can briefly report
-// false before the Capacitor Network plugin has initialised, which would incorrectly
-// block early SOS submissions.
-let _online = true
+// Sync flag — starts false (unknown) until Network.getStatus() resolves in initCapacitor().
+// Starting false is the safer emergency-first default: the SMS fallback button renders
+// immediately on mount and is hidden once internet connectivity is confirmed.
+// Do NOT read navigator.onLine here: in the Android WebView it can be unreliable before
+// the Capacitor Network plugin has initialised.
+let _online = false
 export function getNetworkOnline() { return _online }
 
 // ── Geolocation ───────────────────────────────────────────────────────────────
@@ -130,6 +130,10 @@ export function initCapacitor() {
         drainOfflineQueue().catch(() => {})
         drainPendingReviews().catch(() => {})
       }).catch(() => {})
+    } else {
+      import('./offlineQueue').then(({ drainSMSPendingQueue }) => {
+        drainSMSPendingQueue().catch(() => {}) // retry queued SMS records while offline
+      }).catch(() => {})
     }
   }).catch(() => {})
   Network.addListener('networkStatusChange', async ({ connected }) => {
@@ -140,6 +144,9 @@ export function initCapacitor() {
       import('./offlineQueue').then(({ drainOfflineQueue, drainPendingReviews }) => {
         drainOfflineQueue().catch(() => {})
         drainPendingReviews().catch(() => {})
+        // drainSMSPendingQueue is intentionally omitted here: it is called on startup
+        // when offline. Calling it again on reconnect would race with drainOfflineQueue
+        // and double-dispatch SMS-pending records.
       }).catch(() => {})
     }
   })

@@ -69,7 +69,7 @@ function localPhpUrl(path) {
   return `http://${host}/SurvAIve%20PH%20v3/backend/api/router.php?path=${path}`
 }
 
-export async function localFetch(path, opts = {}) {
+export async function localFetch(path, opts = {}, timeoutMs = 8000) {
   // Pass the local PHP JWT if available (stored after offline login)
   let token = null
   try {
@@ -81,7 +81,7 @@ export async function localFetch(path, opts = {}) {
   // fall through to the Supabase fallback without waiting for the OS TCP timeout
   // (which can be 30–75 s on Android when the host IP is unreachable).
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 8000)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const res = await fetch(localPhpUrl(path), {
       ...opts,
@@ -93,7 +93,14 @@ export async function localFetch(path, opts = {}) {
       },
     })
     clearTimeout(timer)
-    const json = await res.json().catch(() => ({}))
+    let json
+    if (res.ok) {
+      json = await res.json().catch(() => {
+        throw new Error(`Server returned non-JSON response (${res.status})`)
+      })
+    } else {
+      json = await res.json().catch(() => ({}))
+    }
     if (!res.ok) {
       const msg = json.error ?? `Local request failed (${res.status})`
       throw Object.assign(new Error(msg), { error: msg, status: res.status })
@@ -160,8 +167,8 @@ export function calcPriorityScore(body) {
   if      (age === 'senior') score += 20
   else if (age === 'child')  score += 15
 
-  const conds = typeof body.special_conditions === 'string'
-    ? body.special_conditions.split(',').filter(Boolean)
+  const conds = Array.isArray(body.special_conditions) ? body.special_conditions.filter(Boolean)
+    : typeof body.special_conditions === 'string' ? body.special_conditions.split(',').filter(Boolean)
     : []
   if (conds.includes('medical_emergency'))   score += 20
   if (conds.includes('fire'))                score += 15
@@ -216,6 +223,7 @@ export function normalizeSos(r) {
     priority,
     displayScore,
     time_ago,
+    source_channel: r.source_channel ?? 'internet',
     victims: undefined,
   }
 }
@@ -257,13 +265,13 @@ async function get(path) {
       if (!rpcErr && rpcData?.length) supaRows = rpcData.map(normalizeSos)
 
       // 2. Direct query by user_id — runs if RPC failed OR returned empty rows.
-      //    Uses user_id (PHP MySQL integer) which is reliably populated; returns SELECT *
-      //    so confirmed_by_name is always present for normalizeSos to derive 'acknowledged'.
-      if (!supaRows?.length) {
+      //    Uses the integer victims.id; only viable when the victim authenticated via
+      //    the email/password path (which sets authState.user.id to the integer row id).
+      if (!supaRows?.length && authState.user?.id) {
         const { data: directData, error: directErr } = await supabase
           .from('sos_reports')
           .select('*')
-          .eq('user_id', victimId)
+          .eq('user_id', authState.user.id)
           .order('created_at', { ascending: false })
           .limit(100)
         if (!directErr && directData?.length) supaRows = directData.map(normalizeSos)
@@ -272,17 +280,28 @@ async function get(path) {
       if (supaRows?.length) {
         // Merge PHP/MySQL data: PHP rescue_status overrides stale Supabase when Strategy 3
         // fallback wrote the status update to MySQL but Supabase wasn't yet updated.
+        // Use a 1 s timeout — this is best-effort; on Vercel XAMPP is unreachable.
         try {
-          const phpRows = await localFetch('sos/mine')
+          const phpRows = await localFetch('sos/mine', {}, 1000)
           if (Array.isArray(phpRows) && phpRows.length) {
-            const phpMap = new Map(phpRows.map(r => [String(r.id), r]))
+            // Keyed by mesh_packet_id — MySQL and Supabase use independent integer sequences,
+            // so bare integer id cannot be used for cross-store dedup or status lookup.
+            const phpMap = new Map(
+              phpRows.filter(r => r.mesh_packet_id).map(r => [r.mesh_packet_id, r])
+            )
+            const sbMeshIds = new Set(supaRows.map(r => r.mesh_packet_id).filter(Boolean))
             supaRows = supaRows.map(r => {
-              const ph = phpMap.get(String(r.id))
-              if (ph && ph.rescue_status && ph.rescue_status !== r.rescue_status) {
-                return normalizeSos({ ...r, rescue_status: ph.rescue_status, confirmed_at: ph.confirmed_at ?? r.confirmed_at })
+              const ph = r.mesh_packet_id ? phpMap.get(r.mesh_packet_id) : null
+              if (ph && ph.rescue_status && ph.rescue_status !== 'pending' && ph.rescue_status !== r.rescue_status) {
+                return { ...r, rescue_status: ph.rescue_status, confirmed_at: ph.confirmed_at ?? r.confirmed_at }
               }
               return r
             })
+            // Append rows that exist only in MySQL (not yet synced to Supabase)
+            const phpOnly = phpRows
+              .filter(r => !r.mesh_packet_id || !sbMeshIds.has(r.mesh_packet_id))
+              .map(normalizeSos)
+            if (phpOnly.length) supaRows = [...supaRows, ...phpOnly]
           }
         } catch { /* PHP unreachable (e.g. Vercel) — use Supabase data as-is */ }
         return supaRows
@@ -334,19 +353,22 @@ async function get(path) {
   // ── Offline: route all reads to local XAMPP PHP backend ─────────────────────
   if (!getNetworkOnline() && resource === 'sos') {
     const qs = params.toString()
-    const rows = await localFetch(`sos${qs ? '?' + qs : ''}`)
+    const pathStr = id ? `sos/${id}` : `sos${qs ? '?' + qs : ''}`
+    const rows = await localFetch(pathStr)
     return (Array.isArray(rows) ? rows : [rows]).map(normalizeSos)
   }
 
   if (!getNetworkOnline() && resource === 'evacuation_centers') {
     const qs = params.toString()
-    const rows = await localFetch(`evacuation_centers${qs ? '?' + qs : ''}`)
+    const pathStr = id ? `evacuation_centers/${id}` : `evacuation_centers${qs ? '?' + qs : ''}`
+    const rows = await localFetch(pathStr)
     return Array.isArray(rows) ? rows : (rows ? [rows] : [])
   }
 
   if (!getNetworkOnline() && resource === 'constituents') {
     const qs = params.toString()
-    const rows = await localFetch(`constituents${qs ? '?' + qs : ''}`)
+    const pathStr = id ? `constituents/${id}` : `constituents${qs ? '?' + qs : ''}`
+    const rows = await localFetch(pathStr)
     return (Array.isArray(rows) ? rows : (rows ? [rows] : [])).map(r => ({
       ...r,
       account_status: null, // profiles join not available offline
@@ -355,7 +377,8 @@ async function get(path) {
 
   if (!getNetworkOnline() && (resource === 'responders' || resource === 'admins' || resource === 'superadmins')) {
     const qs = params.toString()
-    const rows = await localFetch(`${resource}${qs ? '?' + qs : ''}`)
+    const pathStr = id ? `${resource}/${id}` : `${resource}${qs ? '?' + qs : ''}`
+    const rows = await localFetch(pathStr)
     return Array.isArray(rows) ? rows : (rows ? [rows] : [])
   }
 
@@ -384,8 +407,8 @@ async function get(path) {
       .order('created_at', { ascending: false })
       .limit(200)
     q = q.eq('removed_from_view', false)
-    if (muni)    q = q.or(`municipality.eq.${muni},municipality.is.null`)
-    if (prov)    q = q.or(`province.eq.${prov},province.is.null`)
+    if (muni)    q = q.or(`municipality.eq."${muni}",municipality.is.null`)
+    if (prov)    q = q.or(`province.eq."${prov}",province.is.null`)
     if (svcType) q = q.contains('service_type', [svcType])
     const { data, error } = await q
     if (error) sbThrow(error)
@@ -400,9 +423,14 @@ async function get(path) {
       mysqlRows = (Array.isArray(raw) ? raw : []).map(normalizeSos)
     } catch { /* not on XAMPP network — ignore */ }
 
-    // Merge: MySQL rows missing from Supabase (different ID namespaces, no collision)
-    const sbIds = new Set(sbRows.map(r => r.id))
-    return [...sbRows, ...mysqlRows.filter(r => !sbIds.has(r.id))]
+    // Merge: MySQL rows not already in Supabase, deduped by mesh_packet_id.
+    // MySQL and Supabase use independent auto-increment sequences so bare integer id
+    // cannot be used for dedup — the same integer may refer to different reports.
+    const sbMeshIds = new Set(sbRows.map(r => r.mesh_packet_id).filter(Boolean))
+    return [
+      ...sbRows,
+      ...mysqlRows.filter(r => !r.mesh_packet_id || !sbMeshIds.has(r.mesh_packet_id)),
+    ]
   }
 
   // ── Constituents (victims enriched with account status from profiles) ──
@@ -529,6 +557,8 @@ async function post(path, body = {}) {
         responder:       'responders',
         admin:           'admins',
         response_agency: 'response_agencies',
+        superadmin:      'superadmins',
+        victim:          'victims',
       }
       const staffTable = staffTableMap[userInfo.role]
       if (staffTable) {
@@ -821,6 +851,7 @@ async function post(path, body = {}) {
         is_verified:         isVerified,
         trust_score:         trustScore,
         mesh_packet_id:      body.mesh_packet_id      ?? null,
+        source_channel:      body.source === 'sms' ? 'sms' : 'internet',
         service_type:        Array.isArray(body.service_type)
                                ? body.service_type
                                : (body.service_type ? [body.service_type] : null),
@@ -1064,10 +1095,11 @@ async function put(path, body = {}) {
     if (body.confirmed_by_role !== undefined)          updatePayload.confirmed_by_role = body.confirmed_by_role
     const supaPayload = { ...updatePayload }
     const [supaResult, phpResult] = await Promise.allSettled([
-      supabase.from('sos_reports').update(supaPayload).eq('id', Number(id)),
+      supabase.from('sos_reports').update(supaPayload).eq('id', Number(id)).select('id'),
       localFetch(`sos/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
     ])
     const supaOk = supaResult.status === 'fulfilled' && !supaResult.value?.error
+                  && (supaResult.value?.data?.length ?? 0) > 0
     const phpOk  = phpResult.status === 'fulfilled'
     if (supaOk || phpOk) return { id: Number(id) }
     // Both parallel writes failed — Supabase RPC as last resort
@@ -1155,7 +1187,7 @@ async function del(path) {
     return {}
   }
 
-  // Agency delete: remove from Supabase + profiles row
+  // Agency delete: remove from Supabase + profiles row + XAMPP MySQL
   if (resource === 'agencies') {
     const { data: staffRow } = await supabase
       .from('response_agencies').select('contact_number').eq('id', id).maybeSingle()
@@ -1165,6 +1197,7 @@ async function del(path) {
       supabase.from('profiles').delete()
         .eq('contact_number', staffRow.contact_number).catch(() => {})
     }
+    localFetch(`agencies/${id}`, { method: 'DELETE' }).catch(() => {})
     return {}
   }
 

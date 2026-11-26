@@ -35,8 +35,16 @@ export function VictimTable() {
         status:         r.status,
         barangay:       r.barangay,
         timestamp:      r.time_ago,
-        score:          r.flagged ? Math.max(0, (r.ai_priority_score ?? 50) - 20) : (r.ai_priority_score ?? 50),
-        priority:       r.priority,
+        score: (() => {
+          const raw = r.ai_priority_score ?? 50
+          return r.flagged ? Math.max(0, raw - 20) : raw
+        })(),
+        priority: (() => {
+          const raw = r.ai_priority_score ?? 50
+          const adj = r.flagged ? Math.max(0, raw - 20) : raw
+          return adj >= 80 ? 'CRITICAL' : adj >= 60 ? 'HIGH' : adj >= 40 ? 'MODERATE' : 'LOW'
+        })(),
+        ai_priority_score: r.ai_priority_score ?? 50,
         verified:       !!r.is_verified,
         rescue:         r.rescue_status,
         lat:            r.lat ?? null,
@@ -48,8 +56,10 @@ export function VictimTable() {
         confirmed_by_name: r.confirmed_by_name ?? null,
         confirmed_at:      r.confirmed_at ?? null,
         confirmed_by_role: r.confirmed_by_role ?? null,
+        source_channel:    r.source_channel ?? 'internet',
+        smsSenderNumber:   r.sms_sender_number ?? null,
       }))))
-      .catch(() => setData([]))
+      .catch(err => console.warn('[VictimTable] load failed:', err?.message))
       .finally(() => setLoading(false))
   }, [muni])
 
@@ -60,12 +70,33 @@ export function VictimTable() {
         { event: 'UPDATE', schema: 'public', table: 'sos_reports' },
         payload => {
           const r = payload.new
-          if (muni && r.municipality !== muni) return
+          if (muni && r.municipality !== null && r.municipality !== muni) return
           setData(d => d.map(x => x.id === r.id
-            ? { ...x, rescue: r.rescue_status,
-                confirmed_by_name: r.confirmed_by_name ?? x.confirmed_by_name,
-                confirmed_at:      r.confirmed_at      ?? x.confirmed_at,
-                confirmed_by_role: r.confirmed_by_role ?? x.confirmed_by_role }
+            ? { ...x, rescue: r.rescue_status ?? x.rescue,
+                ai_priority_score: r.ai_priority_score ?? x.ai_priority_score,
+                score: (() => {
+                  const raw = r.ai_priority_score ?? x.ai_priority_score
+                  if (raw == null) return x.score
+                  const isFlagged = r.flagged ?? x.flagged ?? false
+                  return isFlagged ? Math.max(0, raw - 20) : raw
+                })(),
+                priority: (() => {
+                  const raw = r.ai_priority_score ?? x.ai_priority_score
+                  if (raw == null) return x.priority
+                  const isFlagged = r.flagged ?? x.flagged ?? false
+                  const s = isFlagged ? Math.max(0, raw - 20) : raw
+                  return s >= 80 ? 'CRITICAL' : s >= 60 ? 'HIGH' : s >= 40 ? 'MODERATE' : 'LOW'
+                })(),
+                status:             r.status            ?? x.status,
+                flagged:           r.flagged            ?? x.flagged,
+                dismissed:          r.dismissed         ?? x.dismissed,
+                removed_from_view:  r.removed_from_view ?? x.removed_from_view,
+                verified:           !!(r.is_verified    ?? x.verified),
+                confirmed_by_name: r.confirmed_by_name  ?? x.confirmed_by_name,
+                confirmed_at:      r.confirmed_at       ?? x.confirmed_at,
+                confirmed_by_role: r.confirmed_by_role  ?? x.confirmed_by_role,
+                source_channel:    r.source_channel     ?? x.source_channel,
+                smsSenderNumber:   r.sms_sender_number  ?? x.smsSenderNumber }
             : x
           ))
         }
@@ -80,7 +111,7 @@ export function VictimTable() {
       )
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [])
+  }, [muni, load])
 
   // Bridge: sync immediately when AdminLayout's Realtime INSERT fires
   useEffect(() => {
@@ -93,7 +124,7 @@ export function VictimTable() {
   useEffect(() => {
     const id = setInterval(() => load(), 30_000)
     return () => clearInterval(id)
-  }, [])
+  }, [load])
 
   // Initial load — and re-load if municipality changes
   useEffect(() => { load() }, [load])
@@ -115,12 +146,16 @@ export function VictimTable() {
   const displayed = data
     .filter(r => {
       if (barangayFilter !== 'all' && r.barangay !== barangayFilter) return false
-      if (search) return r.name.toLowerCase().includes(search.toLowerCase()) || r.barangay.toLowerCase().includes(search.toLowerCase())
-      if (filter === 'dismissed') return r.dismissed
-      if (filter === 'critical') return !r.dismissed && r.priority === 'CRITICAL'
-      if (filter === 'verified') return !r.dismissed && r.verified
-      if (filter === 'guest')    return !r.dismissed && !r.verified
-      return !r.dismissed   // default: hide dismissed rows from all active views
+      const passFilter = (() => {
+        if (filter === 'dismissed') return r.dismissed && !r.removed_from_view
+        if (filter === 'critical')  return !r.dismissed && !r.removed_from_view && r.priority === 'CRITICAL'
+        if (filter === 'verified')  return !r.dismissed && !r.removed_from_view && r.verified
+        if (filter === 'guest')     return !r.dismissed && !r.removed_from_view && !r.verified
+        return !r.dismissed && !r.removed_from_view
+      })()
+      return search
+        ? passFilter && (r.name.toLowerCase().includes(search.toLowerCase()) || (r.barangay ?? '').toLowerCase().includes(search.toLowerCase()))
+        : passFilter
     })
     .sort((a, b) => {
       if (sortBy === 'score')    return b.score - a.score
@@ -152,19 +187,42 @@ export function VictimTable() {
   }
 
   const flagSuspicious = (id) => {
-    setData(d => d.map(r => r.id === id ? { ...r, flagged: true, score: Math.max(0, r.score - 20) } : r))
-    api.put(`/sos/${id}`, { flagged: true }).catch(console.error)
+    setRescueError(null)
+    const original = data.find(r => r.id === id)
+    setData(d => d.map(r => {
+      if (r.id !== id) return r
+      const newScore    = r.flagged ? r.score : Math.max(0, r.score - 20)
+      const newPriority = newScore >= 80 ? 'CRITICAL' : newScore >= 60 ? 'HIGH' : newScore >= 40 ? 'MODERATE' : 'LOW'
+      return { ...r, flagged: true, score: newScore, priority: newPriority }
+    }))
+    api.put(`/sos/${id}`, { flagged: true }).catch(err => {
+      console.error('[VictimTable] flagSuspicious failed:', err?.message)
+      if (original) setData(d => d.map(r => r.id === id ? original : r))
+      setRescueError('Failed to flag report. Check your connection.')
+    })
   }
 
   const dismissSOS = (id) => {
+    setRescueError(null)
+    const original = data.find(r => r.id === id)
     setData(d => d.map(r => r.id === id ? { ...r, dismissed: true } : r))
-    api.put(`/sos/${id}`, { dismissed: true }).catch(() => {})
+    api.put(`/sos/${id}`, { dismissed: true }).catch(err => {
+      console.error('[VictimTable] dismissSOS failed:', err?.message)
+      if (original) setData(d => d.map(r => r.id === id ? original : r))
+      setRescueError('Failed to dismiss. Check your connection.')
+    })
   }
 
   const removeFromUI = (id) => {
+    setRescueError(null)
+    const removed = data.find(r => r.id === id)
     setData(d => d.filter(r => r.id !== id))
     setConfirmRemoveId(null)
-    api.put(`/sos/${id}`, { removed_from_view: true }).catch(console.error)
+    api.put(`/sos/${id}`, { removed_from_view: true }).catch(err => {
+      console.error('[VictimTable] removeFromUI failed:', err?.message)
+      if (removed) setData(d => [...d, removed])
+      setRescueError('Failed to remove. Check your connection.')
+    })
   }
 
   // Navigate to Command Center and fly to this victim's pin
@@ -255,10 +313,21 @@ export function VictimTable() {
                       }`}>{r.score}</span>
                     </td>
                     <td className="px-4 py-3">
-                      {r.verified
-                        ? <span className="text-[11px] text-[#00d4ff] font-medium">Verified</span>
-                        : <span className="text-[11px] text-[#f59e0b] font-medium">Guest</span>
-                      }
+                      <div className="flex flex-col gap-1">
+                        {r.verified
+                          ? <span className="text-[11px] text-[#00d4ff] font-medium">Verified</span>
+                          : <span className="text-[11px] text-[#f59e0b] font-medium">Guest</span>
+                        }
+                        {r.source_channel === 'sms' && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold w-fit"
+                            style={{ background: 'rgba(245,158,11,0.15)', color: '#d97706' }}>
+                            📱 SMS
+                          </span>
+                        )}
+                        {r.source_channel === 'sms' && r.smsSenderNumber && (
+                          <span className="text-[9px] text-slate-400 font-mono">{r.smsSenderNumber}</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${
@@ -266,7 +335,7 @@ export function VictimTable() {
                         r.rescue === 'en_route'     ? 'bg-[rgba(0,212,255,0.1)] border-[rgba(0,212,255,0.3)] text-[#00d4ff]' :
                         r.rescue === 'acknowledged' ? 'bg-[rgba(245,158,11,0.1)] border-[rgba(245,158,11,0.3)] text-[#f59e0b]' :
                         'bg-[rgba(107,114,128,0.1)] border-[rgba(107,114,128,0.3)] text-[#9ca3af]'
-                      }`}>{RESCUE_LABEL[r.rescue]}</span>
+                      }`}>{RESCUE_LABEL[r.rescue] ?? '—'}</span>
                     </td>
                     <td className="px-4 py-3">
                       {r.confirmed_by_name

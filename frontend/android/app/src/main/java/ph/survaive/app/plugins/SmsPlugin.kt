@@ -17,6 +17,8 @@ import com.getcapacitor.PermissionState
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
 import com.getcapacitor.annotation.PermissionCallback
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Native Android SMS plugin for the SurvAIve PH emergency fallback channel.
@@ -65,12 +67,15 @@ class SmsPlugin : Plugin() {
 
     private fun dispatchSMS(call: PluginCall, reportId: String, recipient: String, message: String) {
         try {
-            val sentAction = "ph.survaive.app.SMS_SENT.${reportId.take(16)}"
+            // Use a per-invocation UUID so concurrent sends (retry + original) never share
+            // the same action string / PendingIntent and resolve the wrong JS promise.
+            val callId     = java.util.UUID.randomUUID().toString().replace("-", "").take(16)
+            val sentAction = "ph.survaive.app.SMS_SENT.$callId"
 
             val piFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
             } else {
-                PendingIntent.FLAG_UPDATE_CURRENT
+                PendingIntent.FLAG_ONE_SHOT
             }
 
             val sentPI = PendingIntent.getBroadcast(
@@ -79,7 +84,7 @@ class SmsPlugin : Plugin() {
 
             val sentReceiver = object : BroadcastReceiver() {
                 override fun onReceive(ctx: Context, intent: Intent) {
-                    try { context.unregisterReceiver(this) } catch (_: Exception) {}
+                    try { context.applicationContext.unregisterReceiver(this) } catch (_: Exception) {}
                     val result = JSObject()
                     result.put("reportId", reportId)
                     when (resultCode) {
@@ -96,10 +101,10 @@ class SmsPlugin : Plugin() {
             }
 
             if (Build.VERSION.SDK_INT >= 33) {
-                context.registerReceiver(sentReceiver, IntentFilter(sentAction), Context.RECEIVER_NOT_EXPORTED)
+                context.applicationContext.registerReceiver(sentReceiver, IntentFilter(sentAction), Context.RECEIVER_NOT_EXPORTED)
             } else {
                 @Suppress("UnspecifiedRegisterReceiverFlag")
-                context.registerReceiver(sentReceiver, IntentFilter(sentAction))
+                context.applicationContext.registerReceiver(sentReceiver, IntentFilter(sentAction))
             }
 
             val smsManager: SmsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -107,16 +112,60 @@ class SmsPlugin : Plugin() {
             } else {
                 @Suppress("DEPRECATION")
                 SmsManager.getDefault()
+            } ?: run {
+                // SmsManager.getDefault() can return null on pre-API-31 dual-SIM devices
+                // when no default SMS SIM is configured.
+                try { context.applicationContext.unregisterReceiver(sentReceiver) } catch (_: Exception) {}
+                call.reject("SMS_NO_SIM", "No SIM card or default SMS app is available")
+                return
             }
 
-            if (message.length > 160) {
-                val parts = smsManager.divideMessage(message)
-                val sentIntents = ArrayList<PendingIntent?>()
-                sentIntents.add(sentPI)
-                repeat(parts.size - 1) { sentIntents.add(null) }
-                smsManager.sendMultipartTextMessage(recipient, null, parts, sentIntents, null)
-            } else {
-                smsManager.sendTextMessage(recipient, null, message, sentPI, null)
+            try {
+                if (message.length > 160) {
+                    // Unregister outer sentReceiver — multi-part uses per-segment receivers
+                    try { context.applicationContext.unregisterReceiver(sentReceiver) } catch (_: Exception) {}
+
+                    val parts     = smsManager.divideMessage(message)
+                    val remaining = AtomicInteger(parts.size)
+                    val resolved  = AtomicBoolean(false)
+                    val sentIntents = ArrayList<PendingIntent?>()
+
+                    parts.forEachIndexed { i, _ ->
+                        val partAction = "$sentAction.part$i"
+                        val partPI = PendingIntent.getBroadcast(context, i, Intent(partAction), piFlags)
+                        val partReceiver = object : BroadcastReceiver() {
+                            override fun onReceive(ctx: Context, intent: Intent) {
+                                try { context.applicationContext.unregisterReceiver(this) } catch (_: Exception) {}
+                                if (resultCode != Activity.RESULT_OK) {
+                                    if (resolved.compareAndSet(false, true)) {
+                                        call.reject("SMS_SEND_FAILED", "Part $i failed with code: $resultCode")
+                                    }
+                                    return
+                                }
+                                if (remaining.decrementAndGet() == 0 && resolved.compareAndSet(false, true)) {
+                                    val result = JSObject()
+                                    result.put("reportId", reportId)
+                                    result.put("status", "submitted")
+                                    call.resolve(result)
+                                }
+                            }
+                        }
+                        if (Build.VERSION.SDK_INT >= 33) {
+                            context.applicationContext.registerReceiver(partReceiver, IntentFilter(partAction), Context.RECEIVER_NOT_EXPORTED)
+                        } else {
+                            @Suppress("UnspecifiedRegisterReceiverFlag")
+                            context.applicationContext.registerReceiver(partReceiver, IntentFilter(partAction))
+                        }
+                        sentIntents.add(partPI)
+                    }
+                    smsManager.sendMultipartTextMessage(recipient, null, parts, sentIntents, null)
+                } else {
+                    smsManager.sendTextMessage(recipient, null, message, sentPI, null)
+                }
+            } catch (e: Exception) {
+                // Send failed before the BroadcastReceiver could be triggered — unregister to prevent leak.
+                try { context.applicationContext.unregisterReceiver(sentReceiver) } catch (_: Exception) {}
+                call.reject("SMS_EXCEPTION", e.message ?: "Unexpected error sending SMS")
             }
 
         } catch (e: Exception) {

@@ -65,6 +65,7 @@ export function SOSReport() {
   const [conditions,  setConditions]  = useState(aiPrefill?.conditions ?? [])
   const [lat,  setLat]  = useState(user?.lat ?? null)
   const [lng,  setLng]  = useState(user?.lng ?? null)
+  const [locationStatus, setLocationStatus] = useState('acquiring') // 'acquiring' | 'found' | 'unavailable'
   const [loading,       setLoading]       = useState(false)
   const [submitted,     setSubmitted]     = useState(false)
   const [sosError,      setSosError]      = useState(null)
@@ -81,12 +82,13 @@ export function SOSReport() {
   const [interimText,    setInterimText]    = useState('')
   const [voiceDetected,  setVoiceDetected]  = useState([])
   const recognitionRef = useRef(null)
+  const submittingRef  = useRef(false)
 
   // ── Effects ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     navigator.geolocation?.getCurrentPosition(
-      (pos) => { setLat(pos.coords.latitude); setLng(pos.coords.longitude) },
-      () => {}
+      (pos) => { setLat(pos.coords.latitude); setLng(pos.coords.longitude); setLocationStatus('found') },
+      () => { setLocationStatus('unavailable') }
     )
     const handlePromise = onNetworkChange(connected => setOffline(!connected))
     setVoiceSupported(!!(window.SpeechRecognition || window.webkitSpeechRecognition))
@@ -188,7 +190,7 @@ export function SOSReport() {
   const buildSMSMessage = ({ meshPacketId, service_type, status, barangay, municipality, lat, lng, notes }) => {
     const id   = (meshPacketId ?? '').slice(0, 8).toUpperCase()
     const type = Array.isArray(service_type) && service_type.length > 0
-      ? service_type[0].toUpperCase()
+      ? service_type.map(s => s?.toUpperCase()).filter(Boolean).join('+')
       : 'GENERAL'
     const loc  = [barangay, municipality].filter(Boolean).join(', ') || 'UNKNOWN'
     const lines = [
@@ -206,11 +208,25 @@ export function SOSReport() {
   // ── Submit ────────────────────────────────────────────────────────────────────
   // useSMS=true: attempt native Android SMS after queuing to IndexedDB
   const submit = async (useSMS = false) => {
+    if (submittingRef.current) return
+    submittingRef.current = true
+    setSosError(null)
     const svcArr = Array.isArray(form.service_type) ? form.service_type : [form.service_type]
-    if (svcArr.length === 0) return
+    if (svcArr.length === 0) {
+      setSosError('Please select at least one emergency service.')
+      submittingRef.current = false
+      return
+    }
+    if (!form.people_count || !Number.isInteger(Number(form.people_count))
+        || Number(form.people_count) < 1 || Number(form.people_count) > 99) {
+      setSosError('Number of people affected must be a whole number between 1 and 99.')
+      submittingRef.current = false
+      return
+    }
     setLoading(true)
     const payload = {
       ...form,
+      service_type:        svcArr,
       lat,
       lng,
       victim_age_group:    ageGroup,
@@ -226,43 +242,55 @@ export function SOSReport() {
       const b = new Uint8Array(16)
       crypto.getRandomValues(b)
       b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80
-      return [...b].map((x, i) => ([3,5,7,9].includes(i)?'-':'') + x.toString(16).padStart(2,'0')).join('')
+      return [...b].map((x, i) => ([4,6,8,10].includes(i)?'-':'') + x.toString(16).padStart(2,'0')).join('')
     })()
     payload.mesh_packet_id = realPacketId
 
     if (offline || !getNetworkOnline()) {
-      // OFFLINE — always persist to the local queue first so the report is never lost.
-      const queuePayload = {
-        ...payload,
-        meshPacketId: realPacketId,
-        isGuest,
-        timestamp:    Date.now(),
-        smsStatus:    useSMS ? 'pending' : null,
-        source:       useSMS ? 'sms'     : 'queue_sync',
-      }
-      const localId = await db.queueSOS(queuePayload)
-
-      // If the user chose SMS and the device has native SMS capability, send it now.
-      if (useSMS && isSMSCapable()) {
-        try {
-          await sendEmergencySMS({
-            reportId:  realPacketId,
-            recipient: PHILSMS_RECEIVING_NUMBER,
-            message:   buildSMSMessage({ ...payload, meshPacketId: realPacketId }),
-          })
-          await db.markSMSSent(localId)
-          setSmsDelivery('submitted')
-        } catch (smsErr) {
-          console.warn('[SOSReport] SMS send failed:', smsErr?.message)
-          await db.markSMSFailed(localId, smsErr?.message ?? 'SMS send failed')
-          setSmsDelivery('failed')
+      try {
+        const queuePayload = {
+          ...payload,
+          meshPacketId: realPacketId,
+          isGuest,
+          timestamp:    Date.now(),
+          smsStatus:    useSMS ? 'pending' : null,
+          source:       useSMS ? 'sms'     : 'queue_sync',
         }
-      } else {
-        setSmsDelivery('queued')
-      }
+        const localId = await db.queueSOS(queuePayload)
 
-      setSubmitted(true)
+        // If the user chose SMS and the device has native SMS capability, send it now.
+        if (useSMS && isSMSCapable()) {
+          try {
+            await sendEmergencySMS({
+              reportId:  realPacketId,
+              recipient: PHILSMS_RECEIVING_NUMBER,
+              message:   buildSMSMessage({ ...payload, meshPacketId: realPacketId }),
+            })
+            await db.markSMSSent(localId)
+            setSmsDelivery('submitted')
+          } catch (smsErr) {
+            console.warn('[SOSReport] SMS send failed:', smsErr?.message)
+            await db.markSMSFailed(localId, smsErr?.message ?? 'SMS send failed').catch(() => {})
+            setSmsDelivery('failed')
+          }
+        } else if (useSMS) {
+          // User chose SMS but device cannot send it (no Android native capability)
+          await db.markSMSFailed(localId, 'SMS not available on this device').catch(() => {})
+          setSmsDelivery('failed')
+        } else {
+          setSmsDelivery('queued')
+        }
+
+        setSubmitted(true)
+      } catch (offlineErr) {
+        console.error('[SOSReport] offline queue failed:', offlineErr?.message)
+        setSosError('Could not save your report. Storage may be full — please free space and retry.')
+        submittingRef.current = false
+        setLoading(false)
+        return
+      }
       setLoading(false)
+      submittingRef.current = false
       return
     }
 
@@ -270,7 +298,7 @@ export function SOSReport() {
     try {
       const res = await api.post('/sos', payload)
       setPriorityScore(res.ai_priority_score)
-      if (res.id) setNewSosId(res.id)
+      if (res.id != null) setNewSosId(res.id)
       // Cache locally so SOSCenter can show it immediately without Supabase SELECT access.
       db.addConfirmedSOS({
         ...payload,
@@ -284,12 +312,21 @@ export function SOSReport() {
       setSubmitted(true)
     } catch (err) {
       console.error('[SOSReport] insert failed:', err?.message ?? String(err))
-      // Internet delivery failed — fall back to the offline queue
-      await db.queueSOS({ ...payload, meshPacketId: realPacketId, isGuest, timestamp: Date.now() })
-      setSosError('Server unreachable — saved on this device. It will send automatically when connection returns.')
-      setSubmitted(true)
+      // Internet delivery failed — fall back to the offline queue.
+      // Wrapped in its own try/catch so a queueSOS failure doesn't lock the form.
+      try {
+        await db.queueSOS({ ...payload, meshPacketId: realPacketId, isGuest, timestamp: Date.now(), smsStatus: null, source: 'queue_sync' })
+        setSosError('Server unreachable — saved on this device. It will send automatically when connection returns.')
+        setSubmitted(true)
+      } catch {
+        setSosError('Could not save report — please retry.')
+        submittingRef.current = false
+        setLoading(false)
+        return
+      }
     }
     setLoading(false)
+    submittingRef.current = false
   }
 
   // ── Success screen ────────────────────────────────────────────────────────────
@@ -317,10 +354,14 @@ export function SOSReport() {
                   A responder will be assigned shortly. Stay in place if possible.
                 </p>
               </div>
-              {priorityScore && (
+              {priorityScore != null && (
                 <div className="glass rounded-xl p-3">
                   <p className="text-xs text-slate-500">AI Priority Score</p>
-                  <p className="text-3xl font-black text-[#ef4444]">{priorityScore}</p>
+                  <p className={`text-3xl font-black ${
+                    priorityScore >= 80 ? 'text-[#ef4444]' :
+                    priorityScore >= 60 ? 'text-[#f97316]' :
+                    priorityScore >= 40 ? 'text-[#f59e0b]' : 'text-[#22c55e]'
+                  }`}>{priorityScore}</p>
                   <p className="text-xs text-slate-400">
                     {priorityScore >= 80 ? 'CRITICAL – Rescue teams alerted' :
                      priorityScore >= 60 ? 'HIGH – Added to priority queue' :
@@ -575,9 +616,13 @@ export function SOSReport() {
               onChange={(e) => f('people_count')(+e.target.value)}
             />
             <div className="flex items-center gap-2 px-3 py-2.5 glass rounded-xl border border-[rgba(255,255,255,0.08)]">
-              <MapPin size={14} className={lat ? 'text-[#22c55e]' : 'text-slate-500'} />
+              <MapPin size={14} className={lat ? 'text-[#22c55e]' : locationStatus === 'unavailable' ? 'text-[#ef4444]' : 'text-slate-500'} />
               <p className="text-xs text-slate-400">
-                {lat ? `GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}` : 'Getting GPS location…'}
+                {lat && lng
+                  ? `GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`
+                  : locationStatus === 'unavailable'
+                    ? 'Location unavailable — coordinates will not be included'
+                    : 'Getting GPS location…'}
               </p>
             </div>
             {form.barangay && (

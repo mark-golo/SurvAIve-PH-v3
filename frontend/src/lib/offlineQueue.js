@@ -6,7 +6,8 @@ import { supabase } from './supabase'
 import { sendEmergencySMS, isSMSCapable } from './smsPlugin'
 import { PHILSMS_RECEIVING_NUMBER } from './smsConfig'
 
-const MAX_RETRY_COUNT = 5
+const MAX_RETRY_COUNT     = 5
+const MAX_SMS_RETRY_COUNT = 3  // lower cap for SMS — each retry costs real money
 
 export async function drainOfflineQueue() {
   try {
@@ -20,6 +21,12 @@ export async function drainOfflineQueue() {
         console.warn('[offlineQueue] skipping localId', item.localId, '— exceeded max retries')
         continue
       }
+      // Records already dispatched via SMS are handled by the PhilSMS webhook.
+      // Attempting an internet POST would just hit the UNIQUE mesh_packet_id constraint.
+      if (item.smsStatus === 'submitted') {
+        try { await db.markSOSSynced(item.localId, null) } catch {}
+        continue
+      }
       try {
         const serverResponse = await api.post('/sos', {
           ...item,
@@ -31,8 +38,18 @@ export async function drainOfflineQueue() {
         console.log('[offlineQueue] drained localId', item.localId)
         drained++
       } catch (e) {
-        console.warn('[offlineQueue] drain failed for localId', item.localId, e?.message)
-        try { await db.addRetryCount(item.localId) } catch {}
+        // A 409 Conflict means the backend already has this record (e.g. SMS webhook beat us).
+        // Treat it as a successful sync rather than a retry-worthy failure.
+        if (e?.status === 409 || String(e?.message).includes('409')) {
+          try { await db.markSOSSynced(item.localId, null) } catch {}
+          drained++
+        } else {
+          console.warn('[offlineQueue] drain failed for localId', item.localId, e?.message)
+          // Don't consume SMS retry budget for internet failures on SMS-sourced records
+          if (item.source !== 'sms') {
+            try { await db.addRetryCount(item.localId, e?.message ?? 'unknown') } catch {}
+          }
+        }
       }
     }
     if (drained > 0) {
@@ -51,16 +68,29 @@ export async function drainSMSPendingQueue() {
   if (!isSMSCapable()) return
   try {
     const all = await db.getPendingSOS()
-    const smsUnsent = all.filter(r => r.smsStatus === 'pending' && r.source === 'sms')
+    const seen = new Set()
+    const smsUnsent = all.filter(r => {
+      // Accept smsStatus 'pending' (explicit first-attempt) or null (no explicit status set)
+      if ((r.smsStatus !== 'pending' && r.smsStatus != null) || r.source !== 'sms') return false
+      const key = r.meshPacketId ?? r.mesh_packet_id ?? String(r.localId)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
     if (!smsUnsent.length) return
     console.log('[offlineQueue] retrying SMS for', smsUnsent.length, 'queued record(s)')
     for (const item of smsUnsent) {
+      if ((item.retryCount ?? 0) >= MAX_SMS_RETRY_COUNT) {
+        try { await db.markSMSFailed(item.localId, 'max_retries_exceeded') } catch {}
+        console.warn('[offlineQueue] SMS localId', item.localId, '— exceeded max retries, marking failed')
+        continue
+      }
       try {
         const svcArr = Array.isArray(item.service_type) ? item.service_type : [item.service_type ?? 'mdrrmo']
         const lines = [
           'SURVAIvePH SOS',
-          `ID: SVP-${(item.meshPacketId ?? item.mesh_packet_id ?? '').slice(0, 8).toUpperCase()}`,
-          `TYPE: ${svcArr[0]?.toUpperCase() ?? 'GENERAL'}`,
+          `ID: SVP-${((item.meshPacketId ?? item.mesh_packet_id ?? '') || String(item.localId).padStart(8, '0')).slice(0, 8).toUpperCase()}`,
+          `TYPE: ${svcArr.map(s => s?.toUpperCase()).filter(Boolean).join('+') || 'GENERAL'}`,
           `STATUS: ${(item.status ?? 'unknown').toUpperCase()}`,
           `LOC: ${[item.barangay, item.municipality].filter(Boolean).join(', ') || 'UNKNOWN'}`,
         ]
@@ -76,6 +106,7 @@ export async function drainSMSPendingQueue() {
         console.log('[offlineQueue] SMS retry succeeded for localId', item.localId)
       } catch (e) {
         console.warn('[offlineQueue] SMS retry failed for localId', item.localId, e?.message)
+        try { await db.addRetryCount(item.localId, e?.message ?? 'unknown') } catch {}
       }
     }
   } catch (e) {
