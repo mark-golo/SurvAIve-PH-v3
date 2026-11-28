@@ -76,7 +76,6 @@ export function SOSReport() {
   // 'submitted' | 'failed' | 'queued' | null
   const [smsDelivery,     setSmsDelivery]     = useState(null)
   const [smsFailReason,   setSmsFailReason]   = useState(null)
-  const [smsFallbackParams, setSmsFallbackParams] = useState(null)
 
   // ── Voice state ──────────────────────────────────────────────────────────────
   const [listening,      setListening]      = useState(false)
@@ -188,22 +187,6 @@ export function SOSReport() {
 
   const stopVoice = () => { recognitionRef.current?.stop(); setListening(false) }
 
-  // ── Intent fallback — called from PERMISSION_DENIED error screen ─────────────
-  const openIntentFallback = async () => {
-    if (!smsFallbackParams) return
-    try {
-      await openSMSApp({
-        reportId:  smsFallbackParams.reportId,
-        recipient: smsFallbackParams.recipient,
-        message:   smsFallbackParams.message,
-      })
-      await db.markSMSLaunched(smsFallbackParams.localId)
-      setSmsDelivery('launched')
-    } catch {
-      // Intent also failed — stay on failed screen
-    }
-  }
-
   // ── SMS message builder ───────────────────────────────────────────────────────
   const buildSMSMessage = ({ meshPacketId, service_type, status, barangay, municipality, lat, lng, notes }) => {
     const id   = (meshPacketId ?? '').slice(0, 8).toUpperCase()
@@ -294,12 +277,21 @@ export function SOSReport() {
             }
           } catch (smsErr) {
             console.warn('[SOSReport] SMS send failed:', smsErr?.message)
-            await db.markSMSFailed(localId, smsErr?.message ?? 'SMS send failed').catch(() => {})
-            setSmsFailReason(smsErr?.message ?? 'unknown')
-            if (String(smsErr?.message).includes('PERMISSION_DENIED')) {
-              setSmsFallbackParams({ reportId: realPacketId, recipient: PHILSMS_RECEIVING_NUMBER, message: smsMessage, localId })
+            if (String(smsErr?.message).includes('PERMISSION_DENIED') && isSMSCapable()) {
+              try {
+                await openSMSApp({ reportId: realPacketId, recipient: PHILSMS_RECEIVING_NUMBER, message: smsMessage })
+                await db.markSMSLaunched(localId)
+                setSmsDelivery('launched')
+              } catch {
+                await db.markSMSFailed(localId, smsErr?.message ?? 'SMS send failed').catch(() => {})
+                setSmsFailReason(smsErr?.message ?? 'unknown')
+                setSmsDelivery('failed')
+              }
+            } else {
+              await db.markSMSFailed(localId, smsErr?.message ?? 'SMS send failed').catch(() => {})
+              setSmsFailReason(smsErr?.message ?? 'unknown')
+              setSmsDelivery('failed')
             }
-            setSmsDelivery('failed')
           }
         } else if (useSMS) {
           // User chose SMS but device cannot send it (no Android native capability)
@@ -472,14 +464,13 @@ export function SOSReport() {
               <h2 className="text-xl font-black text-white">SMS Failed — Saved</h2>
               {(() => {
                 const r = smsFailReason ?? ''
-                let body, hint, showIntentFallback = false
+                let body, hint
                 if (r === 'NO_CAPABILITY') {
                   body = 'This device cannot send SMS. Your report is saved and will sync automatically when internet is available.'
                   hint = 'Connect to Wi-Fi or mobile data to sync your report.'
                 } else if (r.includes('PERMISSION_DENIED')) {
-                  body = 'SurvAIve PH needs SMS permission to send emergency reports. Your report is safely saved on this device.'
-                  hint = 'Go to Settings → Apps → SurvAIve PH → Permissions → SMS, enable it, then retry.'
-                  showIntentFallback = !!smsFallbackParams
+                  body = 'SMS permission was denied and the SMS app also could not open. Your report is safely saved on this device.'
+                  hint = 'Go to Settings → Apps → SurvAIve PH → Permissions → SMS to enable direct sending.'
                 } else if (r.includes('NO_SIM')) {
                   body = 'No SIM card detected or no default SMS app is configured. Your report is safely saved on this device.'
                   hint = 'Insert a SIM card or set a default SMS app in Settings, then retry.'
@@ -507,12 +498,7 @@ export function SOSReport() {
                     <div className="glass rounded-xl p-3 border border-[rgba(239,68,68,0.2)]">
                       <p className="text-xs text-slate-400 leading-relaxed">{hint}</p>
                     </div>
-                    {showIntentFallback && (
-                      <NeonButton variant="secondary" onClick={openIntentFallback} className="w-full">
-                        Open SMS App Instead
-                      </NeonButton>
-                    )}
-                  </>
+</>
                 )
               })()}
             </>

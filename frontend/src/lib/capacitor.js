@@ -16,6 +16,8 @@ import { Network }     from '@capacitor/network'
 // Do NOT read navigator.onLine here: in the Android WebView it can be unreliable before
 // the Capacitor Network plugin has initialised.
 let _online = false
+let _initDone = false
+const _initCallbacks = []
 export function getNetworkOnline() { return _online }
 
 // ── Geolocation ───────────────────────────────────────────────────────────────
@@ -64,7 +66,12 @@ export async function isOnline() {
  * @param {function(connected: boolean): void} callback
  * @returns {Promise<import('@capacitor/core').PluginListenerHandle>}
  */
-export async function onNetworkChange(callback) {
+export function onNetworkChange(callback) {
+  if (!_initDone) {
+    _initCallbacks.push(callback)
+  } else {
+    Promise.resolve().then(() => callback(_online))
+  }
   return Network.addListener('networkStatusChange', ({ connected }) => callback(connected))
 }
 
@@ -125,6 +132,9 @@ export function initCapacitor() {
   // On web this is a no-op since navigator.onLine is already the source of truth.
   Network.getStatus().then(s => {
     _online = s.connected
+    _initCallbacks.forEach(cb => cb(_online))
+    _initCallbacks.length = 0
+    _initDone = true
     if (_online) {
       import('./offlineQueue').then(({ drainOfflineQueue, drainPendingReviews }) => {
         drainOfflineQueue().catch(() => {})

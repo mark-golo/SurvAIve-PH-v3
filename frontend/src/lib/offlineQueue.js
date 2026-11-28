@@ -21,12 +21,6 @@ export async function drainOfflineQueue() {
         console.warn('[offlineQueue] skipping localId', item.localId, '— exceeded max retries')
         continue
       }
-      // Records already dispatched via SMS are handled by the PhilSMS webhook.
-      // Attempting an internet POST would just hit the UNIQUE mesh_packet_id constraint.
-      if (item.smsStatus === 'submitted') {
-        try { await db.markSOSSynced(item.localId, null) } catch {}
-        continue
-      }
       try {
         const serverResponse = await api.post('/sos', {
           ...item,
