@@ -827,7 +827,7 @@ async function post(path, body = {}) {
       if (vRow?.id) supabaseUserId = vRow.id
     }
 
-    const { data: inserted, error } = await supabase
+    const { error } = await supabase
       .from('sos_reports')
       .insert({
         user_id:             supabaseUserId,
@@ -856,12 +856,25 @@ async function post(path, body = {}) {
                                ? body.service_type
                                : (body.service_type ? [body.service_type] : null),
       })
-      .select('id')
+    // No .select() — anon victims (PIN/guest) cannot read back their own rows via RLS;
+    // omitting .select() avoids the false RLS error on the RETURNING clause (same fix as victims insert).
     if (error) {
       console.error('[SOS INSERT] Supabase error:', error.code, error.message, error.details)
       sbThrow(error)
     }
-    const newId = inserted?.[0]?.id ?? null
+    // Best-effort: retrieve the integer ID for the "Track Response" link.
+    // Works for OTP-authenticated victims (Supabase session present); returns null for anon.
+    let newId = null
+    if (body.mesh_packet_id) {
+      try {
+        const { data: idRow } = await supabase
+          .from('sos_reports')
+          .select('id')
+          .eq('mesh_packet_id', body.mesh_packet_id)
+          .maybeSingle()
+        newId = idRow?.id ?? null
+      } catch {}
+    }
     // Dual-write to PHP/MySQL so admin's MySQL-based queries also see this SOS immediately.
     localFetch('sos', { method: 'POST', body: JSON.stringify({ ...body, ai_priority_score: score, ai_rules_version: AI_RULES_VERSION }) })
       .catch(() => {})
