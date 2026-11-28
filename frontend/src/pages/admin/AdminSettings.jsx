@@ -212,7 +212,7 @@ export function AdminSettings() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="p-4 max-w-2xl mx-auto space-y-2">
+    <div className="p-4 space-y-2">
 
       {/* ── Profile Card ─────────────────────────────────────────────────── */}
       <GlassCard>
