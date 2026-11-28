@@ -267,8 +267,8 @@ export function SOSReport() {
               recipient: PHILSMS_RECEIVING_NUMBER,
               message:   buildSMSMessage({ ...payload, meshPacketId: realPacketId }),
             })
-            await db.markSMSSent(localId)
-            setSmsDelivery('submitted')
+            await db.markSMSLaunched(localId)
+            setSmsDelivery('launched')
           } catch (smsErr) {
             console.warn('[SOSReport] SMS send failed:', smsErr?.message)
             await db.markSMSFailed(localId, smsErr?.message ?? 'SMS send failed').catch(() => {})
@@ -410,6 +410,31 @@ export function SOSReport() {
                 </p>
               </div>
             </>
+          ) : smsDelivery === 'launched' ? (
+            /* ── SMS app opened — user must complete send ───────────────────── */
+            <>
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[rgba(0,212,255,0.3)] to-[rgba(0,153,255,0.3)]
+                              border-2 border-[rgba(0,212,255,0.5)] flex items-center justify-center mx-auto
+                              shadow-[0_0_32px_rgba(0,212,255,0.4)]">
+                <Check size={28} className="text-white" />
+              </div>
+              <h2 className="text-xl font-black text-white">SMS App Opened</h2>
+              <div className="glass rounded-xl p-3 border border-[rgba(0,212,255,0.3)]">
+                <p className="text-xs text-[#00d4ff] font-semibold mb-1 tracking-wider">
+                  COMPLETE SENDING IN YOUR SMS APP
+                </p>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Your emergency report has been loaded into your SMS app.
+                  Please complete sending it, then return here.
+                </p>
+              </div>
+              <div className="glass rounded-xl p-3 border border-[rgba(0,212,255,0.2)]">
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Your report is also saved on this device. If the SMS is not sent,
+                  it will sync automatically when internet is available.
+                </p>
+              </div>
+            </>
           ) : smsDelivery === 'failed' ? (
             /* ── SMS failed — still saved locally ──────────────────────────── */
             <>
@@ -434,6 +459,9 @@ export function SOSReport() {
                 } else if (r.includes('RADIO_OFF') || r.includes('NO_SERVICE')) {
                   body = 'No cellular service available. Your report is safely saved on this device.'
                   hint = 'Move to an area with cellular or Wi-Fi signal to send your report.'
+                } else if (r.includes('NO_APP')) {
+                  body = 'No SMS app is installed on this device. Your report is safely saved on this device.'
+                  hint = 'Install an SMS app or connect to Wi-Fi/mobile data to sync your report.'
                 } else if (r.includes('timed out') || r.includes('timeout')) {
                   body = 'The SMS took too long to send. Your report is safely saved on this device.'
                   hint = 'The report will sync automatically when internet is available.'

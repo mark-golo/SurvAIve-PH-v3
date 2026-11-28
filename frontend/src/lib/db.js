@@ -148,6 +148,20 @@ export const db = {
     }
   },
 
+  // Intent-based SMS: marks the SMS app was opened but send is unconfirmed.
+  // Unlike 'submitted', 'launched' records still go through internet POST on reconnect.
+  async markSMSLaunched(localId) {
+    const database = await getDB()
+    const item = await database.get('sos_queue', localId)
+    if (item) {
+      await database.put('sos_queue', {
+        ...item,
+        smsStatus: 'launched',
+        smsSentAt: Date.now(),
+      })
+    }
+  },
+
   async markSMSFailed(localId, reason) {
     const database = await getDB()
     const item = await database.get('sos_queue', localId)
