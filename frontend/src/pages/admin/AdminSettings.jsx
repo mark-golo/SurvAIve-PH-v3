@@ -1,11 +1,9 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import {
   User, Lock, Bell, Volume2, Eye, Sun, Zap, VolumeX,
-  ChevronDown, CheckCircle, AlertCircle, Loader, HelpCircle, LogOut,
+  ChevronDown, CheckCircle, AlertCircle, Loader, HelpCircle,
 } from 'lucide-react'
 import { GlassCard } from '../../components/ui/GlassCard'
-import { LogoutConfirmDialog } from '../../components/ui/LogoutConfirmDialog'
 import { useAlertStore } from '../../store/alertStore'
 import { useAuthStore } from '../../store/auth'
 import { getAdminTheme } from '../../lib/victimTheme'
@@ -99,9 +97,7 @@ function ToggleRow({ icon: Icon, label, description, enabled, onToggle, color = 
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function AdminSettings() {
-  const navigate  = useNavigate()
-  const { user, role, updateUser, logout } = useAuthStore()
-  const [showLogoutDialog, setShowLogoutDialog] = useState(false)
+  const { user, role, updateUser } = useAuthStore()
 
   // ── Alert store ──
   const {
@@ -199,12 +195,6 @@ export function AdminSettings() {
     } finally {
       setPwSaving(false)
     }
-  }
-
-  // ── Sign Out ──
-  async function handleSignOut() {
-    await logout()
-    navigate('/')
   }
 
   // ── Role label ──
@@ -396,23 +386,7 @@ export function AdminSettings() {
         </RowAccordion>
       </CardAccordion>
 
-      {/* ── Sign Out ─────────────────────────────────────────────────────── */}
-      <button onClick={() => setShowLogoutDialog(true)}
-        className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold text-[#ef4444] border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.08)] hover:bg-[rgba(239,68,68,0.15)] transition-all"
-      >
-        <LogOut size={15} />
-        Sign Out
-      </button>
-
       <p className="text-[10px] text-slate-600 text-center pb-2">SurvAIve PH — Emergency Response System</p>
-
-      {showLogoutDialog && (
-        <LogoutConfirmDialog
-          role={role}
-          onConfirm={handleSignOut}
-          onCancel={() => setShowLogoutDialog(false)}
-        />
-      )}
 
     </div>
   )
