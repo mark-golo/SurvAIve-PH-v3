@@ -41,7 +41,7 @@ export function LogoutConfirmDialog({ role, onConfirm, onCancel }) {
         {/* Actions */}
         <div className="flex flex-col gap-2 pt-1">
           <NeonButton variant="red" onClick={onConfirm} className="w-full">
-            Confirm Logout
+            Logout
           </NeonButton>
           <NeonButton variant="ghost" onClick={onCancel} className="w-full">
             Cancel
