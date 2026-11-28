@@ -4,7 +4,7 @@ import { db } from './db'
 import api from './api'
 import { supabase } from './supabase'
 import { sendEmergencySMS, isSMSCapable } from './smsPlugin'
-import { PHILSMS_RECEIVING_NUMBER } from './smsConfig'
+import { getSMSRecipients } from './smsRecipients'
 
 const MAX_RETRY_COUNT     = 5
 const MAX_SMS_RETRY_COUNT = 3  // lower cap for SMS — each retry costs real money
@@ -92,11 +92,14 @@ export async function drainSMSPendingQueue() {
         if (item.lat && item.lng) lines.push(`GPS: ${Number(item.lat).toFixed(4)},${Number(item.lng).toFixed(4)}`)
         if (item.notes) lines.push(`MSG: ${String(item.notes).slice(0, 80)}`)
         const message = lines.join('\n')
-        await sendEmergencySMS({
-          reportId:  item.meshPacketId ?? item.mesh_packet_id ?? String(item.localId),
-          recipient: PHILSMS_RECEIVING_NUMBER,
-          message,
-        })
+        const recipients = await getSMSRecipients(item.municipality, item.province)
+        for (const recipient of recipients) {
+          await sendEmergencySMS({
+            reportId:  item.meshPacketId ?? item.mesh_packet_id ?? String(item.localId),
+            recipient,
+            message,
+          })
+        }
         await db.markSMSSent(item.localId)
         console.log('[offlineQueue] SMS retry succeeded for localId', item.localId)
       } catch (e) {

@@ -18,6 +18,7 @@ import { getVictimTheme } from '../../lib/victimTheme'
 import { getNetworkOnline, onNetworkChange, probeBackend } from '../../lib/capacitor'
 import { sendEmergencySMS, openSMSApp, isSMSCapable } from '../../lib/smsPlugin'
 import { PHILSMS_RECEIVING_NUMBER } from '../../lib/smsConfig'
+import { getSMSRecipients } from '../../lib/smsRecipients'
 import { Home, Map, Sparkles, Settings, MessageSquare } from 'lucide-react'
 
 const NAV = [
@@ -262,12 +263,14 @@ export function SOSReport() {
         // If the user chose SMS and the device has native SMS capability, send it now.
         if (useSMS && isSMSCapable()) {
           const smsMessage = buildSMSMessage({ ...payload, meshPacketId: realPacketId })
+          // Resolve dynamic recipients — agencies/admins for the victim's municipality.
+          // Falls back to PHILSMS_RECEIVING_NUMBER if none are registered for the area.
+          const recipients = await getSMSRecipients(form.municipality, form.province)
           try {
-            const smsResult = await sendEmergencySMS({
-              reportId:  realPacketId,
-              recipient: PHILSMS_RECEIVING_NUMBER,
-              message:   smsMessage,
-            })
+            let smsResult
+            for (const recipient of recipients) {
+              smsResult = await sendEmergencySMS({ reportId: realPacketId, recipient, message: smsMessage })
+            }
             if (smsResult?.status === 'submitted') {
               await db.markSMSSent(localId)
               setSmsDelivery('submitted')
@@ -279,7 +282,8 @@ export function SOSReport() {
             console.warn('[SOSReport] SMS send failed:', smsErr?.message)
             if (String(smsErr?.message).includes('PERMISSION_DENIED') && isSMSCapable()) {
               try {
-                await openSMSApp({ reportId: realPacketId, recipient: PHILSMS_RECEIVING_NUMBER, message: smsMessage })
+                // Intent fallback only supports one recipient
+                await openSMSApp({ reportId: realPacketId, recipient: recipients[0], message: smsMessage })
                 await db.markSMSLaunched(localId)
                 setSmsDelivery('launched')
               } catch {
