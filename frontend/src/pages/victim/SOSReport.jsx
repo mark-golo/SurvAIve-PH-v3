@@ -75,6 +75,7 @@ export function SOSReport() {
   const [newSosId,        setNewSosId]        = useState(null)
   // 'submitted' | 'failed' | 'queued' | null
   const [smsDelivery,     setSmsDelivery]     = useState(null)
+  const [smsFailReason,   setSmsFailReason]   = useState(null)
 
   // ── Voice state ──────────────────────────────────────────────────────────────
   const [listening,      setListening]      = useState(false)
@@ -271,11 +272,13 @@ export function SOSReport() {
           } catch (smsErr) {
             console.warn('[SOSReport] SMS send failed:', smsErr?.message)
             await db.markSMSFailed(localId, smsErr?.message ?? 'SMS send failed').catch(() => {})
+            setSmsFailReason(smsErr?.message ?? 'unknown')
             setSmsDelivery('failed')
           }
         } else if (useSMS) {
           // User chose SMS but device cannot send it (no Android native capability)
           await db.markSMSFailed(localId, 'SMS not available on this device').catch(() => {})
+          setSmsFailReason('NO_CAPABILITY')
           setSmsDelivery('failed')
         } else {
           setSmsDelivery('queued')
@@ -416,21 +419,42 @@ export function SOSReport() {
                 <Check size={28} className="text-white" />
               </div>
               <h2 className="text-xl font-black text-white">SMS Failed — Saved</h2>
-              <div className="glass rounded-xl p-3 border border-[rgba(239,68,68,0.3)]">
-                <p className="text-xs text-[#ef4444] font-semibold mb-1 tracking-wider">
-                  SMS FAILED — SAVED ON DEVICE
-                </p>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Your report is safely saved on this device. SMS could not be sent
-                  (no cellular signal or SIM not available). It will sync automatically
-                  when internet is available.
-                </p>
-              </div>
-              <div className="glass rounded-xl p-3 border border-[rgba(239,68,68,0.2)]">
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Move to an area with cellular or Wi-Fi signal to send your report.
-                </p>
-              </div>
+              {(() => {
+                const r = smsFailReason ?? ''
+                let body, hint
+                if (r === 'NO_CAPABILITY') {
+                  body = 'This device cannot send SMS. Your report is saved and will sync automatically when internet is available.'
+                  hint = 'Connect to Wi-Fi or mobile data to sync your report.'
+                } else if (r.includes('PERMISSION_DENIED')) {
+                  body = 'SurvAIve PH needs SMS permission to send emergency reports. Your report is safely saved on this device.'
+                  hint = 'Go to Settings → Apps → SurvAIve PH → Permissions → SMS, enable it, then retry.'
+                } else if (r.includes('NO_SIM')) {
+                  body = 'No SIM card detected or no default SMS app is configured. Your report is safely saved on this device.'
+                  hint = 'Insert a SIM card or set a default SMS app in Settings, then retry.'
+                } else if (r.includes('RADIO_OFF') || r.includes('NO_SERVICE')) {
+                  body = 'No cellular service available. Your report is safely saved on this device.'
+                  hint = 'Move to an area with cellular or Wi-Fi signal to send your report.'
+                } else if (r.includes('timed out') || r.includes('timeout')) {
+                  body = 'The SMS took too long to send. Your report is safely saved on this device.'
+                  hint = 'The report will sync automatically when internet is available.'
+                } else {
+                  body = 'SMS could not be sent. Your report is safely saved on this device.'
+                  hint = 'The report will sync automatically when internet is available.'
+                }
+                return (
+                  <>
+                    <div className="glass rounded-xl p-3 border border-[rgba(239,68,68,0.3)]">
+                      <p className="text-xs text-[#ef4444] font-semibold mb-1 tracking-wider">
+                        SMS FAILED — SAVED ON DEVICE
+                      </p>
+                      <p className="text-xs text-slate-400 leading-relaxed">{body}</p>
+                    </div>
+                    <div className="glass rounded-xl p-3 border border-[rgba(239,68,68,0.2)]">
+                      <p className="text-xs text-slate-400 leading-relaxed">{hint}</p>
+                    </div>
+                  </>
+                )
+              })()}
             </>
           ) : (
             /* ── Queue-only / no SMS path ───────────────────────────────────── */
