@@ -5,6 +5,7 @@ import {
   ChevronDown, CheckCircle, AlertCircle, Loader, HelpCircle, LogOut,
 } from 'lucide-react'
 import { GlassCard } from '../../components/ui/GlassCard'
+import { LogoutConfirmDialog } from '../../components/ui/LogoutConfirmDialog'
 import { useAlertStore } from '../../store/alertStore'
 import { useAuthStore } from '../../store/auth'
 import { getAdminTheme } from '../../lib/victimTheme'
@@ -99,7 +100,8 @@ function ToggleRow({ icon: Icon, label, description, enabled, onToggle, color = 
 
 export function AdminSettings() {
   const navigate  = useNavigate()
-  const { user, role, updateUser, signOut } = useAuthStore()
+  const { user, role, updateUser, logout } = useAuthStore()
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false)
 
   // ── Alert store ──
   const {
@@ -201,7 +203,7 @@ export function AdminSettings() {
 
   // ── Sign Out ──
   async function handleSignOut() {
-    await signOut?.()
+    await logout()
     navigate('/')
   }
 
@@ -395,7 +397,7 @@ export function AdminSettings() {
       </CardAccordion>
 
       {/* ── Sign Out ─────────────────────────────────────────────────────── */}
-      <button onClick={handleSignOut}
+      <button onClick={() => setShowLogoutDialog(true)}
         className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold text-[#ef4444] border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.08)] hover:bg-[rgba(239,68,68,0.15)] transition-all"
       >
         <LogOut size={15} />
@@ -403,6 +405,14 @@ export function AdminSettings() {
       </button>
 
       <p className="text-[10px] text-slate-600 text-center pb-2">SurvAIve PH — Emergency Response System</p>
+
+      {showLogoutDialog && (
+        <LogoutConfirmDialog
+          role={role}
+          onConfirm={handleSignOut}
+          onCancel={() => setShowLogoutDialog(false)}
+        />
+      )}
 
     </div>
   )

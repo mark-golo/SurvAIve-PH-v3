@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase'
 import api from '../../lib/api'
 import { getAgencyTheme, saveAgencyTheme, resolveTheme } from '../../lib/victimTheme'
 import { ThemeToggle } from '../../components/ui/ThemeToggle'
+import { LogoutConfirmDialog } from '../../components/ui/LogoutConfirmDialog'
 
 const AGENCY_LABELS = {
   mdrrmo:   'MDRRMO',
@@ -76,6 +77,7 @@ export function AgencyLayout() {
 
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [agencyTheme, setAgencyTheme] = useState(() => getAgencyTheme())
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false)
 
   const { soundEnabled, visualEnabled, notificationEnabled, volume } = useAlertStore()
 
@@ -271,7 +273,7 @@ export function AgencyLayout() {
             <Settings2 size={15} />
             Settings
           </button>
-          <button onClick={() => { logout(); navigate('/') }}
+          <button onClick={() => setShowLogoutDialog(true)}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-slate-500 hover:text-white transition-all">
             <LogOut size={15} />
             Sign Out
@@ -370,6 +372,15 @@ export function AgencyLayout() {
           </div>
         )}
       </AnimatePresence>
+
+      {showLogoutDialog && (
+        <LogoutConfirmDialog
+          role="response_agency"
+          onConfirm={() => { logout(); navigate('/') }}
+          onCancel={() => setShowLogoutDialog(false)}
+        />
+      )}
+
     </div>
   )
 }

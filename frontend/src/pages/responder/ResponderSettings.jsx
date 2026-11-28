@@ -9,6 +9,7 @@ import {
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { NeonButton } from '../../components/ui/NeonButton'
+import { LogoutConfirmDialog } from '../../components/ui/LogoutConfirmDialog'
 import { useAuthStore } from '../../store/auth'
 import { supabase } from '../../lib/supabase'
 import { setXamppHost, localFetch } from '../../lib/api'
@@ -123,6 +124,7 @@ function AlertToggleRow({ icon: Icon, label, desc, enabled, onToggle }) {
 
 export function ResponderSettings() {
   const { user, logout } = useAuthStore()
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false)
   const navigate = useNavigate()
 
   // Responder profile from Supabase
@@ -488,7 +490,7 @@ export function ResponderSettings() {
         </CardAccordion>
 
         {/* ── Sign Out ─────────────────────────────────────────────────── */}
-        <NeonButton variant="ghost" onClick={() => { logout(); navigate('/') }} className="w-full">
+        <NeonButton variant="ghost" onClick={() => setShowLogoutDialog(true)} className="w-full">
           Sign Out
         </NeonButton>
 
@@ -496,6 +498,14 @@ export function ResponderSettings() {
       </main>
 
       <MobileNavBar items={NAV} />
+
+      {showLogoutDialog && (
+        <LogoutConfirmDialog
+          role="responder"
+          onConfirm={() => { logout(); navigate('/') }}
+          onCancel={() => setShowLogoutDialog(false)}
+        />
+      )}
     </div>
   )
 }

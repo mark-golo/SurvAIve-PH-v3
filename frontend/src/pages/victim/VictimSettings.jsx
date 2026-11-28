@@ -12,6 +12,7 @@ import {
 import { TopBar, MobileNavBar } from '../../components/ui/NavBar'
 import { GlassCard } from '../../components/ui/GlassCard'
 import { NeonButton } from '../../components/ui/NeonButton'
+import { LogoutConfirmDialog } from '../../components/ui/LogoutConfirmDialog'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useAuthStore } from '../../store/auth'
 import { getVictimTheme, saveVictimTheme } from '../../lib/victimTheme'
@@ -116,6 +117,7 @@ function InfoRow({ label, value }) {
 export function VictimSettings() {
   const navigate = useNavigate()
   const { user, isGuest, logout, updateUser } = useAuthStore()
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false)
 
   // Refresh missing profile fields from DB for users whose auth store was
   // persisted before the backend started returning these fields.
@@ -442,7 +444,7 @@ export function VictimSettings() {
         </CardAccordion>
 
         {/* ── Sign Out ─────────────────────────────────────────────────── */}
-        <NeonButton variant="ghost" onClick={handleLogout} className="w-full">
+        <NeonButton variant="ghost" onClick={() => setShowLogoutDialog(true)} className="w-full">
           {isGuest ? 'Exit Guest Mode' : 'Sign Out'}
         </NeonButton>
 
@@ -452,6 +454,14 @@ export function VictimSettings() {
       <MobileNavBar items={NAV} />
 
       {/* Full-screen QR overlay — outside main so overflow:hidden doesn't clip it */}
+      {showLogoutDialog && (
+        <LogoutConfirmDialog
+          role="victim"
+          onConfirm={handleLogout}
+          onCancel={() => setShowLogoutDialog(false)}
+        />
+      )}
+
       {qrExpanded && qrValue && (
         <div
           className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm"
