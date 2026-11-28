@@ -836,38 +836,54 @@ async function post(path, body = {}) {
       await supabase.auth.signInAnonymously().catch(() => {})
     }
 
-    const { error } = await supabase
-      .from('sos_reports')
-      .insert({
-        user_id:             supabaseUserId,
-        victim_device_id:    body.victim_id           ?? null,
-        name:                body.name                ?? null,
-        barangay:            body.barangay            || null,
-        municipality:        body.municipality        || null,
-        province:            body.province            || null,
-        lat:                 body.lat                 ?? null,
-        lng:                 body.lng                 ?? null,
-        status:              body.status              ?? 'unknown',
-        people_count:        Number(body.people_count) || 1,
-        victim_age_group:    body.victim_age_group    ?? 'adult',
-        special_conditions:  body.special_conditions  ?? '',
-        notes:               body.notes               ?? null,
-        ai_priority_score:   score,
-        ai_classification:   aiClassification.primary      ?? null,
-        ai_confidence:       aiClassification.confidence != null ? Math.round(aiClassification.confidence * 100) : null,
-        ai_rules_version:    AI_RULES_VERSION,
-        rescue_status:       'pending',
-        is_verified:         isVerified,
-        trust_score:         trustScore,
-        mesh_packet_id:      body.mesh_packet_id      ?? null,
-        source_channel:      body.source === 'sms' ? 'sms' : 'internet',
-        removed_from_view:   false,
-        service_type:        Array.isArray(body.service_type)
-                               ? body.service_type
-                               : (body.service_type ? [body.service_type] : null),
-      })
-    // No .select() — anon victims (PIN/guest) cannot read back their own rows via RLS;
-    // omitting .select() avoids the false RLS error on the RETURNING clause (same fix as victims insert).
+    // Core columns that exist in all SurvAIve PH Supabase deployments.
+    const _corePayload = {
+      user_id:             supabaseUserId,
+      victim_device_id:    body.victim_id           ?? null,
+      name:                body.name                ?? null,
+      barangay:            body.barangay            || null,
+      municipality:        body.municipality        || null,
+      province:            body.province            || null,
+      lat:                 body.lat                 ?? null,
+      lng:                 body.lng                 ?? null,
+      status:              body.status              ?? 'unknown',
+      people_count:        Number(body.people_count) || 1,
+      victim_age_group:    body.victim_age_group    ?? 'adult',
+      special_conditions:  body.special_conditions  ?? '',
+      notes:               body.notes               ?? null,
+      rescue_status:       'pending',
+      is_verified:         isVerified,
+      trust_score:         trustScore,
+      mesh_packet_id:      body.mesh_packet_id      ?? null,
+      service_type:        Array.isArray(body.service_type)
+                             ? body.service_type
+                             : (body.service_type ? [body.service_type] : null),
+    }
+    // Extended payload adds AI + admin columns added after initial table creation.
+    // PostgREST PGRST204 rejects the entire INSERT if any column is missing from the
+    // schema cache, so we fall back to _corePayload if that happens.
+    const _extPayload = {
+      ..._corePayload,
+      ai_priority_score:  score,
+      ai_classification:  aiClassification.primary      ?? null,
+      ai_confidence:      aiClassification.confidence != null
+                            ? Math.round(aiClassification.confidence * 100) : null,
+      ai_rules_version:   AI_RULES_VERSION,
+      source_channel:     body.source === 'sms' ? 'sms' : 'internet',
+      removed_from_view:  false,
+    }
+
+    let { error } = await supabase.from('sos_reports').insert(_extPayload)
+    // If any column is missing from the Supabase schema cache, retry with core-only payload.
+    if (error && (
+      error.code === 'PGRST204' ||
+      String(error.message).includes('schema cache') ||
+      String(error.message).includes('Could not find')
+    )) {
+      console.warn('[SOS INSERT] schema fallback — retrying core-only:', error.message)
+      ;({ error } = await supabase.from('sos_reports').insert(_corePayload))
+    }
+    // No .select() — anon victims cannot read back rows via RLS (avoids false RETURNING error).
     if (error) {
       console.error('[SOS INSERT] Supabase error:', error.code, error.message, error.details)
       sbThrow(error)
