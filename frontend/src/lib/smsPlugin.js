@@ -38,3 +38,16 @@ export async function sendEmergencySMS({ reportId, recipient, message }) {
     clearTimeout(timeoutId)
   }
 }
+
+/**
+ * Open the device's default SMS app pre-filled with the emergency message.
+ * Intent-based fallback — no SEND_SMS permission required.
+ *
+ * @returns {Promise<{reportId: string, status: 'launched'}>}
+ */
+export async function openSMSApp({ reportId, recipient, message }) {
+  if (!SmsNative) {
+    throw new Error('Native SMS is only available on Android')
+  }
+  return SmsNative.openSMSIntent({ reportId, recipient, message })
+}

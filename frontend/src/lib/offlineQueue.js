@@ -107,7 +107,12 @@ export async function drainSMSPendingQueue() {
         console.log('[offlineQueue] SMS retry succeeded for localId', item.localId)
       } catch (e) {
         console.warn('[offlineQueue] SMS retry failed for localId', item.localId, e?.message)
-        try { await db.addRetryCount(item.localId, e?.message ?? 'unknown') } catch {}
+        // Permission denied won't resolve on retry — mark failed immediately instead of wasting attempts
+        if (String(e?.message).includes('PERMISSION_DENIED')) {
+          try { await db.markSMSFailed(item.localId, 'permission_denied') } catch {}
+        } else {
+          try { await db.addRetryCount(item.localId, e?.message ?? 'unknown') } catch {}
+        }
       }
     }
   } catch (e) {

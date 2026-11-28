@@ -135,6 +135,7 @@ export function VictimTable() {
     { label: 'Name',     sortKey: null },
     { label: 'Status',   sortKey: 'priority' },
     { label: 'Barangay', sortKey: 'barangay' },
+    ...(filter === 'sms' ? [{ label: 'Sender #', sortKey: null }] : []),
     { label: 'Time',     sortKey: 'time' },
     { label: 'AI Score', sortKey: 'score' },
     { label: 'Verified', sortKey: null },
@@ -151,6 +152,7 @@ export function VictimTable() {
         if (filter === 'critical')  return !r.dismissed && !r.removed_from_view && r.priority === 'CRITICAL'
         if (filter === 'verified')  return !r.dismissed && !r.removed_from_view && r.verified
         if (filter === 'guest')     return !r.dismissed && !r.removed_from_view && !r.verified
+        if (filter === 'sms')       return !r.removed_from_view && r.source_channel === 'sms'
         return !r.dismissed && !r.removed_from_view
       })()
       return search
@@ -267,6 +269,12 @@ export function VictimTable() {
                     : 'glass border-[rgba(255,255,255,0.08)] text-slate-400'
                 }`}>{f}</button>
             ))}
+            <button onClick={() => setFilter('sms')}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                filter === 'sms'
+                  ? 'bg-[rgba(245,158,11,0.15)] border-[rgba(245,158,11,0.5)] text-[#f59e0b]'
+                  : 'glass border-[rgba(255,255,255,0.08)] text-slate-400'
+              }`}>📱 SMS</button>
           </div>
         </div>
 
@@ -306,6 +314,11 @@ export function VictimTable() {
                     </td>
                     <td className="px-4 py-3"><StatusBadge status={r.priority} /></td>
                     <td className="px-4 py-3 text-xs text-slate-400">{r.barangay}</td>
+                    {filter === 'sms' && (
+                      <td className="px-4 py-3 text-xs text-slate-400 font-mono whitespace-nowrap">
+                        {r.smsSenderNumber ?? '—'}
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-xs text-slate-400">{r.timestamp}</td>
                     <td className="px-4 py-3">
                       <span className={`text-sm font-black ${
