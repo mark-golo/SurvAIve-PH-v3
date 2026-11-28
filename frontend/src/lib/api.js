@@ -827,6 +827,15 @@ async function post(path, body = {}) {
       if (vRow?.id) supabaseUserId = vRow.id
     }
 
+    // Victims log in via PIN (createOfflineToken = local JWT, NOT a Supabase session).
+    // Without a session auth.uid() is null, which fails any RLS WITH CHECK (auth.uid() IS NOT NULL).
+    // signInAnonymously() creates an authenticated Supabase anon user so auth.uid() is non-null.
+    // If the Supabase Dashboard has anonymous sign-ins disabled, this 422s silently and we try anyway.
+    const { data: _sess } = await supabase.auth.getSession()
+    if (!_sess?.session) {
+      await supabase.auth.signInAnonymously().catch(() => {})
+    }
+
     const { error } = await supabase
       .from('sos_reports')
       .insert({
@@ -852,6 +861,7 @@ async function post(path, body = {}) {
         trust_score:         trustScore,
         mesh_packet_id:      body.mesh_packet_id      ?? null,
         source_channel:      body.source === 'sms' ? 'sms' : 'internet',
+        removed_from_view:   false,
         service_type:        Array.isArray(body.service_type)
                                ? body.service_type
                                : (body.service_type ? [body.service_type] : null),

@@ -348,7 +348,7 @@ export function SOSReport() {
       // Wrapped in its own try/catch so a queueSOS failure doesn't lock the form.
       try {
         await db.queueSOS({ ...payload, meshPacketId: realPacketId, isGuest, timestamp: Date.now(), smsStatus: null, source: 'queue_sync' })
-        setSosError('Server unreachable — saved on this device. It will send automatically when connection returns.')
+        setSosError(`Delivery failed (${err?.message ?? 'unknown'}) — saved on this device. It will sync automatically when connection returns.`)
         setSubmitted(true)
       } catch {
         setSosError('Could not save report — please retry.')
